@@ -1,8 +1,11 @@
+// api/orkut.js
 const axios = require("axios");
 const { loadDb, saveDb } = require("../lib/github");
 const {
   getDeviceKey,
   applyDiscount,
+  commitReservations,
+  releaseReservations,
   adminUpsertVoucher,
   adminDisableVoucher,
   adminSetMonthlyPromo,
@@ -93,11 +96,12 @@ module.exports = async function handler(req, res) {
     const db = await loadDb();
     const deviceKey = getDeviceKey(deviceId, DEVICE_PEPPER);
 
-    const { finalAmount, discountRp, applied } = applyDiscount({
+    const { finalAmount, discountRp, applied, reservations } = applyDiscount({
       db,
       amount,
       deviceKey,
       voucherCode: voucher || null,
+      reserveTtlMs: 6 * 60 * 1000, // aman (sedikit > expireMinutes VPS)
     });
 
     const r = await axios.post(
@@ -121,6 +125,8 @@ module.exports = async function handler(req, res) {
       amountFinal: finalAmount,
       discountRp,
       applied,
+      reservations: reservations || [],
+      discountCommitted: false,
       status: "pending",
       createdAt: new Date().toISOString(),
       paidAt: null,
@@ -141,26 +147,48 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // NOTE: paidhook sekarang buat status terminal: paid|expired|cancelled|failed
   if (action === "paidhook") {
     if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
     const { idTransaksi, status, paidAt, paidVia, note } = req.body || {};
-    if (!idTransaksi || String(status).toLowerCase() !== "paid") {
-      return res.status(400).json({ success: false, error: "idTransaksi & status=paid required" });
+    if (!idTransaksi || !status) {
+      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
+    }
+
+    const st = String(status).toLowerCase();
+    const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
+    if (!terminal.has(st)) {
+      return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
     }
 
     const db = await loadDb();
     db.tx = db.tx || {};
-    db.tx[idTransaksi] = db.tx[idTransaksi] || { idTransaksi };
+    const tx = db.tx[idTransaksi];
+    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
 
-    db.tx[idTransaksi].status = "paid";
-    db.tx[idTransaksi].paidAt = paidAt || new Date().toISOString();
-    db.tx[idTransaksi].paidVia = paidVia || null;
-    if (note) db.tx[idTransaksi].note = String(note);
+    tx.status = st;
+    tx.lastUpdateAt = new Date().toISOString();
+    if (note) tx.note = String(note);
+
+    if (st === "paid") {
+      tx.paidAt = paidAt || new Date().toISOString();
+      tx.paidVia = paidVia || null;
+
+      if (!tx.discountCommitted) {
+        commitReservations(db, tx.reservations || []);
+        tx.discountCommitted = true;
+      }
+    } else {
+      if (!tx.discountCommitted) {
+        releaseReservations(db, tx.reservations || []);
+        tx.discountCommitted = false;
+      }
+    }
 
     await saveDb(db);
-    return res.status(200).json({ success: true, saved: true });
+    return res.status(200).json({ success: true, saved: true, status: st });
   }
 
   if (action === "status") {
