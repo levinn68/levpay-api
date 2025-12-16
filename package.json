@@ -1,0 +1,18 @@
+{
+  "name": "levpay-api",
+  "version": "1.0.0",
+  "description": "Qr Generator",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "axios": "^0.21.1"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "author": "levin68",
+  "license": "MIT"
+}
