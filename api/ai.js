@@ -1,16 +1,34 @@
+// pages/api/ai.js
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Method Not Allowed" });
+  // CORS (kalau frontend lu beda domain)
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-  const AI_KEY = process.env.LEVPAY_AI_KEY; // set di Vercel Env
-  const AI_MODEL = process.env.LEVPAY_AI_MODEL || "gemini-2.0-flash";
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method Not Allowed" });
+  }
 
-  if (!AI_KEY) return res.status(500).json({ ok: false, error: "LEVPAY_AI_KEY belum diset" });
+  // ✅ Paling aman: simpan di ENV (Vercel Project Settings -> Environment Variables)
+  // const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
-  const message = String(req.body?.message || "").trim();
-  const history = Array.isArray(req.body?.history) ? req.body.history : [];
-  if (!message) return res.status(400).json({ ok: false, error: "message kosong" });
+  // ⚠️ Versi hardcode (nggak disaranin)
+  const DEEPSEEK_API_KEY = "sk-2bacbd078e6345b1aed4ae5a781b9264";
 
-  const LEVPAY_SYSTEM = `
+  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.includes("ISI_APIKEY")) {
+    return res.status(500).json({ success: false, error: "API key belum di-set" });
+  }
+
+  const { message, history, context } = req.body || {};
+  const userMsg = String(message || "").trim();
+
+  if (!userMsg) {
+    return res.status(400).json({ success: false, error: "message is required" });
+  }
+
+  // ====== “Otak” persona LEVPAY ======
+  const system = `
 KAMU ADALAH: "LEVPAY ASSISTEN" (nama panggilan: LEV).
 Peran: asisten resmi LevPay yang bantu user soal pembayaran QRIS, transaksi, voucher, status, dan troubleshooting website LevPay.
 
@@ -153,39 +171,63 @@ Saat user nanya sesuatu teknis:
 - “Fix cepat: (1) (2) (3)”
 - “Patch code: <code>”
 - “Kalau masih zonk, kirim: endpoint + sample JSON response (hapus token).”
-`;
+`.trim();
 
-  const payload = {
-    systemInstruction: { parts: [{ text: LEVPAY_SYSTEM }] },
-    contents: [
-      ...history.slice(-10).map(x => ({
-        role: x?.role === "model" ? "model" : "user",
-        parts: [{ text: String(x?.text || "").slice(0, 2000) }],
-      })),
-      { role: "user", parts: [{ text: message }] },
-    ],
-    generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
-  };
+  // optional: lu bisa kirim context “LEVPAY docs” dari server lu
+  const levpayContext = context ? String(context).slice(0, 6000) : "";
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${encodeURIComponent(AI_KEY)}`;
+  // history format: [{role:"user"|"assistant", content:"..."}]
+  const hist = Array.isArray(history) ? history.slice(-12) : [];
+
+  const messages = [
+    { role: "system", content: system },
+    ...(levpayContext ? [{ role: "system", content: `KONTEKS LEVPAY:\n${levpayContext}` }] : []),
+    ...hist.map((m) => ({
+      role: m?.role === "assistant" ? "assistant" : "user",
+      content: String(m?.content || "").slice(0, 4000),
+    })),
+    { role: "user", content: userMsg },
+  ];
 
   try {
-    const r = await fetch(url, {
+    const r = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages,
+        temperature: 0.7,
+        max_tokens: 900,
+      }),
     });
 
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) return res.status(500).json({ ok: false, error: j?.error?.message || `AI HTTP ${r.status}`, raw: j });
+
+    if (!r.ok) {
+      return res.status(500).json({
+        success: false,
+        error: "DeepSeek error",
+        status: r.status,
+        raw: j,
+      });
+    }
 
     const text =
-      j?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join("") ||
-      j?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      j?.choices?.[0]?.message?.content ||
+      j?.choices?.[0]?.text ||
       "";
 
-    return res.json({ ok: true, text: String(text || "").trim() });
+    return res.json({
+      success: true,
+      data: {
+        reply: String(text || "").trim(),
+        model: j?.model || "deepseek-chat",
+      },
+    });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e?.message || "assistant error" });
+    return res.status(500).json({ success: false, error: e?.message || "server error" });
   }
-      }
+}
