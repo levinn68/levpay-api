@@ -1,34 +1,60 @@
-// api/levpay.js  (Vercel 1-file)
-// Endpoints:
-// - /api/discount?action=apply|commit|release
-// - /api/paidhook
-// - /api/tx?action=list|get|clear
-// - /api/voucher?action=upsert|disable|list|get   (ADMIN)
-// - /api/monthly?action=get|set                   (ADMIN)
+// api/levpay.js  (Vercel SINGLE-FILE ROUTER)
+// Endpoints via query action (recommended):
+// - /api/levpay?action=ping | help
+// - /api/levpay?action=discount.apply|discount.commit|discount.release
+// - /api/levpay?action=voucher.upsert|voucher.disable|voucher.list|voucher.get
+// - /api/levpay?action=monthly.get|monthly.set
+// - /api/levpay?action=tx.upsert|tx.get|tx.list|tx.search|tx.clear
+// - /api/levpay?action=paidhook
+//
+// Notes:
+// - Admin endpoints require header: X-Admin-Key: <ADMIN_KEY>
+// - DB stored in /tmp (ephemeral per instance). OK for testing.
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+// ====== CONFIG ======
 const DB_PATH = path.join("/tmp", "levpay-db.json");
 
-// ===== ENV (Vercel) =====
+// Admin key untuk ADMIN endpoints (voucher/monthly/tx admin ops)
 const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
-const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "LEVIN6824";
-const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "PEPPER_LEVPAY";
 
-// ===== deviceKey unlimited (bypass promo monthly limit) =====
-// MASUKIN DEVICEKEY SHA256 DI SINI kalau mau hardcode:
+// Secret optional buat callback/hook (kalau lu mau proteksi paidhook)
+const CALLBACK_SECRET = process.env.CALLBACK_SECRET || ""; // kosong = off
+
+// Pepper buat bikin deviceKey (monthly promo tracking)
+const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "ISI_PEPPER";
+
+// DeviceKey yang unlimited (bypass limit promo bulanan)
+// MASUKIN HASIL SHA256(deviceId + "|" + DEVICE_PEPPER)
 const UNLIMITED_DEVICE_KEYS = new Set([
   // contoh:
   // "58b370dda7d9575e05bcaa5ce4a0c63725185b492fd39e4ba0b372ef86e9488e",
 ]);
 
-// ===== utils =====
+// ====== utils ======
 function send(res, code, obj) {
   res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(obj));
+}
+
+function setCors(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Admin-Key, X-Callback-Secret"
+  );
+  if (req.method === "OPTIONS") {
+    res.statusCode = 200;
+    res.end("");
+    return true;
+  }
+  return false;
 }
 
 function isAdmin(req) {
@@ -36,33 +62,10 @@ function isAdmin(req) {
   return !!(k && k === ADMIN_KEY);
 }
 
-function verifyCallback(req) {
-  // kalau CALLBACK_SECRET kosong => skip verif
+function checkCallbackSecret(req) {
   if (!CALLBACK_SECRET) return true;
-  const s = String(req.headers["x-callback-secret"] || "").trim();
-  return !!(s && s === CALLBACK_SECRET);
-}
-
-function readBody(req) {
-  return new Promise((resolve) => {
-    let raw = "";
-    req.on("data", (d) => (raw += d));
-    req.on("end", () => resolve(raw));
-  });
-}
-
-async function readJson(req) {
-  try {
-    const raw = await readBody(req);
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function nowIso() {
-  return new Date().toISOString();
+  const k = String(req.headers["x-callback-secret"] || "").trim();
+  return !!(k && k === CALLBACK_SECRET);
 }
 
 function clamp(n, a, b) {
@@ -80,33 +83,50 @@ function yyyymm(d = new Date()) {
   return `${y}${m}`;
 }
 
-function getDeviceKey(deviceId, pepper) {
+function getDeviceKey(deviceId, pepper = DEVICE_PEPPER) {
   return crypto
     .createHash("sha256")
     .update(String(deviceId || "") + "|" + String(pepper || ""))
     .digest("hex");
 }
 
-// ===== DB =====
-function loadDb() {
-  try {
-    if (fs.existsSync(DB_PATH)) {
-      const raw = fs.readFileSync(DB_PATH, "utf8");
-      const j = raw ? JSON.parse(raw) : {};
-      return ensureDb(j);
-    }
-  } catch {}
-  return ensureDb({});
+async function readBody(req) {
+  if (req.body && typeof req.body === "object") return req.body; // vercel biasanya udah parse
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        resolve({});
+      }
+    });
+  });
 }
 
-function saveDb(db) {
+function readDB() {
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db), "utf8");
-  } catch {}
+    if (!fs.existsSync(DB_PATH)) return {};
+    const raw = fs.readFileSync(DB_PATH, "utf8");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
 }
 
-function ensureDb(db) {
-  db.vouchers = db.vouchers || {}; // custom voucher codes
+function writeDB(db) {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ====== DB init / ensure ======
+function ensure(db) {
+  db.vouchers = db.vouchers || {};
   db.promo = db.promo || {};
   db.tx = db.tx || {};
 
@@ -126,14 +146,14 @@ function ensureDb(db) {
   db.promo.monthly.reserved = db.promo.monthly.reserved || {};
   db.promo.monthly.unlimited = db.promo.monthly.unlimited || {};
 
-  // seed unlimited keys (hardcode)
+  // seed unlimited keys
   for (const k of UNLIMITED_DEVICE_KEYS) db.promo.monthly.unlimited[k] = true;
 
   return db;
 }
 
 function cleanupExpiredReservations(db) {
-  ensureDb(db);
+  ensure(db);
   const now = Date.now();
 
   // monthly reserved cleanup
@@ -153,9 +173,9 @@ function cleanupExpiredReservations(db) {
   }
 }
 
-// ===== reserve / commit / release =====
+// ====== Discount engine (reserve/apply/commit/release) ======
 function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
-  ensureDb(db);
+  ensure(db);
   cleanupExpiredReservations(db);
 
   const p = db.promo.monthly;
@@ -193,7 +213,7 @@ function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
 }
 
 function reserveVoucher(db, amount, voucherCode, ttlMs) {
-  ensureDb(db);
+  ensure(db);
   cleanupExpiredReservations(db);
 
   if (!voucherCode) return { ok: false, discountRp: 0 };
@@ -241,10 +261,10 @@ function reserveVoucher(db, amount, voucherCode, ttlMs) {
   };
 }
 
-// ✅ PROMO MONTHLY TIDAK AUTO: harus applyMonthly=true
-function applyDiscount({ db, amount, deviceKey, voucherCode, applyMonthly = false, reserveTtlMs = 6 * 60 * 1000 }) {
-  ensureDb(db);
+function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 60 * 1000 }) {
+  ensure(db);
 
+  const deviceKey = getDeviceKey(deviceId || "");
   let finalAmount = Number(amount || 0);
   let discountRp = 0;
   const applied = [];
@@ -259,22 +279,20 @@ function applyDiscount({ db, amount, deviceKey, voucherCode, applyMonthly = fals
     reservations.push(v.reservation);
   }
 
-  // monthly ONLY kalau diminta
-  if (applyMonthly) {
-    const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs);
-    if (m.ok) {
-      finalAmount = Math.max(1, finalAmount - m.discountRp);
-      discountRp += m.discountRp;
-      applied.push(m.info);
-      reservations.push(m.reservation);
-    }
+  // monthly setelah voucher
+  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs);
+  if (m.ok) {
+    finalAmount = Math.max(1, finalAmount - m.discountRp);
+    discountRp += m.discountRp;
+    applied.push(m.info);
+    reservations.push(m.reservation);
   }
 
-  return { finalAmount, discountRp, applied, reservations };
+  return { finalAmount, discountRp, applied, reservations, deviceKey };
 }
 
 function releaseReservations(db, reservations) {
-  ensureDb(db);
+  ensure(db);
   cleanupExpiredReservations(db);
 
   for (const r of reservations || []) {
@@ -294,7 +312,7 @@ function releaseReservations(db, reservations) {
 }
 
 function commitReservations(db, reservations) {
-  ensureDb(db);
+  ensure(db);
   cleanupExpiredReservations(db);
 
   for (const r of reservations || []) {
@@ -319,47 +337,49 @@ function commitReservations(db, reservations) {
   }
 }
 
-// ===== ADMIN: voucher & monthly =====
+// ====== ADMIN ops ======
 function adminUpsertVoucher(db, body) {
-  ensureDb(db);
+  ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
   if (!code) throw new Error("code required");
 
   const prev = db.vouchers[code] || {};
   db.vouchers[code] = {
     code,
-    name: body.name ? String(body.name) : (prev.name || code),
+    name: body.name ? String(body.name) : prev.name || code,
     enabled: body.enabled !== false,
     percent: clamp(Number(body.percent || 0), 0, 100),
     maxRp: Math.max(0, Number(body.maxRp || 0)),
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
     uses: Number(prev.uses || 0),
-    maxUses: body.maxUses != null ? Number(body.maxUses) : (prev.maxUses ?? null),
-    note: body.note ? String(body.note) : (prev.note || null),
-    updatedAt: nowIso(),
+    maxUses: body.maxUses != null ? Number(body.maxUses) : prev.maxUses ?? null,
+    note: body.note ? String(body.note) : prev.note || null,
+    updatedAt: new Date().toISOString(),
     reserved: prev.reserved || undefined,
   };
   return db.vouchers[code];
 }
 
 function adminDisableVoucher(db, body) {
-  ensureDb(db);
+  ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
   if (!code) throw new Error("code required");
   if (!db.vouchers[code]) throw new Error("voucher not found");
   db.vouchers[code].enabled = false;
-  db.vouchers[code].updatedAt = nowIso();
+  db.vouchers[code].updatedAt = new Date().toISOString();
   return db.vouchers[code];
 }
 
 function adminSetMonthlyPromo(db, body) {
-  ensureDb(db);
+  ensure(db);
   const p = db.promo.monthly;
+
   if (body.enabled != null) p.enabled = !!body.enabled;
   if (body.name != null) p.name = String(body.name);
   if (body.percent != null) p.percent = clamp(Number(body.percent), 0, 100);
   if (body.maxRp != null) p.maxRp = Math.max(0, Number(body.maxRp));
 
+  // add/remove unlimited by deviceKey (sha256)
   if (body.addUnlimitedDeviceKey != null) {
     const k = String(body.addUnlimitedDeviceKey).trim();
     if (k) p.unlimited[k] = true;
@@ -369,245 +389,266 @@ function adminSetMonthlyPromo(db, body) {
     if (k && p.unlimited) delete p.unlimited[k];
   }
 
-  p.updatedAt = nowIso();
+  p.updatedAt = new Date().toISOString();
   return p;
 }
 
-// ===== handler =====
+// ====== TX store ops (simple) ======
+function txUpsert(db, body) {
+  ensure(db);
+  const id = String(body.idTransaksi || body.id || "").trim();
+  if (!id) throw new Error("idTransaksi required");
+  const prev = db.tx[id] || {};
+  db.tx[id] = {
+    ...prev,
+    ...body,
+    idTransaksi: id,
+    updatedAt: new Date().toISOString(),
+    createdAt: prev.createdAt || new Date().toISOString(),
+  };
+  return db.tx[id];
+}
+
+function txGet(db, id) {
+  ensure(db);
+  return db.tx?.[id] || null;
+}
+
+function txList(db, limit = 200) {
+  ensure(db);
+  const arr = Object.values(db.tx || {});
+  arr.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return arr.slice(0, clamp(Number(limit || 200), 1, 1000));
+}
+
+function txSearch(db, q) {
+  ensure(db);
+  const s = String(q || "").trim().toLowerCase();
+  if (!s) return [];
+  const arr = Object.values(db.tx || {});
+  return arr.filter((t) => JSON.stringify(t).toLowerCase().includes(s)).slice(0, 200);
+}
+
+function txClear(db) {
+  ensure(db);
+  db.tx = {};
+  return true;
+}
+
+// ====== HELP ======
+function help() {
+  return {
+    success: true,
+    service: "levpay-api (single file)",
+    paths: {
+      recommended: "/api/levpay?action=...",
+    },
+    actions: [
+      "ping",
+      "help",
+
+      "discount.apply",
+      "discount.commit",
+      "discount.release",
+
+      "voucher.upsert (ADMIN)",
+      "voucher.disable (ADMIN)",
+      "voucher.list (ADMIN)",
+      "voucher.get (ADMIN)",
+
+      "monthly.get (ADMIN)",
+      "monthly.set (ADMIN)",
+
+      "tx.upsert (ADMIN)",
+      "tx.get (ADMIN)",
+      "tx.list (ADMIN)",
+      "tx.search (ADMIN)",
+      "tx.clear (ADMIN)",
+
+      "paidhook",
+    ],
+    admin: {
+      header: "X-Admin-Key",
+      requiredFor: ["voucher.*", "monthly.*", "tx.*"],
+    },
+  };
+}
+
+// ====== MAIN HANDLER ======
 module.exports = async (req, res) => {
+  if (setCors(req, res)) return;
+
+  const url = new URL(req.url, "http://localhost");
+  const action = String(url.searchParams.get("action") || "").trim();
+
+  // body
+  const body = await readBody(req);
+
+  // db
+  const db = ensure(readDB());
+
+  // ping/help
+  if (!action || action === "help") return send(res, 200, help());
+  if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
+
   try {
-    const url = new URL(req.url, "http://localhost");
-    const pathname = url.pathname;
-    const action = String(url.searchParams.get("action") || "").trim().toLowerCase();
+    // ===== DISCOUNT =====
+    if (action === "discount.apply" || action === "apply") {
+      const amount = Number(body.amount);
+      const deviceId = body.deviceId || body.deviceid || body.device_id || "";
+      const voucher = body.voucher || body.voucherCode || body.code || "";
 
-    // CORS
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key, X-Callback-Secret");
-    if (req.method === "OPTIONS") return res.end("");
-
-    const db = loadDb();
-
-    // ===== /api/discount =====
-    if (pathname === "/api/discount") {
-      if (!verifyCallback(req)) return send(res, 401, { success: false, error: "Bad callback secret" });
-
-      if (action === "apply") {
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-
-        const amount = Number(body.amount || 0);
-        const deviceId = String(body.deviceId || "").trim();
-        const voucherCode = String(body.voucher || body.voucherCode || "").trim();
-        const applyMonthly = !!(body.applyMonthly || body.promoMonthly || body.monthly || body.apply_monthly);
-
-        if (!Number.isFinite(amount) || amount < 1) {
-          return send(res, 400, { success: false, error: "amount invalid" });
-        }
-
-        const deviceKey = getDeviceKey(deviceId, DEVICE_PEPPER);
-        const out = applyDiscount({
-          db,
-          amount,
-          deviceKey,
-          voucherCode,
-          applyMonthly,
-          reserveTtlMs: 6 * 60 * 1000,
-        });
-
-        saveDb(db);
-        return send(res, 200, {
-          success: true,
-          data: {
-            amountOriginal: amount,
-            finalAmount: out.finalAmount,
-            discountRp: out.discountRp,
-            applied: out.applied,
-            reservations: out.reservations,
-            deviceKey,
-            applyMonthly,
-          },
-        });
+      if (!Number.isFinite(amount) || amount < 1) {
+        return send(res, 400, { success: false, error: "amount invalid" });
       }
 
-      if (action === "commit") {
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-        commitReservations(db, body.reservations || []);
-        saveDb(db);
-        return send(res, 200, { success: true, ok: true });
-      }
+      const r = applyDiscount({
+        db,
+        amount,
+        deviceId,
+        voucherCode: voucher,
+        reserveTtlMs: Number(body.reserveTtlMs || 6 * 60 * 1000),
+      });
 
-      if (action === "release") {
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-        releaseReservations(db, body.reservations || []);
-        saveDb(db);
-        return send(res, 200, { success: true, ok: true });
-      }
+      writeDB(db);
 
-      return send(res, 404, { success: false, error: "Unknown action" });
-    }
-
-    // ===== /api/paidhook =====
-    if (pathname === "/api/paidhook") {
-      if (!verifyCallback(req)) return send(res, 401, { success: false, error: "Bad callback secret" });
-      if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-
-      const body = await readJson(req);
-      const idTransaksi = String(body.idTransaksi || "").trim();
-      if (!idTransaksi) return send(res, 400, { success: false, error: "idTransaksi required" });
-
-      db.tx[idTransaksi] = {
-        ...db.tx[idTransaksi],
-        ...body,
-        updatedAt: nowIso(),
-      };
-
-      // optional safety: kalau payload bawa reservations, auto commit/release
-      const status = String(body.status || "").toLowerCase();
-      const reservations = body.reservations || [];
-      if (Array.isArray(reservations) && reservations.length) {
-        if (status === "paid") commitReservations(db, reservations);
-        if (status === "expired" || status === "cancelled" || status === "failed") releaseReservations(db, reservations);
-      }
-
-      saveDb(db);
-      return send(res, 200, { success: true, ok: true });
-    }
-
-    // ===== /api/tx =====
-    if (pathname === "/api/tx") {
-      if (!verifyCallback(req)) return send(res, 401, { success: false, error: "Bad callback secret" });
-
-      if (action === "get") {
-        const idTransaksi = String(url.searchParams.get("idTransaksi") || "").trim();
-        const data = db.tx && db.tx[idTransaksi] ? db.tx[idTransaksi] : null;
-        return send(res, 200, { success: true, data });
-      }
-
-      if (action === "clear") {
-        if (!isAdmin(req)) return send(res, 401, { success: false, error: "Admin key required" });
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        db.tx = {};
-        saveDb(db);
-        return send(res, 200, { success: true, ok: true });
-      }
-
-      // default: list
-      const deviceId = String(url.searchParams.get("deviceId") || "").trim();
-      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") || 50)));
-
-      let arr = Object.entries(db.tx || {}).map(([id, v]) => ({ idTransaksi: id, ...v }));
-      if (deviceId) arr = arr.filter((x) => String(x.deviceId || "") === deviceId);
-
-      arr.sort((a, b) => Date.parse(b.updatedAt || b.paidAt || 0) - Date.parse(a.updatedAt || a.paidAt || 0));
-      arr = arr.slice(0, limit);
-
-      return send(res, 200, { success: true, data: arr });
-    }
-
-    // ===== /api/voucher (ADMIN) =====
-    if (pathname === "/api/voucher") {
-      if (!isAdmin(req)) return send(res, 401, { success: false, error: "Admin key required" });
-
-      if (action === "list" || !action) {
-        const list = Object.values(db.vouchers || {}).map((v) => ({
-          code: v.code,
-          name: v.name,
-          enabled: v.enabled !== false,
-          percent: v.percent,
-          maxRp: v.maxRp,
-          expiresAt: v.expiresAt || null,
-          uses: Number(v.uses || 0),
-          maxUses: v.maxUses ?? null,
-          updatedAt: v.updatedAt || null,
-        }));
-        list.sort((a, b) => (a.code > b.code ? 1 : -1));
-        return send(res, 200, { success: true, data: list });
-      }
-
-      if (action === "get") {
-        const code = String(url.searchParams.get("code") || "").trim().toUpperCase();
-        const v = db.vouchers[code] || null;
-        return send(res, 200, { success: true, data: v });
-      }
-
-      if (action === "upsert") {
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-        const v = adminUpsertVoucher(db, body);
-        saveDb(db);
-        return send(res, 200, { success: true, data: v });
-      }
-
-      if (action === "disable") {
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-        const v = adminDisableVoucher(db, body);
-        saveDb(db);
-        return send(res, 200, { success: true, data: v });
-      }
-
-      return send(res, 404, { success: false, error: "Unknown action" });
-    }
-
-    // ===== /api/monthly (ADMIN) =====
-    if (pathname === "/api/monthly") {
-      if (action === "get" || !action) {
-        // public read boleh (kalau mau admin-only, tinggal kunci di sini)
-        const p = db.promo.monthly;
-        return send(res, 200, {
-          success: true,
-          data: {
-            enabled: !!p.enabled,
-            name: p.name,
-            percent: p.percent,
-            maxRp: p.maxRp,
-            updatedAt: p.updatedAt || null,
-            unlimitedCount: Object.keys(p.unlimited || {}).length,
-            reservedCount: Object.keys(p.reserved || {}).length,
-            usedCount: Object.keys(p.used || {}).length,
-          },
-        });
-      }
-
-      if (action === "set") {
-        if (!isAdmin(req)) return send(res, 401, { success: false, error: "Admin key required" });
-        if (req.method !== "POST") return send(res, 405, { success: false, error: "Method Not Allowed" });
-        const body = await readJson(req);
-        const p = adminSetMonthlyPromo(db, body);
-        saveDb(db);
-        return send(res, 200, { success: true, data: p });
-      }
-
-      return send(res, 404, { success: false, error: "Unknown action" });
-    }
-
-    // root/help
-    if (pathname === "/" || pathname === "/help") {
       return send(res, 200, {
         success: true,
-        service: "levpay-vercel-single",
-        time: nowIso(),
-        routes: [
-          "POST /api/discount?action=apply (X-Callback-Secret) body:{amount,deviceId,voucher?,applyMonthly?}",
-          "POST /api/discount?action=commit (X-Callback-Secret) body:{reservations:[]}",
-          "POST /api/discount?action=release (X-Callback-Secret) body:{reservations:[]}",
-          "POST /api/paidhook (X-Callback-Secret) body:{idTransaksi,status,deviceId,...,reservations?}",
-          "GET  /api/tx?action=list&deviceId=...&limit=50 (X-Callback-Secret)",
-          "GET  /api/tx?action=get&idTransaksi=... (X-Callback-Secret)",
-          "POST /api/tx?action=clear (X-Admin-Key + X-Callback-Secret)",
-          "GET  /api/voucher?action=list (X-Admin-Key)",
-          "POST /api/voucher?action=upsert (X-Admin-Key)",
-          "POST /api/voucher?action=disable (X-Admin-Key)",
-          "GET  /api/monthly?action=get",
-          "POST /api/monthly?action=set (X-Admin-Key)",
-        ],
+        data: {
+          finalAmount: r.finalAmount,
+          discountRp: r.discountRp,
+          applied: r.applied,
+          reservations: r.reservations,
+          deviceKey: r.deviceKey,
+        },
       });
     }
 
-    return send(res, 404, { success: false, error: "Not found" });
+    if (action === "discount.commit" || action === "commit") {
+      const reservations = Array.isArray(body.reservations) ? body.reservations : [];
+      commitReservations(db, reservations);
+      writeDB(db);
+      return send(res, 200, { success: true, data: { committed: reservations.length } });
+    }
+
+    if (action === "discount.release" || action === "release") {
+      const reservations = Array.isArray(body.reservations) ? body.reservations : [];
+      releaseReservations(db, reservations);
+      writeDB(db);
+      return send(res, 200, { success: true, data: { released: reservations.length } });
+    }
+
+    // ===== VOUCHER (ADMIN) =====
+    if (action.startsWith("voucher.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "voucher.upsert") {
+        const out = adminUpsertVoucher(db, body || {});
+        writeDB(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "voucher.disable") {
+        const out = adminDisableVoucher(db, body || {});
+        writeDB(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "voucher.list") {
+        const items = Object.values(db.vouchers || {}).sort((a, b) =>
+          String(a.code || "").localeCompare(String(b.code || ""))
+        );
+        return send(res, 200, { success: true, data: items });
+      }
+
+      if (action === "voucher.get") {
+        const code = String(body.code || url.searchParams.get("code") || "").trim().toUpperCase();
+        if (!code) return send(res, 400, { success: false, error: "code required" });
+        const v = db.vouchers?.[code];
+        if (!v) return send(res, 404, { success: false, error: "voucher not found" });
+        return send(res, 200, { success: true, data: v });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown voucher action" });
+    }
+
+    // ===== MONTHLY (ADMIN) =====
+    if (action.startsWith("monthly.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "monthly.get") {
+        cleanupExpiredReservations(db);
+        return send(res, 200, { success: true, data: db.promo.monthly });
+      }
+
+      if (action === "monthly.set") {
+        const out = adminSetMonthlyPromo(db, body || {});
+        writeDB(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown monthly action" });
+    }
+
+    // ===== TX (ADMIN) =====
+    if (action.startsWith("tx.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "tx.upsert") {
+        const out = txUpsert(db, body || {});
+        writeDB(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "tx.get") {
+        const id = String(body.idTransaksi || url.searchParams.get("idTransaksi") || "").trim();
+        if (!id) return send(res, 400, { success: false, error: "idTransaksi required" });
+        const out = txGet(db, id);
+        if (!out) return send(res, 404, { success: false, error: "not found" });
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "tx.list") {
+        const limit = Number(body.limit || url.searchParams.get("limit") || 200);
+        const out = txList(db, limit);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "tx.search") {
+        const q = body.q || url.searchParams.get("q") || "";
+        const out = txSearch(db, q);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "tx.clear") {
+        txClear(db);
+        writeDB(db);
+        return send(res, 200, { success: true, data: { cleared: true } });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown tx action" });
+    }
+
+    // ===== PAIDHOOK (optional secret) =====
+    if (action === "paidhook") {
+      if (!checkCallbackSecret(req)) return send(res, 401, { success: false, error: "bad secret" });
+
+      // simpan minimal ke tx store (kalau ada idTransaksi)
+      const id = String(body.idTransaksi || body.id || "").trim();
+      if (id) {
+        txUpsert(db, { ...body, idTransaksi: id });
+        writeDB(db);
+      }
+
+      return send(res, 200, { success: true, data: { received: true, idTransaksi: id || null } });
+    }
+
+    return send(res, 404, {
+      success: false,
+      error: "Unknown action",
+      hint:
+        "use action=discount.apply|discount.commit|discount.release|voucher.*|monthly.*|tx.*|paidhook|help|ping",
+    });
   } catch (e) {
     return send(res, 500, { success: false, error: e?.message || "server error" });
   }
