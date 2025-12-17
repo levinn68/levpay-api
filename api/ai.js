@@ -26,7 +26,7 @@ Format jawaban:
 
     const prompt = `${SYSTEM}\n\nUser: ${ask}\nAssistant:`;
 
-    const upstream = "https://theresapisv3.vercel.app/ai/deepseekV3?ask=" + encodeURIComponent(prompt);
+    const upstream = "https://theresapisv3.vercel.app/ai/groq?prompt=" + encodeURIComponent(prompt);
 
     const r = await fetch(upstream, { method: "GET" });
     const text = await r.text();
