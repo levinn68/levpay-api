@@ -1,30 +1,59 @@
 // api/paidlog.js
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://agwaxaejnnszunccmftm.supabase.co";          // TODO ganti
-const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnd2F4YWVqbm5zenVuY2NtZnRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMjI0NDUsImV4cCI6MjA4MTU5ODQ0NX0.fB_-VKL6CyjYa3jaG_6Pmag-Za-DEQhRujSiEmk1l-I";  // TODO ganti (hardcode kalau maksa)
+// ⚠️ Ini key lu "anon". Bisa dipakai, tapi kalau RLS ketat biasanya INSERT/UPDATE bakal KE-REFUSE.
+// Paling aman pakai SERVICE_ROLE (server only). Tapi lu bilang mau hardcode, ya udah.
+const SUPABASE_URL = "https://agwaxaejnnszunccmftm.supabase.co";
+const SUPABASE_SERVICE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnd2F4YWVqbm5zenVuY2NtZnRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMjI0NDUsImV4cCI6MjA4MTU5ODQ0NX0.fB_-VKL6CyjYa3jaG_6Pmag-Za-DEQhRujSiEmk1l-I";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
-function json(res, code, body) {
+function send(res, code, body) {
   res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
 }
 
+async function readBody(req) {
+  // Vercel kadang udah parse, kadang belum
+  if (req.body && typeof req.body === "object") return req.body;
+
+  const chunks = [];
+  for await (const ch of req) chunks.push(ch);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { raw };
+  }
+}
+
 export default async function handler(req, res) {
   try {
+    // ===== CORS =====
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    if (req.method === "OPTIONS") return res.end();
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") return res.status(204).end();
+
+    // ✅ PING mode: /api/paidlog?ping=1
+    if (req.method === "GET" && String(req.query?.ping || "") === "1") {
+      return send(res, 200, {
+        success: true,
+        pong: true,
+        now: new Date().toISOString(),
+      });
+    }
 
     // GET /api/paidlog?limit=10&q=...
     if (req.method === "GET") {
-      const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
-      const q = String(req.query.q || "").trim();
+      const limit = Math.min(50, Math.max(1, Number(req.query?.limit || 10)));
+      const q = String(req.query?.q || "").trim();
 
       let query = sb
         .from("levpay_paidlog")
@@ -46,15 +75,16 @@ export default async function handler(req, res) {
       }
 
       const { data, error } = await query;
-      if (error) return json(res, 500, { success: false, error: error.message, data: [] });
-      return json(res, 200, { success: true, data });
+      if (error) return send(res, 500, { success: false, error: error.message, data: [] });
+      return send(res, 200, { success: true, data });
     }
 
     // POST /api/paidlog  (upsert)
     if (req.method === "POST") {
-      const body = req.body || {};
-      const idTransaksi = String(body.idTransaksi || "").trim();
-      if (!idTransaksi) return json(res, 400, { success: false, error: "missing idTransaksi" });
+      const body = await readBody(req);
+
+      const idTransaksi = String(body?.idTransaksi || "").trim();
+      if (!idTransaksi) return send(res, 400, { success: false, error: "missing idTransaksi" });
 
       const row = {
         idTransaksi,
@@ -73,12 +103,12 @@ export default async function handler(req, res) {
         .select("idTransaksi")
         .single();
 
-      if (error) return json(res, 500, { success: false, error: error.message });
-      return json(res, 200, { success: true, data });
+      if (error) return send(res, 500, { success: false, error: error.message });
+      return send(res, 200, { success: true, data });
     }
 
-    return json(res, 405, { success: false, error: "method not allowed" });
+    return send(res, 405, { success: false, error: "method not allowed" });
   } catch (e) {
-    return json(res, 500, { success: false, error: String(e?.message || e) });
+    return send(res, 500, { success: false, error: String(e?.message || e) });
   }
 }
