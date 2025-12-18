@@ -1,8 +1,8 @@
-// api/paidlog.js
-import { createClient } from "@supabase/supabase-js";
+// api/paidlog.js  (CommonJS)
+const { createClient } = require("@supabase/supabase-js");
 
-// ⚠️ Ini key lu "anon". Bisa dipakai, tapi kalau RLS ketat biasanya INSERT/UPDATE bakal KE-REFUSE.
-// Paling aman pakai SERVICE_ROLE (server only). Tapi lu bilang mau hardcode, ya udah.
+// ⚠️ paling bener pakai ENV, tapi lu minta hardcode yaudah.
+// NOTE: jangan pake "service_role" di client/public. Ini cuma di server (Vercel function).
 const SUPABASE_URL = "https://agwaxaejnnszunccmftm.supabase.co";
 const SUPABASE_SERVICE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnd2F4YWVqbm5zenVuY2NtZnRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMjI0NDUsImV4cCI6MjA4MTU5ODQ0NX0.fB_-VKL6CyjYa3jaG_6Pmag-Za-DEQhRujSiEmk1l-I";
@@ -17,37 +17,39 @@ function send(res, code, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req) {
-  // Vercel kadang udah parse, kadang belum
-  if (req.body && typeof req.body === "object") return req.body;
-
-  const chunks = [];
-  for await (const ch of req) chunks.push(ch);
-  const raw = Buffer.concat(chunks).toString("utf8").trim();
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { raw };
-  }
+function cors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Admin-Key"
+  );
 }
 
-export default async function handler(req, res) {
+function safeJsonBody(req) {
+  // Vercel kadang udah parse -> object
+  if (req.body && typeof req.body === "object") return req.body;
+
+  // kadang string
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+
+  return {};
+}
+
+module.exports = async (req, res) => {
   try {
-    // ===== CORS =====
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    cors(res);
 
-    if (req.method === "OPTIONS") return res.status(204).end();
+    if (req.method === "OPTIONS") {
+      res.statusCode = 204;
+      return res.end();
+    }
 
-    // ✅ PING mode: /api/paidlog?ping=1
+    // ✅ ping biar lu bisa "ngecek hidup"
     if (req.method === "GET" && String(req.query?.ping || "") === "1") {
-      return send(res, 200, {
-        success: true,
-        pong: true,
-        now: new Date().toISOString(),
-      });
+      return send(res, 200, { ok: true, name: "paidlog", ts: Date.now() });
     }
 
     // GET /api/paidlog?limit=10&q=...
@@ -76,14 +78,14 @@ export default async function handler(req, res) {
 
       const { data, error } = await query;
       if (error) return send(res, 500, { success: false, error: error.message, data: [] });
-      return send(res, 200, { success: true, data });
+      return send(res, 200, { success: true, data: data || [] });
     }
 
-    // POST /api/paidlog  (upsert)
+    // POST /api/paidlog (upsert by idTransaksi)
     if (req.method === "POST") {
-      const body = await readBody(req);
+      const body = safeJsonBody(req);
 
-      const idTransaksi = String(body?.idTransaksi || "").trim();
+      const idTransaksi = String(body.idTransaksi || "").trim();
       if (!idTransaksi) return send(res, 400, { success: false, error: "missing idTransaksi" });
 
       const row = {
@@ -111,4 +113,4 @@ export default async function handler(req, res) {
   } catch (e) {
     return send(res, 500, { success: false, error: String(e?.message || e) });
   }
-}
+};
