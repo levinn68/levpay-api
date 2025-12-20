@@ -855,7 +855,7 @@
         return x || location.origin;
       }
       function endpoint(action){
-        return normHost(HOST) + "/api/orkut?action=" + encodeURIComponent(action);
+        return normHost(HOST) + "/api/levpay?action=" + encodeURIComponent(action);
       }
       function isAdminAction(action){
         return /^(voucher\.|monthly\.|tx\.)/.test(action);
@@ -896,7 +896,7 @@
         if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
         const h = heads.length ? (" \\\n  " + heads.join(" \\\n  ")) : "";
         const data = (method === "GET" || body == null) ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
-        return `curl -sS -X ${method} "${HOSTVAR}/api/orkut?action=${action}"${h}${data} | jq`;
+        return `curl -sS -X ${method} "${HOSTVAR}/api/levpay?action=${action}"${h}${data} | jq`;
       }
       function setLast({action, method, body, response}){
         last.action = action;
