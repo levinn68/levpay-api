@@ -3,964 +3,795 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LevPay Admin</title>
+  <title>LevPay Admin (Mazer-like)</title>
+
+  <!-- Mazer (CSS) -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/zuramai/mazer@main/dist/assets/css/main/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/zuramai/mazer@main/dist/assets/css/main/app-dark.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Flatpickr for better datetime picker -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+
   <style>
-    :root{
-      --bg0:#070A12;
-      --bg1:#0B1020;
-      --card:rgba(255,255,255,.06);
-      --card2:rgba(255,255,255,.045);
-      --bd:rgba(255,255,255,.10);
-      --txt:rgba(245,248,255,.92);
-      --mut:rgba(245,248,255,.62);
-      --mut2:rgba(245,248,255,.44);
-
-      --ok:#22c55e;
-      --warn:#f59e0b;
-      --bad:#ef4444;
-
-      --pri1:#7c3aed;
-      --pri2:#22d3ee;
-
-      --r:18px;
-      --r2:22px;
-      --shadow: 0 16px 44px rgba(0,0,0,.38);
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-    }
-
-    *{ box-sizing:border-box; }
-    html,body{ height:100%; }
-    body{
-      margin:0;
-      font-family:var(--sans);
-      color:var(--txt);
-      background:
-        radial-gradient(900px 560px at 10% -15%, rgba(124,58,237,.22), transparent 60%),
-        radial-gradient(900px 560px at 95% 0%, rgba(34,211,238,.14), transparent 55%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
-      overflow-x:hidden;
-    }
-
-    /* Lock blur */
-    body.is-locked .shell{
-      filter: blur(12px);
-      transform: scale(.99);
-      opacity:.65;
-      pointer-events:none;
-      user-select:none;
-      transition: .2s ease;
-    }
-    body:not(.is-locked) .shell{
-      transition: .2s ease;
-    }
-
-    /* Layout */
-    .shell{
-      width:min(980px, 94vw);
-      margin: 18px auto 64px;
-      display:grid;
-      gap:14px;
-    }
-
-    /* Header */
-    .header{
-      border:1px solid var(--bd);
-      border-radius: var(--r2);
-      background: linear-gradient(180deg, var(--card), var(--card2));
-      box-shadow: var(--shadow);
-      overflow:hidden;
-    }
-    .headerInner{
-      padding: 14px 14px 10px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      flex-wrap:wrap;
-    }
-    .brand{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-      min-width: 220px;
-    }
-    .brand .title{
-      font-size:15px;
-      font-weight:1000;
-      letter-spacing:-.02em;
-      margin:0;
-    }
-    .brand .sub{
-      margin:0;
-      color:var(--mut);
-      font-size:12px;
-      font-weight:900;
-      line-height:1.45;
-    }
-
-    .statusRow{
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-      align-items:center;
-      justify-content:flex-end;
-    }
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.05);
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 1000;
-      white-space:nowrap;
-    }
-    .dot{
-      width:10px;height:10px;border-radius:999px;
-      background: rgba(255,255,255,.18);
-    }
-    .pill[data-tone="ok"] .dot{ background: var(--ok); }
-    .pill[data-tone="warn"] .dot{ background: var(--warn); }
-    .pill[data-tone="bad"] .dot{ background: var(--bad); }
-
-    /* Tabs */
-    .tabs{
-      padding: 8px 10px 12px;
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-      border-top:1px solid rgba(255,255,255,.06);
-    }
-    .tabBtn{
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.04);
-      color: var(--txt);
-      padding: 10px 12px;
-      border-radius: 999px;
-      font-weight: 1000;
-      font-size: 12px;
-      cursor:pointer;
-      transition: .12s ease;
-    }
-    .tabBtn:active{ transform: translateY(1px); }
-    .tabBtn.is-active{
-      border-color: rgba(34,211,238,.20);
-      background: linear-gradient(90deg, rgba(124,58,237,.20), rgba(34,211,238,.12));
-    }
-
-    /* Panels */
-    .panel{
-      border:1px solid var(--bd);
-      border-radius: var(--r2);
-      background: linear-gradient(180deg, var(--card), var(--card2));
-      box-shadow: var(--shadow);
-      overflow:hidden;
-    }
-    .panelHead{
-      padding: 14px 14px 12px;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .panelHead h2{
-      margin:0;
-      font-size: 14px;
-      font-weight:1000;
-      letter-spacing:-.01em;
-    }
-    .panelHead .desc{
-      margin-top:6px;
-      color:var(--mut);
-      font-size:12px;
-      font-weight:900;
-      line-height:1.55;
-    }
-    .panelBody{ padding: 14px; }
-
-    .grid{
-      display:grid;
-      grid-template-columns: 1.1fr .9fr;
-      gap:14px;
-    }
-    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
-
-    /* Form */
-    label{
-      display:block;
-      margin: 6px 0 8px;
-      font-size: 12px;
-      color: var(--mut);
-      font-weight: 1000;
-    }
-    .input, select{
-      width:100%;
-      border-radius: 16px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(0,0,0,.18);
-      color: var(--txt);
-      padding: 12px 12px;
-      outline:none;
-      font-weight: 950;
-      font-size: 14px;
-    }
-    .row2{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:12px;
-    }
-    @media (max-width: 560px){ .row2{ grid-template-columns:1fr; } }
-
-    .hint{
-      margin-top:8px;
-      color: var(--mut2);
-      font-size:12px;
-      font-weight:900;
-      line-height:1.55;
-    }
-
-    /* Buttons */
-    .btnRow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
-    .btn{
-      border:none;
-      border-radius: 16px;
-      padding: 11px 14px;
-      font-weight: 1000;
-      cursor:pointer;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:10px;
-      transition: .12s ease;
-      -webkit-tap-highlight-color: transparent;
-      user-select:none;
-    }
-    .btn:active{ transform: translateY(1px); }
-    .btn[disabled]{ opacity:.55; cursor:not-allowed; transform:none; }
-    .btnPri{
-      color:#06101f;
-      background: linear-gradient(90deg, var(--pri1), var(--pri2));
-    }
-    .btnGhost{
-      color: var(--txt);
-      background: rgba(255,255,255,.04);
-      border:1px solid rgba(255,255,255,.12);
-    }
-    .btnOk{
-      color:#06150e;
-      background: linear-gradient(90deg, var(--ok), var(--pri2));
-    }
-    .btnBad{
-      color:#24080a;
-      background: linear-gradient(90deg, var(--bad), var(--warn));
-    }
-
-    .divider{ height:1px; background: rgba(255,255,255,.08); margin: 12px 0; }
-
-    /* Table list */
-    .tableWrap{
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(0,0,0,.20);
-      border-radius: 18px;
-      overflow:hidden;
-    }
-    table{ width:100%; border-collapse: collapse; font-size:12px; }
-    thead{ background: rgba(255,255,255,.05); }
-    th,td{ padding: 10px 10px; border-bottom:1px solid rgba(255,255,255,.06); vertical-align:top; }
-    th{
-      text-align:left;
-      color: var(--mut);
-      font-weight:1000;
-      font-size:11px;
-      text-transform: uppercase;
-      letter-spacing:.03em;
-    }
-    tbody tr{ cursor:pointer; transition: .12s ease; }
-    tbody tr:hover{ background: rgba(255,255,255,.04); }
-    .right{ text-align:right; }
-    .mono{ font-family: var(--mono); }
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.04);
-      font-weight:1000;
-      white-space:nowrap;
-    }
-    .badge .dot{ width:8px;height:8px;border-radius:999px; background: rgba(255,255,255,.18); }
-    .badge[data-tone="ok"] .dot{ background: var(--ok); }
-    .badge[data-tone="bad"] .dot{ background: var(--bad); }
-    .mut{ color: var(--mut); }
-    .mut2{ color: var(--mut2); }
-
-    /* Sections */
-    .section{ display:none; }
-    .section.is-on{ display:block; animation: fade .14s ease both; }
-    @keyframes fade{ from{opacity:0; transform: translateY(6px)} to{opacity:1; transform:none} }
-
-    /* Modal */
-    .modal{
-      position:fixed; inset:0;
-      display:none;
-      place-items:center;
+    /* --- Lock blur --- */
+    body.is-locked #app { filter: blur(12px); opacity: .65; pointer-events:none; user-select:none; }
+    .lock-overlay{
+      position:fixed; inset:0; z-index:9999;
+      display:none; align-items:center; justify-content:center;
       background: rgba(0,0,0,.55);
-      backdrop-filter: blur(14px);
-      z-index: 50;
-    }
-    .modal.is-on{ display:grid; }
-    .modalCard{
-      width: min(560px, 94vw);
-      border-radius: 26px;
-      border:1px solid rgba(255,255,255,.16);
-      background: rgba(10,13,22,.94);
-      box-shadow: var(--shadow);
-      overflow:hidden;
-      animation: pop .14s ease both;
-    }
-    @keyframes pop{ from{opacity:0; transform: translateY(10px)} to{opacity:1; transform:none} }
-    .modalHead{
-      padding: 14px 14px 10px;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      display:flex;
-      justify-content:space-between;
-      gap:12px;
-      align-items:flex-start;
-    }
-    .modalHead h3{ margin:0; font-weight:1000; font-size:14px; }
-    .modalHead p{ margin:6px 0 0; color: var(--mut); font-size:12px; font-weight:900; line-height:1.55; }
-    .modalBody{ padding: 14px; }
-
-    /* Toast */
-    .toast{
-      position: fixed;
-      left:50%;
-      bottom: 18px;
-      transform: translateX(-50%);
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(0,0,0,.40);
       backdrop-filter: blur(10px);
-      box-shadow: var(--shadow);
-      padding: 10px 14px;
-      border-radius: 999px;
-      font-weight: 1000;
-      font-size: 12px;
-      display:none;
-      z-index: 60;
-      max-width: min(860px, 92vw);
-      text-align:center;
+      padding: 18px;
     }
-    .toast.is-on{ display:block; animation: pop .14s ease both; }
+    body.is-locked .lock-overlay{ display:flex; }
 
-    /* Debug box */
-    .codeBox{
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(0,0,0,.22);
+    .lock-card{
+      width:min(520px, 94vw);
       border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(18, 22, 33, .92);
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      overflow:hidden;
+    }
+    .lock-head{
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    }
+    .lock-head h3{ margin:0; font-weight:800; font-size:16px; }
+    .lock-head p{ margin:.35rem 0 0; opacity:.75; font-size:12px; }
+    .lock-body{ padding: 14px 16px 16px; }
+    .lock-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+
+    /* --- Curl / JSON boxes --- */
+    .codebox{
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.28);
       padding: 12px;
-      font-family: var(--mono);
       font-size: 12px;
-      line-height: 1.55;
+      line-height: 1.6;
       white-space: pre;
       overflow:auto;
-      max-height: 320px;
+      max-height: 260px;
     }
 
-    .inline{
-      display:flex;
-      gap:10px;
-      align-items:center;
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid rgba(0,0,0,.08);
+      padding:6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(0,0,0,.04);
     }
-    .grow{ flex:1; }
+    .dot{ width:10px; height:10px; border-radius:99px; background: #adb5bd; }
+    .pill.ok .dot{ background:#22c55e; }
+    .pill.bad .dot{ background:#ef4444; }
+    .pill.warn .dot{ background:#f59e0b; }
+
+    /* Hide voucher code in table */
+    .mask-code{ opacity:.75; }
+    .clickable-row{ cursor:pointer; }
+    .clickable-row:hover{ background: rgba(0,0,0,.03); }
+
+    /* Small helper */
+    .muted{ opacity:.75; }
+    .small{ font-size: 12px; }
+    .btn i{ margin-right:6px; }
+
+    /* Prevent weird shadow overlays on mobile */
+    .card { overflow:hidden; }
   </style>
 </head>
 
 <body class="is-locked">
-  <div class="toast" id="toast">OK</div>
-
-  <!-- Login modal -->
-  <div class="modal is-on" id="modal">
-    <div class="modalCard">
-      <div class="modalHead">
+  <!-- LOCK MODAL -->
+  <div class="lock-overlay">
+    <div class="lock-card">
+      <div class="lock-head">
         <div>
-          <h3>Masuk Admin</h3>
-          <p>Masukkan <b>Admin Key</b>. Setelah masuk, blur hilang otomatis.</p>
+          <h3>LevPay Admin</h3>
+          <p>Masukin <b>Admin Key</b>. Setelah valid, blur hilang otomatis.</p>
         </div>
-        <button class="btn btnGhost" id="btnDemo" type="button">Isi contoh</button>
+        <button class="btn btn-sm btn-light" id="btnDemo"><i class="bi bi-magic"></i>Contoh</button>
       </div>
-      <div class="modalBody">
-        <label>Base URL (opsional)</label>
-        <input class="input" id="baseUrl" placeholder="Kosong = domain ini (recommended)" />
-        <div class="hint">Kalau admin ini satu domain sama API, kosongin aja.</div>
+      <div class="lock-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">API Base URL</label>
+            <input class="form-control" id="inBase" placeholder="Kosong = domain ini (recommended)" />
+            <div class="form-text">Contoh: https://levpay-api.vercel.app</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Admin Key</label>
+            <input class="form-control" id="inKey" type="password" placeholder="Masukkan admin key..." />
+            <div class="form-text">Disimpan lokal (localStorage). Logout buat hapus.</div>
+          </div>
+        </div>
 
-        <div class="divider"></div>
+        <div class="lock-actions">
+          <button class="btn btn-primary" id="btnLogin"><i class="bi bi-shield-lock"></i>Masuk</button>
+          <button class="btn btn-outline-light" id="btnPingLock"><i class="bi bi-wifi"></i>Ping</button>
+        </div>
 
-        <label>Admin Key</label>
-        <input class="input" id="adminKey" type="password" placeholder="Masukkan Admin Key..." />
-        <div class="hint">Key disimpan lokal (localStorage). Logout buat hapus.</div>
-
-        <div class="btnRow">
-          <button class="btn btnPri" id="btnUnlock" type="button">Masuk</button>
-          <button class="btn btnGhost" id="btnPing" type="button">Ping</button>
+        <div class="mt-3 d-flex flex-wrap gap-2">
+          <span class="pill warn" id="pillApi"><span class="dot"></span><span id="pillApiText">API: belum dicek</span></span>
+          <span class="pill warn" id="pillKey"><span class="dot"></span><span id="pillKeyText">Key: belum</span></span>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="shell">
-    <!-- Header + tabs -->
-    <div class="header">
-      <div class="headerInner">
-        <div class="brand">
-          <p class="title">LevPay Admin</p>
-          <p class="sub">Voucher & Monthly settings (production UI)</p>
-        </div>
+  <div id="app">
+    <div id="main">
+      <!-- TOPBAR -->
+      <header class="mb-3">
+        <nav class="navbar navbar-expand navbar-light">
+          <div class="container-fluid">
+            <a class="navbar-brand" href="javascript:void(0)">
+              <strong>LevPay Admin</strong>
+              <span class="ms-2 small muted">Mazer-like UI</span>
+            </a>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-primary" id="btnRefresh"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
+              <button class="btn btn-sm btn-outline-danger" id="btnLogout"><i class="bi bi-box-arrow-right"></i>Logout</button>
+            </div>
+          </div>
+        </nav>
+      </header>
 
-        <div class="statusRow">
-          <div class="pill" id="pillApi" data-tone="warn"><span class="dot"></span><span id="pillApiText">API: belum dicek</span></div>
-          <div class="pill" id="pillKey" data-tone="warn"><span class="dot"></span><span id="pillKeyText">Key: belum</span></div>
-          <div class="pill" id="pillV" data-tone="warn"><span class="dot"></span><span id="pillVText">Voucher: —</span></div>
-          <div class="pill" id="pillM" data-tone="warn"><span class="dot"></span><span id="pillMText">Monthly: —</span></div>
-        </div>
-      </div>
+      <div class="page-content">
+        <section class="row">
+          <!-- LEFT: MENU -->
+          <div class="col-12 col-lg-3">
+            <div class="card">
+              <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                  <span class="pill warn" id="pillVoucher"><span class="dot"></span><span id="pillVoucherText">Voucher: —</span></span>
+                  <span class="pill warn" id="pillMonthly"><span class="dot"></span><span id="pillMonthlyText">Monthly: —</span></span>
+                </div>
+                <hr>
+                <div class="list-group">
+                  <button class="list-group-item list-group-item-action active" data-tab="voucher">
+                    <i class="bi bi-ticket-perforated"></i> Voucher
+                  </button>
+                  <button class="list-group-item list-group-item-action" data-tab="monthly">
+                    <i class="bi bi-calendar2-week"></i> Monthly
+                  </button>
+                  <button class="list-group-item list-group-item-action" data-tab="tools">
+                    <i class="bi bi-wrench-adjustable"></i> Tools
+                  </button>
+                  <button class="list-group-item list-group-item-action" data-tab="debug">
+                    <i class="bi bi-bug"></i> Debug
+                  </button>
+                </div>
 
-      <div class="tabs">
-        <button class="tabBtn is-active" data-tab="voucher">Voucher</button>
-        <button class="tabBtn" data-tab="monthly">Monthly</button>
-        <button class="tabBtn" data-tab="tools">Tools</button>
-        <button class="tabBtn" data-tab="debug">Debug</button>
+                <hr>
+                <div class="small muted">
+                  Endpoint tetap: <span class="mono">/api/orkut?action=...</span> (admin pakai header <span class="mono">X-Admin-Key</span>)
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <span style="flex:1"></span>
-        <button class="tabBtn" id="btnRefresh">Refresh</button>
-        <button class="tabBtn" id="btnLogout">Logout</button>
+          <!-- RIGHT: CONTENT -->
+          <div class="col-12 col-lg-9">
+            <!-- TAB: VOUCHER -->
+            <div id="tabVoucher">
+              <!-- CURL + JSON PREVIEW -->
+              <div class="card mb-3">
+                <div class="card-header">
+                  <h4 class="card-title mb-0">cURL + JSON (otomatis)</h4>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-bold">cURL preview</div>
+                        <button class="btn btn-sm btn-outline-secondary" id="btnCopyCurl"><i class="bi bi-clipboard"></i>Copy</button>
+                      </div>
+                      <div class="codebox mono" id="curlBox">—</div>
+                      <div class="form-text">
+                        Admin key dimasking jadi <span class="mono">$ADMIN</span>. Biar aman.
+                      </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-bold">Response JSON</div>
+                        <button class="btn btn-sm btn-outline-secondary" id="btnCopyJson"><i class="bi bi-clipboard"></i>Copy</button>
+                      </div>
+                      <div class="codebox mono" id="jsonBox">{}</div>
+                      <div class="form-text">Response terakhir ditampilkan di sini.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LIST VOUCHER ON -->
+              <div class="card mb-3">
+                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <h4 class="card-title mb-0">Voucher ON</h4>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" id="btnLoadVouchers"><i class="bi bi-download"></i>Load</button>
+                    <button class="btn btn-sm btn-primary" id="btnNewVoucher"><i class="bi bi-plus-lg"></i>New</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2 mb-2">
+                    <div class="col-12 col-md-6">
+                      <input class="form-control" id="qVoucher" placeholder="Search name / note..." />
+                    </div>
+                    <div class="col-12 col-md-3">
+                      <select class="form-select" id="sortVoucher">
+                        <option value="updated">Sort: Updated</option>
+                        <option value="name">Sort: Name</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-3 d-grid">
+                      <button class="btn btn-outline-secondary" id="btnPing"><i class="bi bi-wifi"></i>Ping</button>
+                    </div>
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                      <thead>
+                        <tr>
+                          <th>Status</th>
+                          <th>Nama</th>
+                          <th class="text-end">Diskon %</th>
+                          <th class="text-end">Limit Nominal</th>
+                          <th class="text-end">Limit Pemakaian</th>
+                          <th>Expired</th>
+                        </tr>
+                      </thead>
+                      <tbody id="voucherTbody">
+                        <tr><td colspan="6" class="muted">Belum ada data. Klik Load.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div class="mt-2 small muted">
+                    Catatan: kalau diskon “kecil”, cek <b>Limit Nominal (maxRp)</b>. Kalau mau tanpa cap: set <b>0</b>.
+                  </div>
+                </div>
+              </div>
+
+              <!-- VOUCHER FORM -->
+              <div class="card">
+                <div class="card-header">
+                  <h4 class="card-title mb-0">Edit Voucher</h4>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Enabled</label>
+                      <select class="form-select" id="vEnabled">
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12 col-md-8">
+                      <label class="form-label">Nama</label>
+                      <input class="form-control" id="vName" placeholder="VIP LEVEL" />
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Diskon %</label>
+                      <input class="form-control" id="vPercent" type="number" min="0" max="100" step="1" placeholder="10" />
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Limit Nominal (maxRp) — 0=unlimited</label>
+                      <input class="form-control" id="vMaxRp" type="number" min="0" step="1" placeholder="0" />
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Limit Pemakaian (maxUses) — kosong=unlimited</label>
+                      <input class="form-control" id="vMaxUses" type="number" min="1" step="1" placeholder="" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Expired</label>
+                      <input class="form-control" id="vExpiresAt" placeholder="Pilih tanggal & jam..." />
+                      <div class="form-text">Pakai kalender biar gampang (flatpickr).</div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Note</label>
+                      <input class="form-control" id="vNote" placeholder="Catatan internal" />
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label">Voucher Code (hidden)</label>
+                      <div class="input-group">
+                        <input class="form-control mono" id="vCode" type="password" placeholder="(hidden)" autocomplete="off" />
+                        <button class="btn btn-outline-secondary" id="btnRevealCode"><i class="bi bi-eye"></i>Reveal</button>
+                      </div>
+                      <div class="form-text">Kode tidak ditampilkan di tabel. Reveal hanya kalau perlu.</div>
+                    </div>
+                  </div>
+
+                  <hr>
+
+                  <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-primary" id="btnUpsert"><i class="bi bi-save2"></i>Save (Upsert)</button>
+                    <button class="btn btn-outline-success" id="btnEnable"><i class="bi bi-toggle-on"></i>Enable</button>
+                    <button class="btn btn-outline-danger" id="btnDisable"><i class="bi bi-toggle-off"></i>Disable</button>
+                  </div>
+
+                  <hr>
+
+                  <h6 class="mb-2">Test (createqr)</h6>
+                  <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Amount</label>
+                      <input class="form-control" id="tAmount" type="number" min="1" step="1" value="10000">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Device ID</label>
+                      <input class="form-control mono" id="tDeviceId" placeholder="dev_web_xxx">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Voucher (hidden)</label>
+                      <div class="input-group">
+                        <input class="form-control mono" id="tVoucher" type="password" placeholder="(hidden)" autocomplete="off" />
+                        <button class="btn btn-outline-secondary" id="btnRevealTest"><i class="bi bi-eye"></i>Reveal</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button class="btn btn-outline-secondary" id="btnGenDevice"><i class="bi bi-shuffle"></i>Generate Device ID</button>
+                    <button class="btn btn-success" id="btnRunTest"><i class="bi bi-play-fill"></i>Run Test</button>
+                  </div>
+
+                  <div class="small muted mt-2">
+                    cURL preview otomatis ikut berubah sesuai tombol terakhir yang lo klik (Upsert/Disable/Enable/Test).
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: MONTHLY -->
+            <div id="tabMonthly" class="d-none">
+              <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between flex-wrap gap-2">
+                  <h4 class="card-title mb-0">Monthly Promo</h4>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" id="btnGetMonthly"><i class="bi bi-download"></i>Get</button>
+                    <button class="btn btn-sm btn-primary" id="btnSetMonthly"><i class="bi bi-save2"></i>Save</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Enabled</label>
+                      <select class="form-select" id="mEnabled">
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-8">
+                      <label class="form-label">Nama Promo</label>
+                      <input class="form-control" id="mName" placeholder="PROMO BULANAN">
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Diskon %</label>
+                      <input class="form-control" id="mPercent" type="number" min="0" max="100" step="1">
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Max Rp</label>
+                      <input class="form-control" id="mMaxRp" type="number" min="0" step="1">
+                    </div>
+                  </div>
+
+                  <hr>
+                  <h6 class="mb-2">Unlimited DeviceKey</h6>
+                  <div class="small muted mb-2">
+                    DeviceKey = <span class="mono">SHA256(deviceId + "|" + pepper)</span>. Pepper itu secret biar gak bisa ditebak.
+                  </div>
+
+                  <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Device ID</label>
+                      <input class="form-control mono" id="uDeviceId" placeholder="dev_web_xxx">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Pepper</label>
+                      <input class="form-control mono" id="uPepper" type="password" placeholder="(hidden)">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">DeviceKey (hidden)</label>
+                      <div class="input-group">
+                        <input class="form-control mono" id="uDeviceKey" type="password" readonly placeholder="(hidden)">
+                        <button class="btn btn-outline-secondary" id="btnRevealDK"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-outline-secondary" id="btnGenDK"><i class="bi bi-cpu"></i>Gen</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button class="btn btn-success" id="btnAddUnlimited"><i class="bi bi-plus-circle"></i>Add Unlimited</button>
+                    <button class="btn btn-outline-danger" id="btnRemoveUnlimited"><i class="bi bi-dash-circle"></i>Remove Unlimited</button>
+                  </div>
+
+                  <hr>
+                  <div class="fw-bold mb-2">Monthly Snapshot (sanitized)</div>
+                  <div class="codebox mono" id="monthlyBox">{}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: TOOLS -->
+            <div id="tabTools" class="d-none">
+              <div class="card">
+                <div class="card-header">
+                  <h4 class="card-title mb-0">Tools</h4>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12 col-md-8">
+                      <label class="form-label">Generate Device ID</label>
+                      <input class="form-control mono" id="toolDeviceId" readonly>
+                    </div>
+                    <div class="col-12 col-md-4 d-grid gap-2">
+                      <button class="btn btn-primary" id="btnToolGen"><i class="bi bi-shuffle"></i>Generate</button>
+                      <button class="btn btn-outline-secondary" id="btnToolCopy"><i class="bi bi-clipboard"></i>Copy</button>
+                    </div>
+                  </div>
+
+                  <hr>
+                  <div class="small muted">
+                    Device ID random itu normal. Monthly tracking pakai deviceKey (hash) jadi aman.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: DEBUG -->
+            <div id="tabDebug" class="d-none">
+              <div class="card">
+                <div class="card-header d-flex justify-content-between flex-wrap gap-2">
+                  <h4 class="card-title mb-0">Debug (Sanitized)</h4>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnCopyLog"><i class="bi bi-clipboard"></i>Copy</button>
+                    <button class="btn btn-sm btn-outline-danger" id="btnClearLog"><i class="bi bi-trash"></i>Clear</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="codebox mono" id="logBox">{}</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
       </div>
     </div>
-
-    <!-- Voucher section -->
-    <section class="section is-on" id="secVoucher">
-      <div class="panel">
-        <div class="panelHead">
-          <div>
-            <h2>Voucher Manager</h2>
-            <div class="desc">List hanya voucher <b>ON</b> (kode disembunyikan). Klik untuk edit.</div>
-          </div>
-          <div class="btnRow" style="margin:0">
-            <button class="btn btnGhost" id="btnLoadVouchers" type="button">Load</button>
-            <button class="btn btnGhost" id="btnNewVoucher" type="button">New</button>
-          </div>
-        </div>
-
-        <div class="panelBody">
-          <div class="grid">
-            <!-- List ON -->
-            <div>
-              <div class="row2">
-                <div>
-                  <label>Search (name / note)</label>
-                  <input class="input" id="qSearch" placeholder="Cari voucher..." />
-                </div>
-                <div>
-                  <label>Sort</label>
-                  <select class="input" id="qSort">
-                    <option value="updated">UPDATED</option>
-                    <option value="name">NAME</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="divider"></div>
-
-              <div class="tableWrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style="width:110px">Status</th>
-                      <th>Name</th>
-                      <th class="right">%</th>
-                      <th class="right">MaxRp</th>
-                      <th style="width:160px">Expires</th>
-                    </tr>
-                  </thead>
-                  <tbody id="voucherTbody">
-                    <tr><td colspan="5" class="mut">Belum ada data. Klik <b>Load</b>.</td></tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="hint">
-                90% tapi kepotong kecil biasanya karena <b>maxRp</b> (cap) masih ada.
-                Kalau mau bener-bener 90% tanpa cap → set maxRp = 0.
-              </div>
-            </div>
-
-            <!-- Form -->
-            <div>
-              <div class="row2">
-                <div>
-                  <label>Enabled</label>
-                  <select class="input" id="vEnabled">
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Nama</label>
-                  <input class="input" id="vName" placeholder="VIP LEVEL" />
-                </div>
-              </div>
-
-              <div class="row2">
-                <div>
-                  <label>Diskon %</label>
-                  <input class="input" id="vPercent" type="number" min="0" max="100" step="1" placeholder="90" />
-                </div>
-                <div>
-                  <label>MaxRp (0 = unlimited)</label>
-                  <input class="input" id="vMaxRp" type="number" min="0" step="1" placeholder="0" />
-                </div>
-              </div>
-
-              <div class="row2">
-                <div>
-                  <label>MaxUses (kosong = unlimited)</label>
-                  <input class="input" id="vMaxUses" type="number" min="1" step="1" placeholder="" />
-                </div>
-                <div>
-                  <label>Expires At</label>
-                  <input class="input" id="vExpiresAt" type="datetime-local" />
-                </div>
-              </div>
-
-              <label>Note</label>
-              <input class="input" id="vNote" placeholder="Catatan internal" />
-
-              <div class="divider"></div>
-
-              <!-- code hidden -->
-              <label>Voucher Code (hidden)</label>
-              <div class="inline">
-                <input class="input grow" id="vCode" type="password" placeholder="(hidden)" autocomplete="off" />
-                <button class="btn btnGhost" id="btnRevealCode" type="button">Reveal</button>
-              </div>
-              <div class="hint">Kode tidak ditampilkan di list. Reveal hanya kalau perlu.</div>
-
-              <div class="btnRow">
-                <button class="btn btnPri" id="btnUpsert" type="button">Save (Upsert)</button>
-                <button class="btn btnBad" id="btnDisable" type="button">Disable</button>
-                <button class="btn btnGhost" id="btnEnable" type="button">Enable</button>
-              </div>
-
-              <div class="divider"></div>
-
-              <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Test (createqr)</h2>
-              <div class="row2">
-                <div>
-                  <label>Amount</label>
-                  <input class="input" id="tAmount" type="number" min="1" step="1" value="10000" />
-                </div>
-                <div>
-                  <label>Device ID</label>
-                  <input class="input" id="tDeviceId" placeholder="dev_web_xxx" />
-                </div>
-              </div>
-              <div class="row2">
-                <div>
-                  <label>Voucher (hidden)</label>
-                  <input class="input" id="tVoucher" type="password" placeholder="(hidden)" autocomplete="off" />
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn btnGhost" id="btnGenDeviceId" type="button" style="width:100%">Generate Device ID</button>
-                </div>
-              </div>
-              <div class="btnRow">
-                <button class="btn btnOk" id="btnTest" type="button">Run Test</button>
-                <button class="btn btnGhost" id="btnRevealTest" type="button">Reveal Voucher</button>
-              </div>
-              <div class="hint">Test ini ngecek hasil diskon di backend langsung, biar sama alur createqr.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Monthly section -->
-    <section class="section" id="secMonthly">
-      <div class="panel">
-        <div class="panelHead">
-          <div>
-            <h2>Monthly Promo</h2>
-            <div class="desc">1× per device per bulan + unlimited deviceKey</div>
-          </div>
-          <div class="btnRow" style="margin:0">
-            <button class="btn btnGhost" id="btnGetMonthly" type="button">Get</button>
-            <button class="btn btnPri" id="btnSetMonthly" type="button">Save</button>
-          </div>
-        </div>
-
-        <div class="panelBody">
-          <div class="grid">
-            <div>
-              <div class="row2">
-                <div>
-                  <label>Enabled</label>
-                  <select class="input" id="mEnabled">
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Nama Promo</label>
-                  <input class="input" id="mName" placeholder="PROMO BULANAN" />
-                </div>
-              </div>
-
-              <div class="row2">
-                <div>
-                  <label>Diskon %</label>
-                  <input class="input" id="mPercent" type="number" min="0" max="100" step="1" />
-                </div>
-                <div>
-                  <label>Max Rp</label>
-                  <input class="input" id="mMaxRp" type="number" min="0" step="1" />
-                </div>
-              </div>
-
-              <div class="divider"></div>
-
-              <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Unlimited DeviceKey</h2>
-              <div class="hint">
-                deviceKey = SHA-256(deviceId|pepper) → output 64 char (normal). Pepper itu secret biar gak bisa ditebak.
-              </div>
-
-              <div class="row2" style="margin-top:10px">
-                <div>
-                  <label>Device ID</label>
-                  <input class="input" id="uDeviceId" placeholder="dev_web_xxx" />
-                </div>
-                <div>
-                  <label>Pepper</label>
-                  <input class="input" id="uPepper" type="password" placeholder="(hidden)" autocomplete="off" />
-                </div>
-              </div>
-
-              <label>DeviceKey (hidden)</label>
-              <div class="inline">
-                <input class="input grow mono" id="uDeviceKey" type="password" placeholder="(hidden)" readonly />
-                <button class="btn btnGhost" id="btnRevealDeviceKey" type="button">Reveal</button>
-                <button class="btn btnGhost" id="btnGenDeviceKey" type="button">Generate</button>
-              </div>
-
-              <div class="btnRow">
-                <button class="btn btnOk" id="btnAddUnlimited" type="button">Add Unlimited</button>
-                <button class="btn btnBad" id="btnRemoveUnlimited" type="button">Remove Unlimited</button>
-              </div>
-            </div>
-
-            <div>
-              <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Monthly Snapshot (sanitized)</h2>
-              <div class="codeBox" id="monthlyBox">{}</div>
-              <div class="hint">Dimasking biar gak bocor deviceKey.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Tools section -->
-    <section class="section" id="secTools">
-      <div class="panel">
-        <div class="panelHead">
-          <div>
-            <h2>Tools</h2>
-            <div class="desc">Generate deviceId cepat</div>
-          </div>
-        </div>
-        <div class="panelBody">
-          <label>Device ID</label>
-          <div class="inline">
-            <input class="input grow mono" id="toolDeviceId" readonly />
-            <button class="btn btnPri" id="btnToolGen" type="button">Generate</button>
-            <button class="btn btnGhost" id="btnToolCopy" type="button">Copy</button>
-          </div>
-          <div class="hint">Device ID random memang beda-beda.</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Debug -->
-    <section class="section" id="secDebug">
-      <div class="panel">
-        <div class="panelHead">
-          <div>
-            <h2>Debug (Sanitized)</h2>
-            <div class="desc">Response terakhir dimasking (kode voucher, url, deviceKey)</div>
-          </div>
-          <div class="btnRow" style="margin:0">
-            <button class="btn btnGhost" id="btnCopyLog" type="button">Copy</button>
-            <button class="btn btnGhost" id="btnClearLog" type="button">Clear</button>
-          </div>
-        </div>
-        <div class="panelBody">
-          <div class="codeBox" id="logBox">{}</div>
-        </div>
-      </div>
-    </section>
-
   </div>
+
+  <!-- Flatpickr -->
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
 
   <script>
-    (function(){
-      const $ = (id)=>document.getElementById(id);
+    (() => {
+      const $ = (id) => document.getElementById(id);
 
+      // LocalStorage keys
+      const LS_BASE = "levpay_base";
       const LS_KEY  = "levpay_admin_key";
-      const LS_BASE = "levpay_admin_base";
-      const LS_TAB  = "levpay_admin_tab";
+      const LS_TAB  = "levpay_tab";
 
-      let ADMIN_KEY = "";
+      // State
       let BASE = "";
+      let ADMIN = "";
+      let lastCurl = "";
+      let lastJson = {};
       let voucherCache = [];
 
-      // Elements
-      const modal = $("modal");
-      const baseUrlEl = $("baseUrl");
-      const adminKeyEl = $("adminKey");
-      const btnUnlock = $("btnUnlock");
-      const btnPing = $("btnPing");
+      // Elements (lock)
+      const inBase = $("inBase");
+      const inKey = $("inKey");
+      const btnLogin = $("btnLogin");
       const btnDemo = $("btnDemo");
+      const btnPingLock = $("btnPingLock");
+      const pillApi = $("pillApi"), pillApiText = $("pillApiText");
+      const pillKey = $("pillKey"), pillKeyText = $("pillKeyText");
 
-      const pillApi = $("pillApi"), pillKey=$("pillKey"), pillV=$("pillV"), pillM=$("pillM");
-      const pillApiText=$("pillApiText"), pillKeyText=$("pillKeyText"), pillVText=$("pillVText"), pillMText=$("pillMText");
-
-      const tabs = Array.from(document.querySelectorAll(".tabBtn[data-tab]"));
-      const secVoucher=$("secVoucher"), secMonthly=$("secMonthly"), secTools=$("secTools"), secDebug=$("secDebug");
-
+      // Elements (top)
       const btnRefresh = $("btnRefresh");
       const btnLogout = $("btnLogout");
+      const btnPing = $("btnPing");
 
-      const btnLoadVouchers=$("btnLoadVouchers"), btnNewVoucher=$("btnNewVoucher");
-      const qSearch=$("qSearch"), qSort=$("qSort");
-      const voucherTbody=$("voucherTbody");
+      // Pills
+      const pillVoucher = $("pillVoucher"), pillVoucherText = $("pillVoucherText");
+      const pillMonthly = $("pillMonthly"), pillMonthlyText = $("pillMonthlyText");
 
-      const vEnabled=$("vEnabled"), vName=$("vName"), vPercent=$("vPercent"), vMaxRp=$("vMaxRp"), vMaxUses=$("vMaxUses"),
-            vExpiresAt=$("vExpiresAt"), vNote=$("vNote"), vCode=$("vCode");
-      const btnRevealCode=$("btnRevealCode"), btnUpsert=$("btnUpsert"), btnDisable=$("btnDisable"), btnEnable=$("btnEnable");
+      // Tabs
+      const tabBtns = Array.from(document.querySelectorAll("[data-tab]"));
+      const tabVoucher = $("tabVoucher");
+      const tabMonthly = $("tabMonthly");
+      const tabTools = $("tabTools");
+      const tabDebug = $("tabDebug");
 
-      const tAmount=$("tAmount"), tDeviceId=$("tDeviceId"), tVoucher=$("tVoucher"),
-            btnGenDeviceId=$("btnGenDeviceId"), btnTest=$("btnTest"), btnRevealTest=$("btnRevealTest");
+      // Curl+Json
+      const curlBox = $("curlBox");
+      const jsonBox = $("jsonBox");
+      const btnCopyCurl = $("btnCopyCurl");
+      const btnCopyJson = $("btnCopyJson");
+      const logBox = $("logBox");
+      const btnCopyLog = $("btnCopyLog");
+      const btnClearLog = $("btnClearLog");
 
-      const btnGetMonthly=$("btnGetMonthly"), btnSetMonthly=$("btnSetMonthly"),
-            mEnabled=$("mEnabled"), mName=$("mName"), mPercent=$("mPercent"), mMaxRp=$("mMaxRp"),
-            monthlyBox=$("monthlyBox");
+      // Voucher list/form
+      const btnLoadVouchers = $("btnLoadVouchers");
+      const btnNewVoucher = $("btnNewVoucher");
+      const qVoucher = $("qVoucher");
+      const sortVoucher = $("sortVoucher");
+      const voucherTbody = $("voucherTbody");
 
-      const uDeviceId=$("uDeviceId"), uPepper=$("uPepper"), uDeviceKey=$("uDeviceKey"),
-            btnRevealDeviceKey=$("btnRevealDeviceKey"), btnGenDeviceKey=$("btnGenDeviceKey"),
-            btnAddUnlimited=$("btnAddUnlimited"), btnRemoveUnlimited=$("btnRemoveUnlimited");
+      const vEnabled = $("vEnabled");
+      const vName = $("vName");
+      const vPercent = $("vPercent");
+      const vMaxRp = $("vMaxRp");
+      const vMaxUses = $("vMaxUses");
+      const vExpiresAt = $("vExpiresAt");
+      const vNote = $("vNote");
+      const vCode = $("vCode");
+      const btnRevealCode = $("btnRevealCode");
+      const btnUpsert = $("btnUpsert");
+      const btnEnable = $("btnEnable");
+      const btnDisable = $("btnDisable");
 
-      const toolDeviceId=$("toolDeviceId"), btnToolGen=$("btnToolGen"), btnToolCopy=$("btnToolCopy");
+      // Test
+      const tAmount = $("tAmount");
+      const tDeviceId = $("tDeviceId");
+      const tVoucher = $("tVoucher");
+      const btnRevealTest = $("btnRevealTest");
+      const btnGenDevice = $("btnGenDevice");
+      const btnRunTest = $("btnRunTest");
 
-      const logBox=$("logBox"), btnCopyLog=$("btnCopyLog"), btnClearLog=$("btnClearLog");
+      // Monthly
+      const btnGetMonthly = $("btnGetMonthly");
+      const btnSetMonthly = $("btnSetMonthly");
+      const mEnabled = $("mEnabled");
+      const mName = $("mName");
+      const mPercent = $("mPercent");
+      const mMaxRp = $("mMaxRp");
+      const monthlyBox = $("monthlyBox");
 
-      // Toast
-      function toast(msg){
-        const el = $("toast");
-        el.textContent = msg;
-        el.classList.add("is-on");
-        clearTimeout(el._t);
-        el._t = setTimeout(()=>el.classList.remove("is-on"), 1500);
-      }
+      const uDeviceId = $("uDeviceId");
+      const uPepper = $("uPepper");
+      const uDeviceKey = $("uDeviceKey");
+      const btnRevealDK = $("btnRevealDK");
+      const btnGenDK = $("btnGenDK");
+      const btnAddUnlimited = $("btnAddUnlimited");
+      const btnRemoveUnlimited = $("btnRemoveUnlimited");
+
+      // Tools
+      const toolDeviceId = $("toolDeviceId");
+      const btnToolGen = $("btnToolGen");
+      const btnToolCopy = $("btnToolCopy");
+
+      // Flatpickr for voucher expired
+      let fp = null;
 
       function setPill(el, tone, text){
-        el.dataset.tone = tone;
+        el.classList.remove("ok","warn","bad");
+        el.classList.add(tone);
         el.querySelector("span:last-child").textContent = text;
       }
 
-      function lockUI(locked){
-        document.body.classList.toggle("is-locked", !!locked);
-        modal.classList.toggle("is-on", !!locked);
+      function lock(on){
+        document.body.classList.toggle("is-locked", !!on);
       }
 
-      function apiBase(){
+      function baseUrl(){
         return String(BASE||"").trim().replace(/\/+$/,"");
       }
       function endpoint(action){
-        return apiBase() + "/api/orkut?action=" + encodeURIComponent(action);
+        // per your request: nembak ke /api/orkut
+        return baseUrl() + "/api/orkut?action=" + encodeURIComponent(action);
       }
 
       async function jfetch(url, opts){
         const r = await fetch(url, opts);
-        const text = await r.text();
-        let json=null;
-        try{ json = text ? JSON.parse(text) : {}; } catch { json = { raw:text }; }
-        return { ok:r.ok, status:r.status, json };
+        const txt = await r.text();
+        let json = {};
+        try { json = txt ? JSON.parse(txt) : {}; } catch { json = { raw: txt }; }
+        return { ok: r.ok, status: r.status, json };
       }
 
-      async function callAction(action, { method="GET", admin=false, body=null } = {}){
-        const headers = {};
-        if (method !== "GET") headers["Content-Type"] = "application/json";
-        if (admin) headers["X-Admin-Key"] = ADMIN_KEY;
-
-        const res = await jfetch(endpoint(action), {
-          method,
-          headers,
-          body: body ? JSON.stringify(body) : undefined
-        });
-        return { action, ...res };
+      function maskKey(){
+        return "$ADMIN";
       }
 
-      async function callAny(actions, cfg){
-        let last=null;
-        for (const a of actions){
-          const r = await callAction(a, cfg);
-          last=r;
-          if (r.ok) return r;
-          if (r.status === 401) return r;
-        }
-        return last;
+      function curlFor(action, method, body, isAdmin){
+        const HOST = "$HOST";
+        const head = [];
+        if (isAdmin) head.push(`-H "X-Admin-Key: ${maskKey()}"`);
+        if (method !== "GET") head.push(`-H "Content-Type: application/json"`);
+        const h = head.length ? (" \\\n  " + head.join(" \\\n  ")) : "";
+        const data = (method === "GET" || !body) ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
+        return `curl -sS -X ${method} "${HOST}/api/orkut?action=${action}"${h}${data} | jq`;
       }
 
-      // Sanitize
       function deepSanitize(obj){
         const seen = new WeakSet();
-        const walk = (x, k)=>{
+        const walk = (x, k) => {
           if (x == null) return x;
           if (typeof x === "string"){
-            if (x.includes("/api/")) return "••••(hidden-url)••••";
-            if (/^[a-f0-9]{64}$/i.test(x)) return "••••(hidden-deviceKey)••••";
-            if (k && String(k).toLowerCase().includes("code")) return "••••(hidden-code)••••";
-            if (k && String(k).toLowerCase().includes("voucher")) return "••••(hidden-voucher)••••";
+            if (k && k.toLowerCase().includes("code")) return "••••(hidden)••••";
+            if (k && k.toLowerCase().includes("voucher")) return "••••(hidden)••••";
+            if (/^[a-f0-9]{64}$/i.test(x)) return "••••(hidden)••••";
             return x;
           }
           if (typeof x !== "object") return x;
           if (seen.has(x)) return "[circular]";
           seen.add(x);
-          if (Array.isArray(x)) return x.map(v=>walk(v,k));
+          if (Array.isArray(x)) return x.map(v => walk(v, k));
           const out = {};
           for (const [kk,vv] of Object.entries(x)){
-            const low = String(kk).toLowerCase();
-            if (low.includes("devicekey")) out[kk] = "••••(hidden-deviceKey)••••";
-            else if (low === "code") out[kk] = "••••(hidden-code)••••";
-            else if (low.includes("voucher")) out[kk] = "••••(hidden-voucher)••••";
-            else if (low.includes("url") || low.includes("path")) out[kk] = "••••(hidden-url)••••";
+            const low = kk.toLowerCase();
+            if (low === "code" || low.includes("voucher") || low.includes("devicekey")) out[kk] = "••••(hidden)••••";
             else out[kk] = walk(vv, kk);
           }
           return out;
         };
         return walk(obj, "");
       }
-      function log(obj){
-        try{ logBox.textContent = JSON.stringify(deepSanitize(obj), null, 2); }
-        catch{ logBox.textContent = "{}"; }
+
+      function setBoxes(curlText, json){
+        lastCurl = curlText || "—";
+        lastJson = json || {};
+        curlBox.textContent = lastCurl;
+        jsonBox.textContent = JSON.stringify(deepSanitize(lastJson), null, 2);
+        logBox.textContent = JSON.stringify(deepSanitize(lastJson), null, 2);
+      }
+
+      function copy(text){
+        return navigator.clipboard.writeText(String(text||""))
+          .catch(()=>{});
       }
 
       function sanitizeCode(s){
         return String(s||"").trim().toUpperCase().replace(/\s+/g,"");
       }
-      function maskMid(s){
-        const str = String(s||"");
-        if (str.length <= 6) return "••••••";
-        return "••••" + str.slice(-2);
-      }
 
-      function toIsoFromDatetimeLocal(v){
-        const s = String(v||"").trim();
-        if (!s) return null;
-        const d = new Date(s);
-        if (!Number.isFinite(d.getTime())) return null;
-        return d.toISOString();
-      }
-      function fromIsoToDatetimeLocal(iso){
-        if (!iso) return "";
-        const d = new Date(iso);
-        if (!Number.isFinite(d.getTime())) return "";
-        const pad=(n)=>String(n).padStart(2,"0");
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      }
-
-      function maybeNumber(v){
-        const s = String(v ?? "").trim();
-        if (s === "") return undefined;
-        const n = Number(s);
-        return Number.isFinite(n) ? n : undefined;
+      function maskCode(code){
+        const s = String(code||"");
+        if (s.length <= 4) return "••••";
+        return "••••" + s.slice(-2);
       }
 
       function genDeviceId(){
-        const rnd = Math.random().toString(36).slice(2, 8);
-        const rnd2 = Math.random().toString(36).slice(2, 8);
-        return "dev_web_" + rnd + "_" + rnd2;
+        const a = Math.random().toString(36).slice(2,8);
+        const b = Math.random().toString(36).slice(2,8);
+        return "dev_web_" + a + "_" + b;
       }
+
       async function sha256Hex(str){
         const enc = new TextEncoder().encode(str);
         const buf = await crypto.subtle.digest("SHA-256", enc);
-        const arr = Array.from(new Uint8Array(buf));
-        return arr.map(b=>b.toString(16).padStart(2,"0")).join("");
-      }
-      function copy(text){
-        return navigator.clipboard.writeText(String(text||""))
-          .then(()=>toast("Copied ✅"))
-          .catch(()=>toast("Copy gagal"));
+        return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
       }
 
-      // Tabs
-      function setTab(name){
-        tabs.forEach(b=>b.classList.toggle("is-active", b.dataset.tab===name));
-        secVoucher.classList.toggle("is-on", name==="voucher");
-        secMonthly.classList.toggle("is-on", name==="monthly");
-        secTools.classList.toggle("is-on", name==="tools");
-        secDebug.classList.toggle("is-on", name==="debug");
-        localStorage.setItem(LS_TAB, name);
+      function toIsoFromFp(){
+        // flatpickr stores string; we parse to Date safely
+        const v = String(vExpiresAt.value||"").trim();
+        if (!v) return null;
+        const d = new Date(v);
+        if (!Number.isFinite(d.getTime())) return null;
+        return d.toISOString();
       }
-      tabs.forEach(b=>b.addEventListener("click", ()=>setTab(b.dataset.tab)));
 
-      // API
-      async function ping(){
-        const r = await callAction("ping", { method:"GET" });
-        log({ type:"ping", ...r });
-        if (r.ok){
-          setPill(pillApi, "ok", "API: OK");
-          toast("Ping OK");
-        } else {
-          setPill(pillApi, "bad", "API: ERROR");
-          toast("Ping error ("+r.status+")");
-        }
+      async function callAction(action, {method="GET", admin=false, body=null} = {}){
+        const headers = {};
+        if (method !== "GET") headers["Content-Type"] = "application/json";
+        if (admin) headers["X-Admin-Key"] = ADMIN;
+
+        const r = await jfetch(endpoint(action), {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined
+        });
+
+        setBoxes(
+          curlFor(action, method, body, admin),
+          { action, status: r.status, ok: r.ok, response: r.json }
+        );
+
         return r;
       }
 
-      async function adminValidateKey(){
-        // try admin endpoint (dummy)
-        const cand = ["voucher.disable","admin_disable_voucher","admin_voucher_disable"];
-        const r = await callAny(cand, { method:"POST", admin:true, body:{ code:"__VALIDATE__" } });
-        log({ type:"validate", status:r?.status, ok:r?.ok });
-        if (r?.status === 401){
-          setPill(pillKey, "bad", "Key: salah");
+      async function ping(){
+        const r = await callAction("ping", { method:"GET" });
+        if (r.ok) setPill(pillApi, "ok", "API: OK");
+        else setPill(pillApi, "bad", "API: ERROR");
+        return r;
+      }
+
+      async function validateKey(){
+        // Try a known admin endpoint to confirm 401 vs ok
+        // If your orkut.js exposes voucher.list (ADMIN), we use it
+        const r = await callAction("voucher.list", { method:"GET", admin:true });
+        if (r.status === 401){
+          setPill(pillKey, "bad", "Key: salah (401)");
           return false;
         }
         setPill(pillKey, "ok", "Key: OK");
         return true;
       }
 
-      // Voucher list (ON only)
-      function sortVouchers(arr){
-        const mode = String(qSort.value||"updated");
-        const out = [...arr];
-        if (mode === "name") out.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
-        else out.sort((a,b)=>String(b.updatedAt||"").localeCompare(String(a.updatedAt||"")));
-        return out;
+      function setTab(name){
+        tabBtns.forEach(b=>{
+          const on = b.getAttribute("data-tab") === name;
+          b.classList.toggle("active", on);
+        });
+        tabVoucher.classList.toggle("d-none", name !== "voucher");
+        tabMonthly.classList.toggle("d-none", name !== "monthly");
+        tabTools.classList.toggle("d-none", name !== "tools");
+        tabDebug.classList.toggle("d-none", name !== "debug");
+        localStorage.setItem(LS_TAB, name);
       }
-      function applySearch(arr){
-        const s = String(qSearch.value||"").trim().toLowerCase();
-        return arr.filter(v=>{
-          if (!v.enabled) return false; // ON ONLY
-          if (!s) return true;
-          const hay = ((v.name||"") + " " + (v.note||"")).toLowerCase();
-          return hay.includes(s);
+
+      function sortVouchers(list){
+        const mode = String(sortVoucher.value||"updated");
+        const arr = [...list];
+        if (mode === "name"){
+          arr.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
+        } else {
+          arr.sort((a,b)=>String(b.updatedAt||"").localeCompare(String(a.updatedAt||"")));
+        }
+        return arr;
+      }
+
+      function renderVouchers(){
+        const q = String(qVoucher.value||"").trim().toLowerCase();
+        const items = sortVouchers(
+          voucherCache.filter(v=>{
+            if (!v.enabled) return false; // ON only
+            if (!q) return true;
+            const hay = ((v.name||"") + " " + (v.note||"")).toLowerCase();
+            return hay.includes(q);
+          })
+        );
+
+        if (!items.length){
+          voucherTbody.innerHTML = `<tr><td colspan="6" class="muted">Tidak ada voucher ON.</td></tr>`;
+          return;
+        }
+
+        voucherTbody.innerHTML = items.map(v=>{
+          const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
+          const maxRp = Number(v.maxRp||0);
+          const maxUses = (v.maxUses == null ? "∞" : String(v.maxUses));
+          return `
+            <tr class="clickable-row" data-code="${v.code}">
+              <td><span class="badge bg-success">ON</span></td>
+              <td>
+                <div class="fw-bold">${escapeHtml(v.name || "(no name)")}</div>
+                <div class="small muted mask-code">ID: ${escapeHtml(maskCode(v.code))}</div>
+              </td>
+              <td class="text-end mono">${escapeHtml(String(v.percent||0))}</td>
+              <td class="text-end mono">${escapeHtml(maxRp ? maxRp.toLocaleString("id-ID") : "∞")}</td>
+              <td class="text-end mono">${escapeHtml(maxUses)}</td>
+              <td class="mono">${escapeHtml(exp)}</td>
+            </tr>
+          `;
+        }).join("");
+
+        Array.from(voucherTbody.querySelectorAll("tr[data-code]")).forEach(tr=>{
+          tr.addEventListener("click", ()=>{
+            const code = tr.getAttribute("data-code");
+            const v = voucherCache.find(x=>x.code===code);
+            if (!v) return;
+            loadVoucher(v);
+          });
         });
       }
 
@@ -973,159 +804,108 @@
           .replaceAll("'","&#039;");
       }
 
-      function renderVouchers(){
-        const items = sortVouchers(applySearch(voucherCache));
-        if (!items.length){
-          voucherTbody.innerHTML = `<tr><td colspan="5" class="mut">Tidak ada voucher ON.</td></tr>`;
-          return;
-        }
-        voucherTbody.innerHTML = items.map(v=>{
-          const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
-          const cap = v.maxRp ? v.maxRp.toLocaleString("id-ID") : "∞";
-          return `
-            <tr data-code="${escapeHtml(v.code)}">
-              <td>
-                <span class="badge" data-tone="ok"><span class="dot"></span><span>ON</span></span>
-              </td>
-              <td>
-                <div style="font-weight:1000">${escapeHtml(v.name||"(no name)")}</div>
-                <div class="mut2" style="margin-top:2px">ID: ${escapeHtml(maskMid(v.code))}</div>
-              </td>
-              <td class="right mono">${escapeHtml(String(v.percent||0))}</td>
-              <td class="right mono">${escapeHtml(String(cap))}</td>
-              <td class="mono">${escapeHtml(exp)}</td>
-            </tr>
-          `;
-        }).join("");
-
-        Array.from(voucherTbody.querySelectorAll("tr[data-code]")).forEach(tr=>{
-          tr.addEventListener("click", ()=>{
-            const code = tr.getAttribute("data-code");
-            const v = voucherCache.find(x=>x.code===code);
-            if (!v) return;
-            loadVoucherToForm(v);
-            toast("Loaded");
-          });
-        });
+      function clearVoucher(){
+        vEnabled.value = "true";
+        vName.value = "";
+        vPercent.value = "";
+        vMaxRp.value = "0";
+        vMaxUses.value = "";
+        vExpiresAt.value = "";
+        vNote.value = "";
+        vCode.value = "";
+        tVoucher.value = "";
       }
 
-      async function loadVouchers(){
-        setPill(pillV, "warn", "Voucher: loading...");
-        const cand = ["voucher.list","admin_list_voucher","admin_voucher_list"];
-        const r = await callAny(cand, { method:"GET", admin:true });
-        log({ type:"voucher.list", ...r });
-
-        if (r.status === 401){
-          setPill(pillV, "bad", "Voucher: unauthorized");
-          toast("Unauthorized");
-          return;
-        }
-        if (!r.ok){
-          setPill(pillV, "bad", "Voucher: error");
-          toast("Load voucher gagal ("+r.status+")");
-          return;
-        }
-
-        const data = r.json?.data ?? r.json ?? [];
-        const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
-        voucherCache = items.map(v=>({
-          code: sanitizeCode(v.code || ""),
-          name: String(v.name||"").trim(),
-          enabled: v.enabled !== false,
-          percent: Number(v.percent||0),
-          maxRp: Number(v.maxRp||0),
-          maxUses: v.maxUses ?? null,
-          uses: Number(v.uses||0),
-          expiresAt: v.expiresAt ?? null,
-          updatedAt: v.updatedAt ?? null,
-          note: v.note ?? null
-        })).filter(v=>v.code);
-
-        const onCount = voucherCache.filter(v=>v.enabled).length;
-        setPill(pillV, "ok", `Voucher: ${onCount} ON`);
-        renderVouchers();
-        toast("Voucher loaded ✅");
-      }
-
-      function clearVoucherForm(){
-        vEnabled.value="true";
-        vName.value="";
-        vPercent.value="";
-        vMaxRp.value="0";
-        vMaxUses.value="";
-        vExpiresAt.value="";
-        vNote.value="";
-        vCode.value="";
-        tVoucher.value="";
-      }
-
-      function loadVoucherToForm(v){
+      function loadVoucher(v){
         vEnabled.value = String(!!v.enabled);
         vName.value = v.name || "";
         vPercent.value = String(Number(v.percent||0));
         vMaxRp.value = String(Number(v.maxRp||0));
         vMaxUses.value = (v.maxUses == null ? "" : String(v.maxUses));
-        vExpiresAt.value = fromIsoToDatetimeLocal(v.expiresAt);
+        vExpiresAt.value = v.expiresAt ? new Date(v.expiresAt).toISOString() : "";
         vNote.value = v.note || "";
         vCode.value = v.code || "";
         tVoucher.value = v.code || "";
+
+        // make curl preview look like "upsert"
+        const payload = buildVoucherPayload();
+        setBoxes(
+          curlFor("voucher.upsert", "POST", payload, true),
+          lastJson
+        );
       }
 
       function buildVoucherPayload(forceEnabled){
         const code = sanitizeCode(vCode.value);
-        const percent = maybeNumber(vPercent.value);
-        if (!code) throw new Error("code wajib");
-        if (percent == null) throw new Error("percent wajib");
+        const percent = Number(String(vPercent.value||"").trim());
+        if (!code) throw new Error("Voucher code wajib");
+        if (!Number.isFinite(percent)) throw new Error("Diskon % wajib");
 
-        const payload = { code, percent };
-        payload.enabled = (forceEnabled != null) ? !!forceEnabled : (String(vEnabled.value)==="true");
+        const payload = {
+          code,
+          enabled: (forceEnabled != null) ? !!forceEnabled : (vEnabled.value === "true"),
+          name: String(vName.value||"").trim() || code,
+          percent: Math.max(0, Math.min(100, percent)),
+          maxRp: Math.max(0, Number(String(vMaxRp.value||"0").trim() || "0")),
+          note: String(vNote.value||"").trim() || null
+        };
 
-        const name = String(vName.value||"").trim();
-        const note = String(vNote.value||"").trim();
-        const maxRp = maybeNumber(vMaxRp.value);
-        const maxUses = maybeNumber(vMaxUses.value);
-        const expiresAt = toIsoFromDatetimeLocal(vExpiresAt.value);
+        const mu = String(vMaxUses.value||"").trim();
+        if (mu !== ""){
+          const n = Number(mu);
+          if (Number.isFinite(n) && n > 0) payload.maxUses = n;
+        }
 
-        if (name) payload.name=name;
-        if (note) payload.note=note;
-        if (maxRp != null) payload.maxRp=maxRp;
-        if (maxUses != null) payload.maxUses=maxUses;
-        if (expiresAt) payload.expiresAt=expiresAt;
+        const exp = toIsoFromFp();
+        if (exp) payload.expiresAt = exp;
 
         return payload;
       }
 
+      async function loadVouchers(){
+        setPill(pillVoucher, "warn", "Voucher: loading...");
+        const r = await callAction("voucher.list", { method:"GET", admin:true });
+        if (r.status === 401){
+          setPill(pillVoucher, "bad", "Voucher: 401");
+          return;
+        }
+        if (!r.ok){
+          setPill(pillVoucher, "bad", "Voucher: error");
+          return;
+        }
+
+        const raw = r.json?.data ?? r.json ?? [];
+        const list = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
+        voucherCache = list.map(v=>({
+          code: sanitizeCode(v.code||""),
+          name: String(v.name||""),
+          enabled: v.enabled !== false,
+          percent: Number(v.percent||0),
+          maxRp: Number(v.maxRp||0),
+          maxUses: (v.maxUses == null ? null : Number(v.maxUses)),
+          expiresAt: v.expiresAt || null,
+          note: v.note || null,
+          updatedAt: v.updatedAt || null
+        })).filter(v=>v.code);
+
+        const on = voucherCache.filter(v=>v.enabled).length;
+        setPill(pillVoucher, "ok", `Voucher: ${on} ON`);
+        renderVouchers();
+      }
+
       async function upsertVoucher(forceEnabled){
         const payload = buildVoucherPayload(forceEnabled);
-        const cand = ["voucher.upsert","admin_upsert_voucher","admin_voucher_upsert"];
-        const r = await callAny(cand, { method:"POST", admin:true, body: payload });
-        log({ type:"voucher.upsert", status:r?.status, ok:r?.ok, payload, json:r?.json });
-
-        if (r.status === 401){ toast("Unauthorized"); return; }
-        if (!r.ok){ toast("Upsert gagal ("+r.status+")"); return; }
-
-        toast("Saved ✅");
-        await loadVouchers();
+        const r = await callAction("voucher.upsert", { method:"POST", admin:true, body: payload });
+        if (r.status === 401) return;
+        if (r.ok) await loadVouchers();
       }
 
       async function disableVoucher(){
         const code = sanitizeCode(vCode.value);
-        if (!code){ toast("Kode kosong"); return; }
-        if (!confirm("Disable voucher ini?")) return;
-
-        const cand = ["voucher.disable","admin_disable_voucher","admin_voucher_disable"];
-        const r = await callAny(cand, { method:"POST", admin:true, body:{ code } });
-        log({ type:"voucher.disable", ...r });
-
-        if (r.status === 401){ toast("Unauthorized"); return; }
-        if (!r.ok){ toast("Disable gagal ("+r.status+")"); return; }
-
-        toast("Disabled ✅");
-        await loadVouchers();
-      }
-
-      async function enableVoucher(){
-        await upsertVoucher(true);
+        if (!code) throw new Error("Voucher code kosong");
+        const r = await callAction("voucher.disable", { method:"POST", admin:true, body:{ code } });
+        if (r.status === 401) return;
+        if (r.ok) await loadVouchers();
       }
 
       async function testCreateQR(){
@@ -1133,255 +913,234 @@
         const deviceId = String(tDeviceId.value||"").trim();
         const voucher = String(tVoucher.value||"").trim();
 
-        if (!Number.isFinite(amount) || amount < 1){ toast("Amount invalid"); return; }
-        if (!deviceId){ toast("Device ID wajib"); return; }
+        if (!Number.isFinite(amount) || amount < 1) throw new Error("Amount invalid");
+        if (!deviceId) throw new Error("Device ID wajib");
 
-        const r = await callAction("createqr", { method:"POST", body:{ amount, deviceId, voucher } });
-        log({ type:"createqr", ...r });
-
-        if (!r.ok){ toast("Test gagal ("+r.status+")"); return; }
-
-        const d = r.json?.data ?? r.json ?? {};
-        const pricing = d?.pricing || {};
-        const disc = pricing?.discountRp ?? 0;
-        toast("OK • discountRp: " + disc);
+        // createqr is public in your flow (levpay front). If you want discount.apply instead, change action here.
+        await callAction("createqr", { method:"POST", admin:false, body:{ amount, deviceId, voucher } });
       }
 
-      // Monthly
       async function getMonthly(){
-        setPill(pillM, "warn", "Monthly: loading...");
-        const cand = ["monthly.get","admin_get_monthly_promo","monthly_get"];
-        const r = await callAny(cand, { method:"GET", admin:true });
-        log({ type:"monthly.get", ...r });
-
+        setPill(pillMonthly, "warn", "Monthly: loading...");
+        const r = await callAction("monthly.get", { method:"GET", admin:true });
         if (r.status === 401){
-          setPill(pillM, "bad", "Monthly: unauthorized");
-          toast("Unauthorized");
+          setPill(pillMonthly, "bad", "Monthly: 401");
           return;
         }
         if (!r.ok){
-          setPill(pillM, "bad", "Monthly: error");
-          toast("Get monthly gagal ("+r.status+")");
+          setPill(pillMonthly, "bad", "Monthly: error");
           return;
         }
+        const d = r.json?.data ?? r.json ?? {};
+        if (d.enabled != null) mEnabled.value = String(!!d.enabled);
+        if (d.name != null) mName.value = String(d.name);
+        if (d.percent != null) mPercent.value = String(d.percent);
+        if (d.maxRp != null) mMaxRp.value = String(d.maxRp);
 
-        const data = r.json?.data ?? r.json ?? {};
-        if (data.enabled != null) mEnabled.value = String(!!data.enabled);
-        if (data.name != null) mName.value = String(data.name);
-        if (data.percent != null) mPercent.value = String(data.percent);
-        if (data.maxRp != null) mMaxRp.value = String(data.maxRp);
-
-        monthlyBox.textContent = JSON.stringify(deepSanitize(data), null, 2);
-        setPill(pillM, "ok", "Monthly: OK");
-        toast("Monthly loaded ✅");
-      }
-
-      function buildMonthlyPayload(extra){
-        const payload = {};
-        payload.enabled = (String(mEnabled.value)==="true");
-        const name = String(mName.value||"").trim();
-        const percent = maybeNumber(mPercent.value);
-        const maxRp = maybeNumber(mMaxRp.value);
-        if (name) payload.name=name;
-        if (percent != null) payload.percent=percent;
-        if (maxRp != null) payload.maxRp=maxRp;
-        return { ...payload, ...(extra||{}) };
+        monthlyBox.textContent = JSON.stringify(deepSanitize(d), null, 2);
+        setPill(pillMonthly, "ok", "Monthly: OK");
       }
 
       async function setMonthly(extra){
-        const payload = buildMonthlyPayload(extra);
-        const cand = ["monthly.set","admin_set_monthly_promo","monthly_set"];
-        const r = await callAny(cand, { method:"POST", admin:true, body: payload });
-        log({ type:"monthly.set", ...r });
-
-        if (r.status === 401){ toast("Unauthorized"); return; }
-        if (!r.ok){ toast("Save monthly gagal ("+r.status+")"); return; }
-
-        toast("Monthly saved ✅");
-        await getMonthly();
+        const payload = {
+          enabled: (mEnabled.value === "true"),
+          name: String(mName.value||"").trim(),
+          percent: Number(String(mPercent.value||"0").trim()),
+          maxRp: Number(String(mMaxRp.value||"0").trim()),
+          ...(extra||{})
+        };
+        const r = await callAction("monthly.set", { method:"POST", admin:true, body: payload });
+        if (r.status === 401) return;
+        if (r.ok) await getMonthly();
       }
 
       async function genDeviceKey(){
         const did = String(uDeviceId.value||"").trim();
         const pep = String(uPepper.value||"").trim();
-        if (!did || !pep){ toast("Isi deviceId & pepper"); return; }
+        if (!did || !pep) throw new Error("Isi deviceId & pepper");
         const key = await sha256Hex(did + "|" + pep);
         uDeviceKey.value = key;
-        toast("DeviceKey generated");
-      }
-      async function addUnlimited(){
-        const dk = String(uDeviceKey.value||"").trim();
-        if (!dk){ toast("Generate deviceKey dulu"); return; }
-        await setMonthly({ addUnlimitedDeviceKey: dk });
-      }
-      async function removeUnlimited(){
-        const dk = String(uDeviceKey.value||"").trim();
-        if (!dk){ toast("Generate deviceKey dulu"); return; }
-        await setMonthly({ removeUnlimitedDeviceKey: dk });
       }
 
-      // Unlock
-      async function doUnlock(){
-        BASE = String(baseUrlEl.value||"").trim();
+      // EVENTS
+      btnDemo.addEventListener("click", () => {
+        inBase.value = "";
+        inKey.value = "";
+        setPill(pillApi, "warn", "API: belum dicek");
+        setPill(pillKey, "warn", "Key: belum");
+      });
+
+      btnPingLock.addEventListener("click", async () => {
+        BASE = String(inBase.value||"").trim();
+        if (!BASE) BASE = location.origin;
+        await ping();
+      });
+
+      btnLogin.addEventListener("click", async () => {
+        BASE = String(inBase.value||"").trim();
+        ADMIN = String(inKey.value||"").trim();
+        if (!BASE) BASE = location.origin;
+        if (!ADMIN) { setPill(pillKey, "bad", "Key: kosong"); return; }
+
         localStorage.setItem(LS_BASE, BASE);
-
-        const rawKey = String(adminKeyEl.value||"").trim();
-        if (rawKey && rawKey !== "••••••••••") ADMIN_KEY = rawKey;
-        if (!ADMIN_KEY){ toast("Admin key wajib"); return; }
-        localStorage.setItem(LS_KEY, ADMIN_KEY);
+        localStorage.setItem(LS_KEY, ADMIN);
 
         await ping();
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Admin key salah (401)"); return; }
+        const ok = await validateKey();
+        if (!ok) return;
 
-        lockUI(false);
-        toast("Masuk ✅");
+        lock(false);
 
+        // init widgets after unlock
         await loadVouchers();
         await getMonthly();
-      }
+      });
 
-      function doLogout(){
-        ADMIN_KEY = "";
+      btnLogout.addEventListener("click", () => {
+        if (!confirm("Logout?")) return;
         localStorage.removeItem(LS_KEY);
-        setPill(pillKey,"warn","Key: belum");
-        lockUI(true);
-      }
-
-      // Events
-      btnUnlock.addEventListener("click", doUnlock);
-      btnPing.addEventListener("click", ping);
-      btnDemo.addEventListener("click", ()=>{
-        baseUrlEl.value = "";
-        adminKeyEl.value = "CONTOH_KEY";
-        toast("Contoh diisi (bukan key asli)");
+        ADMIN = "";
+        lock(true);
       });
 
-      btnRefresh.addEventListener("click", async ()=>{
+      btnRefresh.addEventListener("click", async () => {
         await ping();
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
+        const ok = await validateKey();
+        if (!ok) return;
         await loadVouchers();
         await getMonthly();
       });
-      btnLogout.addEventListener("click", ()=>{ if(confirm("Logout?")) doLogout(); });
 
-      btnLoadVouchers.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await loadVouchers();
-      });
-      btnNewVoucher.addEventListener("click", ()=>{ clearVoucherForm(); toast("New voucher"); });
+      btnPing.addEventListener("click", ping);
 
-      qSearch.addEventListener("input", renderVouchers);
-      qSort.addEventListener("change", renderVouchers);
+      tabBtns.forEach(b => b.addEventListener("click", () => setTab(b.getAttribute("data-tab"))));
 
-      btnRevealCode.addEventListener("click", ()=>{
-        const isPwd = vCode.type === "password";
-        vCode.type = isPwd ? "text" : "password";
-        btnRevealCode.textContent = isPwd ? "Hide" : "Reveal";
-      });
+      btnLoadVouchers.addEventListener("click", loadVouchers);
+      btnNewVoucher.addEventListener("click", () => { clearVoucher(); setBoxes(curlFor("voucher.upsert","POST",{code:"CODE",name:"NAME",enabled:true,percent:10,maxRp:0},"ADMIN"), lastJson); });
 
-      btnUpsert.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        try{ await upsertVoucher(); } catch(e){ toast(e?.message || "error"); }
+      qVoucher.addEventListener("input", renderVouchers);
+      sortVoucher.addEventListener("change", renderVouchers);
+
+      btnRevealCode.addEventListener("click", () => {
+        vCode.type = (vCode.type === "password") ? "text" : "password";
       });
-      btnDisable.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await disableVoucher();
-      });
-      btnEnable.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        try{ await enableVoucher(); } catch(e){ toast(e?.message || "error"); }
+      btnRevealTest.addEventListener("click", () => {
+        tVoucher.type = (tVoucher.type === "password") ? "text" : "password";
       });
 
-      btnGenDeviceId.addEventListener("click", ()=>{
+      btnUpsert.addEventListener("click", async () => {
+        try { await upsertVoucher(null); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      });
+      btnEnable.addEventListener("click", async () => {
+        try { await upsertVoucher(true); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      });
+      btnDisable.addEventListener("click", async () => {
+        try {
+          if (!confirm("Disable voucher ini?")) return;
+          await disableVoucher();
+        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      });
+
+      btnGenDevice.addEventListener("click", () => {
         const id = genDeviceId();
         tDeviceId.value = id;
         uDeviceId.value = id;
         toolDeviceId.value = id;
-        toast("Device ID dibuat");
-      });
-      btnTest.addEventListener("click", testCreateQR);
-      btnRevealTest.addEventListener("click", ()=>{
-        const isPwd = tVoucher.type === "password";
-        tVoucher.type = isPwd ? "text" : "password";
-        btnRevealTest.textContent = isPwd ? "Hide Voucher" : "Reveal Voucher";
       });
 
-      btnGetMonthly.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await getMonthly();
-      });
-      btnSetMonthly.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await setMonthly();
+      btnRunTest.addEventListener("click", async () => {
+        try { await testCreateQR(); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
       });
 
-      btnRevealDeviceKey.addEventListener("click", ()=>{
-        const isPwd = uDeviceKey.type === "password";
-        uDeviceKey.type = isPwd ? "text" : "password";
-        btnRevealDeviceKey.textContent = isPwd ? "Hide" : "Reveal";
+      btnGetMonthly.addEventListener("click", getMonthly);
+      btnSetMonthly.addEventListener("click", async () => { await setMonthly(); });
+
+      btnRevealDK.addEventListener("click", () => {
+        uDeviceKey.type = (uDeviceKey.type === "password") ? "text" : "password";
       });
-      btnGenDeviceKey.addEventListener("click", genDeviceKey);
-      btnAddUnlimited.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await addUnlimited();
+      btnGenDK.addEventListener("click", async () => {
+        try { await genDeviceKey(); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
       });
-      btnRemoveUnlimited.addEventListener("click", async ()=>{
-        const ok = await adminValidateKey();
-        if (!ok){ toast("Key salah / belum"); return; }
-        await removeUnlimited();
+      btnAddUnlimited.addEventListener("click", async () => {
+        try {
+          const dk = String(uDeviceKey.value||"").trim();
+          if (!dk) throw new Error("Generate deviceKey dulu");
+          await setMonthly({ addUnlimitedDeviceKey: dk });
+        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      });
+      btnRemoveUnlimited.addEventListener("click", async () => {
+        try {
+          const dk = String(uDeviceKey.value||"").trim();
+          if (!dk) throw new Error("Generate deviceKey dulu");
+          await setMonthly({ removeUnlimitedDeviceKey: dk });
+        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
       });
 
-      btnToolGen.addEventListener("click", ()=>{ toolDeviceId.value = genDeviceId(); toast("Generated"); });
-      btnToolCopy.addEventListener("click", ()=>copy(toolDeviceId.value));
+      btnToolGen.addEventListener("click", () => { toolDeviceId.value = genDeviceId(); });
+      btnToolCopy.addEventListener("click", () => copy(toolDeviceId.value));
 
-      btnCopyLog.addEventListener("click", ()=>copy(logBox.textContent));
-      btnClearLog.addEventListener("click", ()=>{ logBox.textContent="{}"; toast("Cleared"); });
+      btnCopyCurl.addEventListener("click", () => copy(curlBox.textContent));
+      btnCopyJson.addEventListener("click", () => copy(jsonBox.textContent));
+      btnCopyLog.addEventListener("click", () => copy(logBox.textContent));
+      btnClearLog.addEventListener("click", () => { logBox.textContent = "{}"; });
 
-      // Init
-      function loadSaved(){
-        BASE = localStorage.getItem(LS_BASE) || "";
-        ADMIN_KEY = localStorage.getItem(LS_KEY) || "";
-        baseUrlEl.value = BASE;
-        adminKeyEl.value = ADMIN_KEY ? "••••••••••" : "";
+      // INIT
+      function init(){
+        BASE = localStorage.getItem(LS_BASE) || location.origin;
+        ADMIN = localStorage.getItem(LS_KEY) || "";
 
-        const savedTab = localStorage.getItem(LS_TAB) || "voucher";
-        setTab(savedTab);
+        inBase.value = (BASE === location.origin) ? "" : BASE;
+        inKey.value = ADMIN ? "••••••••••" : "";
 
+        setPill(pillApi, "warn", "API: belum dicek");
+        setPill(pillKey, "warn", "Key: belum");
+        setPill(pillVoucher, "warn", "Voucher: —");
+        setPill(pillMonthly, "warn", "Monthly: —");
+
+        // device init
         const did = genDeviceId();
         tDeviceId.value = did;
         uDeviceId.value = did;
         toolDeviceId.value = did;
 
-        setPill(pillV,"warn","Voucher: —");
-        setPill(pillM,"warn","Monthly: —");
+        // init flatpickr
+        fp = flatpickr(vExpiresAt, {
+          enableTime: true,
+          time_24hr: true,
+          dateFormat: "Y-m-d H:i",
+          allowInput: true
+        });
 
-        if (ADMIN_KEY){
-          lockUI(false);
-          setPill(pillKey,"warn","Key: tersimpan");
-          setTimeout(async ()=>{
+        // tab restore
+        const t = localStorage.getItem(LS_TAB) || "voucher";
+        setTab(t);
+
+        if (ADMIN){
+          // auto unlock attempt (without showing key)
+          lock(false);
+          (async ()=>{
             await ping();
-            const ok = await adminValidateKey();
-            if (!ok){ toast("Admin key salah. Login ulang."); doLogout(); return; }
-            toast("Session OK ✅");
-            await loadVouchers();
-            await getMonthly();
-          }, 60);
+            const ok = await validateKey();
+            if (!ok){
+              lock(true);
+              inKey.value = "";
+            } else {
+              await loadVouchers();
+              await getMonthly();
+            }
+          })();
         } else {
-          lockUI(true);
-          setPill(pillKey,"warn","Key: belum");
+          lock(true);
         }
-      }
-      loadSaved();
 
+        // initial curl preview
+        setBoxes(
+          curlFor("voucher.upsert","POST",{ code:"VIPL", name:"VIP LEVEL", enabled:true, percent:10, maxRp:0, maxUses:100, expiresAt:"2026-12-31T23:59:59.000Z", note:"..." }, true),
+          {}
+        );
+      }
+
+      init();
     })();
   </script>
 </body>
