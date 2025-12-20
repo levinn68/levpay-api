@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LevPay Admin</title>
+  <style>
+    :root{
+      --bg:#0b0f17; --card:#121a27; --card2:#0f1622; --text:#e7eefc; --muted:#9fb0cf;
+      --line:#22314a; --good:#34d399; --warn:#fbbf24; --bad:#fb7185; --btn:#4f46e5;
+      --btn2:#06b6d4;
+      --radius:16px;
+      --shadow: 0 12px 50px rgba(0,0,0,.45);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:var(--sans);
+      background: radial-gradient(1000px 600px at 10% 0%, #132038 0%, transparent 60%),
+                  radial-gradient(800px 500px at 90% 10%, #1a1f4d 0%, transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      min-height:100vh;
+    }
+    a{color:inherit}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:18px 18px; border:1px solid var(--line); background:rgba(18,26,39,.75);
+      border-radius:var(--radius); box-shadow:var(--shadow); backdrop-filter: blur(10px);
+      position:sticky; top:12px; z-index:5;
+    }
+    .brand{display:flex; gap:12px; align-items:center}
+    .logo{
+      width:38px;height:38px;border-radius:12px;
+      background: linear-gradient(135deg, rgba(79,70,229,.9), rgba(6,182,212,.9));
+      box-shadow: 0 10px 30px rgba(79,70,229,.25);
+    }
+    .brand h1{font-size:16px;margin:0}
+    .brand p{margin:0;font-size:12px;color:var(--muted)}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .pill{
+      padding:7px 10px; border:1px solid var(--line); border-radius:999px;
+      background:rgba(15,22,34,.8); color:var(--muted); font-size:12px;
+    }
+    .pill code{font-family:var(--mono); color:#c7d5ff}
+    .btn{
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(15,22,34,.9);
+      color:var(--text);
+      padding:10px 12px;border-radius:12px;
+      cursor:pointer; transition:.15s transform,.15s opacity,.15s border-color;
+      display:inline-flex; align-items:center; gap:8px; font-weight:600;
+    }
+    .btn:hover{transform: translateY(-1px); border-color: rgba(255,255,255,.25)}
+    .btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
+    .btn.primary{background: linear-gradient(135deg, rgba(79,70,229,.92), rgba(6,182,212,.92)); border-color:transparent}
+    .btn.danger{background: rgba(251,113,133,.12); border-color: rgba(251,113,133,.35)}
+    .btn.good{background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.35)}
+    .tabs{
+      margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;
+    }
+    .tab{
+      padding:10px 12px; border-radius:12px; cursor:pointer;
+      border:1px solid var(--line); background:rgba(18,26,39,.55);
+      color:var(--muted); font-weight:700; font-size:13px;
+    }
+    .tab.active{
+      color:var(--text);
+      border-color: rgba(79,70,229,.5);
+      background: rgba(79,70,229,.14);
+    }
+    .grid{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap:14px;
+    }
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr}
+      .topbar{position:static}
+    }
+    .card{
+      border:1px solid var(--line);
+      background:rgba(18,26,39,.55);
+      border-radius:var(--radius);
+      padding:16px;
+      box-shadow:var(--shadow);
+    }
+    .card h2{
+      margin:0 0 10px 0; font-size:14px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .muted{color:var(--muted); font-size:12px}
+    .form{
+      display:grid; gap:10px;
+    }
+    .field{display:grid; gap:6px}
+    .field label{font-size:12px;color:var(--muted)}
+    .field input, .field textarea, .field select{
+      width:100%;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(15,22,34,.9);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 12px;
+      outline:none;
+      font-size:14px;
+    }
+    .field textarea{min-height:88px; resize:vertical; font-family:var(--mono); font-size:12px}
+    .inline{
+      display:grid; grid-template-columns: 1fr 1fr; gap:10px;
+    }
+    @media (max-width:520px){ .inline{grid-template-columns:1fr} }
+    .table{
+      width:100%;
+      border-collapse: collapse;
+      font-size:13px;
+      overflow:auto;
+    }
+    .table th, .table td{
+      padding:10px 10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      vertical-align:top;
+    }
+    .table th{color:var(--muted);font-weight:700;text-align:left; font-size:12px}
+    .badge{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 8px; border-radius:999px; font-size:12px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(15,22,34,.85);
+    }
+    .dot{width:8px;height:8px;border-radius:99px;background:var(--warn)}
+    .dot.good{background:var(--good)}
+    .dot.bad{background:var(--bad)}
+    .mono{font-family:var(--mono)}
+    .spacer{height:12px}
+    .hide{display:none !important}
+
+    /* Toast */
+    .toast{
+      position:fixed; left:50%; bottom:18px; transform: translateX(-50%);
+      background:rgba(15,22,34,.95);
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:var(--shadow);
+      border-radius:14px;
+      padding:10px 12px;
+      max-width:min(720px, calc(100vw - 24px));
+      color:var(--text);
+      display:none;
+      z-index:20;
+    }
+    .toast.show{display:block}
+    .toast .small{font-size:12px;color:var(--muted)}
+    .toast .row{justify-content:space-between}
+
+    /* Login overlay */
+    .overlay{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:flex; align-items:center; justify-content:center;
+      padding:18px;
+      z-index:50;
+    }
+    .modal{
+      width:min(520px, 100%);
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(18,26,39,.85);
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      padding:16px;
+      backdrop-filter: blur(10px);
+    }
+    .modal h3{margin:0 0 6px 0}
+    .modal .muted{margin:0 0 12px 0}
+    .footer-note{color:var(--muted); font-size:12px; margin-top:12px; line-height:1.4}
+    pre{
+      margin:0; padding:12px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(15,22,34,.9);
+      border-radius:14px;
+      overflow:auto;
+      font-size:12px;
+      line-height:1.45;
+      font-family:var(--mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>LevPay Admin Panel</h1>
+          <p class="muted">Kelola voucher, promo bulanan, dan transaksi (admin)</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="pill">HOST: <code id="pillHost">—</code></div>
+        <div class="pill">Admin: <code id="pillAdmin">—</code></div>
+        <button class="btn" id="btnLogin">Login</button>
+        <button class="btn danger" id="btnLogout">Logout</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="vouchers">Vouchers</div>
+      <div class="tab" data-tab="monthly">Monthly Promo</div>
+      <div class="tab" data-tab="tx">Transactions</div>
+      <div class="tab" data-tab="debug">Debug</div>
+    </div>
+
+    <!-- VOUCHERS -->
+    <div id="tab-vouchers" class="grid">
+      <div class="card">
+        <h2>
+          <span>Voucher List</span>
+          <span class="row">
+            <button class="btn" id="btnVoucherList">Refresh</button>
+          </span>
+        </h2>
+        <div class="muted">Endpoint: <span class="mono">voucher.list</span> (ADMIN)</div>
+        <div class="spacer"></div>
+        <div id="voucherTableWrap"></div>
+      </div>
+
+      <div class="card">
+        <h2>Upsert / Disable / Get</h2>
+        <div class="muted">Upsert: <span class="mono">voucher.upsert</span> • Disable: <span class="mono">voucher.disable</span> • Get: <span class="mono">voucher.get</span></div>
+        <div class="spacer"></div>
+
+        <div class="form">
+          <div class="inline">
+            <div class="field">
+              <label>Code (wajib)</label>
+              <input id="v_code" placeholder="HEMAT10" />
+            </div>
+            <div class="field">
+              <label>Nama</label>
+              <input id="v_name" placeholder="HEMAT 10%" />
+            </div>
+          </div>
+
+          <div class="inline">
+            <div class="field">
+              <label>Percent (0-100)</label>
+              <input id="v_percent" type="number" step="1" placeholder="10" />
+            </div>
+            <div class="field">
+              <label>Max Rp</label>
+              <input id="v_maxRp" type="number" step="1" placeholder="5000" />
+            </div>
+          </div>
+
+          <div class="inline">
+            <div class="field">
+              <label>ExpiresAt (ISO, optional)</label>
+              <input id="v_expiresAt" placeholder="2026-12-31T23:59:59.000Z" />
+            </div>
+            <div class="field">
+              <label>Max Uses (optional)</label>
+              <input id="v_maxUses" type="number" step="1" placeholder="100" />
+            </div>
+          </div>
+
+          <div class="inline">
+            <div class="field">
+              <label>Enabled</label>
+              <select id="v_enabled">
+                <option value="true">true (aktif)</option>
+                <option value="false">false (mati)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input id="v_note" placeholder="Voucher custom test" />
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn primary" id="btnVoucherUpsert">Upsert</button>
+            <button class="btn danger" id="btnVoucherDisable">Disable</button>
+            <button class="btn" id="btnVoucherGet">Get</button>
+          </div>
+
+          <div class="muted">Tips: kalau mau “off”, paling aman pakai <span class="mono">voucher.disable</span>. Kalau mau on lagi, pakai <span class="mono">voucher.upsert</span> dengan enabled=true.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MONTHLY -->
+    <div id="tab-monthly" class="grid hide">
+      <div class="card">
+        <h2>
+          <span>Monthly Promo Status</span>
+          <span class="row">
+            <button class="btn" id="btnMonthlyGet">Refresh</button>
+          </span>
+        </h2>
+        <div class="muted">Endpoint: <span class="mono">monthly.get</span> (ADMIN)</div>
+        <div class="spacer"></div>
+        <pre id="monthlyDump">{}</pre>
+      </div>
+
+      <div class="card">
+        <h2>Update Monthly Promo</h2>
+        <div class="muted">Endpoint: <span class="mono">monthly.set</span> (ADMIN)</div>
+        <div class="spacer"></div>
+
+        <div class="form">
+          <div class="inline">
+            <div class="field">
+              <label>Enabled</label>
+              <select id="m_enabled">
+                <option value="true">true (aktif)</option>
+                <option value="false">false (mati)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Name</label>
+              <input id="m_name" placeholder="PROMO BULANAN" />
+            </div>
+          </div>
+
+          <div class="inline">
+            <div class="field">
+              <label>Percent</label>
+              <input id="m_percent" type="number" step="1" placeholder="5" />
+            </div>
+            <div class="field">
+              <label>Max Rp</label>
+              <input id="m_maxRp" type="number" step="1" placeholder="2000" />
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn primary" id="btnMonthlySet">Save</button>
+            <button class="btn danger" id="btnMonthlyOff">Quick OFF</button>
+            <button class="btn good" id="btnMonthlyOn">Quick ON</button>
+          </div>
+
+          <div class="spacer"></div>
+          <h2 style="margin:0 0 6px 0;font-size:14px">Unlimited DeviceKey (bypass limit bulanan)</h2>
+          <div class="muted">Add/Remove: <span class="mono">addUnlimitedDeviceKey</span> / <span class="mono">removeUnlimitedDeviceKey</span></div>
+          <div class="spacer"></div>
+
+          <div class="field">
+            <label>DeviceKey (sha256 deviceId|pepper)</label>
+            <input id="m_deviceKey" placeholder="paste deviceKey di sini" />
+          </div>
+          <div class="row">
+            <button class="btn good" id="btnMonthlyAddUnlimited">Add Unlimited</button>
+            <button class="btn danger" id="btnMonthlyRemoveUnlimited">Remove Unlimited</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TX -->
+    <div id="tab-tx" class="grid hide">
+      <div class="card">
+        <h2>
+          <span>TX List</span>
+          <span class="row">
+            <button class="btn" id="btnTxList">Refresh</button>
+          </span>
+        </h2>
+        <div class="muted">Endpoint: <span class="mono">tx.list</span> (ADMIN)</div>
+        <div class="spacer"></div>
+
+        <div class="inline">
+          <div class="field">
+            <label>Limit (1-1000)</label>
+            <input id="tx_limit" type="number" value="200" />
+          </div>
+          <div class="field">
+            <label>Search (q)</label>
+            <input id="tx_q" placeholder="LEVPay-..." />
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="btnTxSearch">Search</button>
+          <button class="btn danger" id="btnTxClear">Clear ALL</button>
+        </div>
+
+        <div class="spacer"></div>
+        <div id="txTableWrap"></div>
+      </div>
+
+      <div class="card">
+        <h2>TX Get</h2>
+        <div class="muted">Endpoint: <span class="mono">tx.get</span> (ADMIN)</div>
+        <div class="spacer"></div>
+
+        <div class="form">
+          <div class="field">
+            <label>ID Transaksi</label>
+            <input id="tx_id" placeholder="LEVPAY-20136" />
+          </div>
+          <div class="row">
+            <button class="btn primary" id="btnTxGet">Get</button>
+          </div>
+          <pre id="txDump">{}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEBUG -->
+    <div id="tab-debug" class="grid hide">
+      <div class="card">
+        <h2>Quick Actions</h2>
+        <div class="muted">Buat ngetes API cepat (ADMIN key wajib di header)</div>
+        <div class="spacer"></div>
+        <div class="form">
+          <div class="field">
+            <label>Action</label>
+            <input id="dbg_action" placeholder="voucher.list / monthly.get / tx.list" />
+          </div>
+          <div class="field">
+            <label>Method</label>
+            <select id="dbg_method">
+              <option>GET</option>
+              <option>POST</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Body (JSON)</label>
+            <textarea id="dbg_body">{}</textarea>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="btnDbgSend">Send</button>
+          </div>
+          <pre id="dbgDump">{}</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Notes</h2>
+        <div class="muted">
+          Kalau admin panel ini disatuin dengan domain yang sama dengan API Vercel lu,
+          isi HOST boleh dikosongin (atau “/”).
+        </div>
+        <div class="footer-note">
+          <b>Keamanan:</b> Admin-Key di browser itu rawan. Untuk production, bikin endpoint auth beneran (session/JWT),
+          atau minimal Basic Auth + server side proxy.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN OVERLAY -->
+  <div id="loginOverlay" class="overlay hide">
+    <div class="modal">
+      <h3>Login Admin</h3>
+      <p class="muted">Masukin HOST API + Admin Key. Disimpan lokal di device.</p>
+
+      <div class="form">
+        <div class="field">
+          <label>HOST (contoh: https://your-vercel.app atau kosong kalau 1 domain)</label>
+          <input id="loginHost" placeholder="https://example.vercel.app" />
+        </div>
+        <div class="field">
+          <label>X-Admin-Key</label>
+          <input id="loginKey" placeholder="LEVIN6824" />
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnSaveLogin">Masuk</button>
+          <button class="btn" id="btnCloseLogin">Batal</button>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        <b>Tips:</b> kalau API lu ada di path <span class="mono">/api/levpay</span>,
+        HOST cukup domain saja. Contoh: <span class="mono">https://abc.vercel.app</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast">
+    <div class="row">
+      <div>
+        <div id="toastTitle" style="font-weight:800">Info</div>
+        <div id="toastMsg" class="small">—</div>
+      </div>
+      <button class="btn" id="toastClose">OK</button>
+    </div>
+  </div>
+
+  <script>
+    // ========= storage =========
+    const LS_HOST = "levpay_admin_host";
+    const LS_KEY  = "levpay_admin_key";
+
+    const el = (id) => document.getElementById(id);
+
+    const state = {
+      host: localStorage.getItem(LS_HOST) || "",
+      key:  localStorage.getItem(LS_KEY)  || "",
+    };
+
+    function normHost(h){
+      const s = String(h || "").trim();
+      if (!s || s === "/" ) return "";
+      return s.replace(/\/+$/, "");
+    }
+
+    function maskKey(k){
+      const s = String(k||"");
+      if (!s) return "—";
+      if (s.length <= 4) return "****";
+      return s.slice(0,2) + "****" + s.slice(-2);
+    }
+
+    function setPills(){
+      el("pillHost").textContent  = state.host ? state.host : "(same-domain)";
+      el("pillAdmin").textContent = maskKey(state.key);
+    }
+
+    // ========= toast =========
+    let toastTimer = null;
+    function toast(title, msg){
+      el("toastTitle").textContent = title || "Info";
+      el("toastMsg").textContent = msg || "";
+      el("toast").classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=> el("toast").classList.remove("show"), 4500);
+    }
+    el("toastClose").addEventListener("click", ()=> el("toast").classList.remove("show"));
+
+    // ========= api helper =========
+    async function api(action, method="GET", body=null, qs={}){
+      const base = normHost(state.host);
+      const url = new URL((base ? base : "") + "/api/levpay", window.location.origin);
+
+      url.searchParams.set("action", action);
+
+      // extra querystring
+      Object.entries(qs || {}).forEach(([k,v])=>{
+        if (v == null || v === "") return;
+        url.searchParams.set(k, String(v));
+      });
+
+      const headers = {
+        "Accept": "application/json",
+      };
+      if (state.key) headers["X-Admin-Key"] = state.key;
+      if (method !== "GET") headers["Content-Type"] = "application/json";
+
+      const res = await fetch(url.toString(), {
+        method,
+        headers,
+        body: method === "GET" ? null : JSON.stringify(body || {}),
+      });
+
+      const text = await res.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch { json = { raw:text }; }
+
+      if (!res.ok || (json && json.success === false)){
+        const err = (json && (json.error || json.message)) ? (json.error || json.message) : ("HTTP " + res.status);
+        throw new Error(err);
+      }
+      return json;
+    }
+
+    // ========= tabs =========
+    function setTab(name){
+      document.querySelectorAll(".tab").forEach(t=>{
+        t.classList.toggle("active", t.dataset.tab === name);
+      });
+      ["vouchers","monthly","tx","debug"].forEach(k=>{
+        el("tab-"+k).classList.toggle("hide", k !== name);
+      });
+    }
+    document.querySelectorAll(".tab").forE
