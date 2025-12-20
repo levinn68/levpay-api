@@ -1,3 +1,4 @@
+<!-- admin/admin.html  (LEVPay Admin Panel - single file) -->
 <!doctype html>
 <html lang="id">
 <head>
@@ -6,944 +7,1247 @@
   <title>LevPay Admin</title>
   <style>
     :root{
-      --bg:#0b0f17; --card:#121a27; --card2:#0f1622; --text:#e7eefc; --muted:#9fb0cf;
-      --line:#22314a; --good:#34d399; --warn:#fbbf24; --bad:#fb7185; --btn:#4f46e5;
-      --btn2:#06b6d4;
-      --radius:16px;
-      --shadow: 0 12px 50px rgba(0,0,0,.45);
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      --bg:#0b0f18; --card:#0f1626; --card2:#0c1322;
+      --text:#eaf0ff; --muted:#9aa6c2; --muted2:#7f8aa6;
+      --line:rgba(255,255,255,.10);
+      --good:#22c55e; --warn:#f97316; --bad:#ef4444; --brand1:#7c3aed; --brand2:#22d3ee;
+      --r:18px;
+      --shadow:0 18px 48px rgba(0,0,0,.35);
+      font-synthesis-weight:none;
     }
-    *{box-sizing:border-box}
+    *{ box-sizing:border-box; }
     body{
-      margin:0; font-family:var(--sans);
-      background: radial-gradient(1000px 600px at 10% 0%, #132038 0%, transparent 60%),
-                  radial-gradient(800px 500px at 90% 10%, #1a1f4d 0%, transparent 55%),
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 20% -10%, rgba(124,58,237,.35), transparent 60%),
+                  radial-gradient(1200px 700px at 90% 0%, rgba(34,211,238,.22), transparent 60%),
                   var(--bg);
       color:var(--text);
-      min-height:100vh;
     }
-    a{color:inherit}
-    .wrap{max-width:1100px;margin:0 auto;padding:24px}
-    .topbar{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:18px 18px; border:1px solid var(--line); background:rgba(18,26,39,.75);
-      border-radius:var(--radius); box-shadow:var(--shadow); backdrop-filter: blur(10px);
-      position:sticky; top:12px; z-index:5;
+    a{ color:inherit; }
+    .wrap{ max-width:1100px; margin:0 auto; padding:22px 14px 60px; }
+    .top{
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+      margin-bottom:16px;
     }
-    .brand{display:flex; gap:12px; align-items:center}
+    .brand{
+      display:flex; gap:10px; align-items:center;
+    }
     .logo{
-      width:38px;height:38px;border-radius:12px;
-      background: linear-gradient(135deg, rgba(79,70,229,.9), rgba(6,182,212,.9));
-      box-shadow: 0 10px 30px rgba(79,70,229,.25);
+      width:44px;height:44px;border-radius:16px;
+      background: linear-gradient(135deg, rgba(124,58,237,1), rgba(34,211,238,1));
+      box-shadow:0 16px 40px rgba(34,211,238,.12);
     }
-    .brand h1{font-size:16px;margin:0}
-    .brand p{margin:0;font-size:12px;color:var(--muted)}
-    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    h1{ margin:0; font-size:18px; font-weight:950; letter-spacing:-.02em; }
+    .sub{ color:var(--muted); font-size:12px; font-weight:800; margin-top:2px; }
+
+    .card{
+      border-radius:var(--r);
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      margin-bottom:14px;
+    }
+    .cardHead{
+      padding:14px 14px 12px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.02);
+    }
+    .cardTitle{ font-size:14px; font-weight:1000; letter-spacing:-.01em; margin:0; }
     .pill{
-      padding:7px 10px; border:1px solid var(--line); border-radius:999px;
-      background:rgba(15,22,34,.8); color:var(--muted); font-size:12px;
-    }
-    .pill code{font-family:var(--mono); color:#c7d5ff}
-    .btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px;
       border:1px solid rgba(255,255,255,.12);
-      background:rgba(15,22,34,.9);
+      background: rgba(255,255,255,.04);
+      font-weight:950; font-size:12px;
       color:var(--text);
-      padding:10px 12px;border-radius:12px;
-      cursor:pointer; transition:.15s transform,.15s opacity,.15s border-color;
-      display:inline-flex; align-items:center; gap:8px; font-weight:600;
+      user-select:none;
     }
-    .btn:hover{transform: translateY(-1px); border-color: rgba(255,255,255,.25)}
-    .btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
-    .btn.primary{background: linear-gradient(135deg, rgba(79,70,229,.92), rgba(6,182,212,.92)); border-color:transparent}
-    .btn.danger{background: rgba(251,113,133,.12); border-color: rgba(251,113,133,.35)}
-    .btn.good{background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.35)}
+    .dot{ width:10px; height:10px; border-radius:999px; background:rgba(255,255,255,.35); }
+    .dot.good{ background: rgba(34,197,94,.95); }
+    .dot.warn{ background: rgba(249,115,22,.95); }
+    .dot.bad{ background: rgba(239,68,68,.95); }
+    .cardBody{ padding:14px; }
+
+    .grid{ display:grid; gap:12px; }
+    @media(min-width: 980px){
+      .grid2{ grid-template-columns: 1.1fr .9fr; }
+      .grid3{ grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .row{ display:flex; gap:10px; flex-wrap:wrap; }
+    .field{ display:grid; gap:8px; }
+    .label{ color:var(--muted); font-weight:950; font-size:12px; }
+    .input, textarea{
+      width:100%;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.18);
+      color:var(--text);
+      padding:12px 12px;
+      outline:none;
+      font-weight:850;
+      font-size:13px;
+    }
+    textarea{ min-height:110px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight:700; }
+
+    .btn{
+      border:none;
+      border-radius:14px;
+      padding:12px 12px;
+      font-weight:950;
+      cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:10px;
+      user-select:none;
+      -webkit-tap-highlight-color:transparent;
+      touch-action: manipulation;
+      transition: transform .12s ease, opacity .12s ease, background .12s ease, border-color .12s ease;
+    }
+    .btn:active{ transform: scale(.99); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+    .btnPrimary{
+      color:#08101f;
+      background: linear-gradient(90deg, rgba(124,58,237,1), rgba(34,211,238,1));
+      box-shadow:0 16px 40px rgba(34,211,238,.14);
+    }
+    .btnGhost{
+      color:var(--text);
+      background: rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .btnBad{
+      color: rgba(255,230,230,.96);
+      background: rgba(239,68,68,.14);
+      border:1px solid rgba(239,68,68,.28);
+    }
+    .btnWarn{
+      color: rgba(255,244,232,.96);
+      background: rgba(249,115,22,.14);
+      border:1px solid rgba(249,115,22,.28);
+    }
+
     .tabs{
-      margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;
+      display:flex; flex-wrap:wrap; gap:8px;
+      margin: 0 0 12px;
     }
     .tab{
-      padding:10px 12px; border-radius:12px; cursor:pointer;
-      border:1px solid var(--line); background:rgba(18,26,39,.55);
-      color:var(--muted); font-weight:700; font-size:13px;
-    }
-    .tab.active{
-      color:var(--text);
-      border-color: rgba(79,70,229,.5);
-      background: rgba(79,70,229,.14);
-    }
-    .grid{
-      margin-top:14px;
-      display:grid;
-      grid-template-columns: 1.1fr .9fr;
-      gap:14px;
-    }
-    @media (max-width: 900px){
-      .grid{grid-template-columns:1fr}
-      .topbar{position:static}
-    }
-    .card{
-      border:1px solid var(--line);
-      background:rgba(18,26,39,.55);
-      border-radius:var(--radius);
-      padding:16px;
-      box-shadow:var(--shadow);
-    }
-    .card h2{
-      margin:0 0 10px 0; font-size:14px;
-      display:flex; justify-content:space-between; align-items:center;
-    }
-    .muted{color:var(--muted); font-size:12px}
-    .form{
-      display:grid; gap:10px;
-    }
-    .field{display:grid; gap:6px}
-    .field label{font-size:12px;color:var(--muted)}
-    .field input, .field textarea, .field select{
-      width:100%;
-      border:1px solid rgba(255,255,255,.12);
-      background:rgba(15,22,34,.9);
-      color:var(--text);
-      border-radius:12px;
       padding:10px 12px;
-      outline:none;
-      font-size:14px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      font-weight:950;
+      font-size:12px;
+      cursor:pointer;
+      user-select:none;
     }
-    .field textarea{min-height:88px; resize:vertical; font-family:var(--mono); font-size:12px}
-    .inline{
-      display:grid; grid-template-columns: 1fr 1fr; gap:10px;
+    .tab.isActive{
+      border-color: rgba(34,211,238,.38);
+      background: rgba(34,211,238,.10);
     }
-    @media (max-width:520px){ .inline{grid-template-columns:1fr} }
+
     .table{
       width:100%;
-      border-collapse: collapse;
-      font-size:13px;
-      overflow:auto;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.12);
     }
-    .table th, .table td{
+    .table th,.table td{
       padding:10px 10px;
       border-bottom:1px solid rgba(255,255,255,.08);
+      font-size:12px;
       vertical-align:top;
     }
-    .table th{color:var(--muted);font-weight:700;text-align:left; font-size:12px}
-    .badge{
-      display:inline-flex; align-items:center; gap:6px;
-      padding:4px 8px; border-radius:999px; font-size:12px;
-      border:1px solid rgba(255,255,255,.12);
-      background:rgba(15,22,34,.85);
+    .table th{
+      text-align:left;
+      color:var(--muted);
+      font-weight:1000;
+      background: rgba(255,255,255,.03);
     }
-    .dot{width:8px;height:8px;border-radius:99px;background:var(--warn)}
-    .dot.good{background:var(--good)}
-    .dot.bad{background:var(--bad)}
-    .mono{font-family:var(--mono)}
-    .spacer{height:12px}
-    .hide{display:none !important}
-
-    /* Toast */
+    .table tr:last-child td{ border-bottom:none; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .muted{ color:var(--muted); }
+    .muted2{ color:var(--muted2); }
+    .help{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.55;
+      font-weight:800;
+      margin-top:8px;
+      white-space:pre-line;
+    }
     .toast{
-      position:fixed; left:50%; bottom:18px; transform: translateX(-50%);
-      background:rgba(15,22,34,.95);
-      border:1px solid rgba(255,255,255,.14);
-      box-shadow:var(--shadow);
+      position:fixed;
+      left:50%;
+      bottom:18px;
+      transform:translateX(-50%);
+      width:min(560px, 92vw);
       border-radius:14px;
-      padding:10px 12px;
-      max-width:min(720px, calc(100vw - 24px));
-      color:var(--text);
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(10,13,22,.92);
+      box-shadow: var(--shadow);
+      padding:12px 12px;
       display:none;
-      z-index:20;
+      z-index:999;
     }
-    .toast.show{display:block}
-    .toast .small{font-size:12px;color:var(--muted)}
-    .toast .row{justify-content:space-between}
+    .toast.isOn{ display:block; }
+    .toast b{ font-weight:1000; }
+    .kbd{
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+    }
 
-    /* Login overlay */
+    /* simple login overlay */
     .overlay{
-      position:fixed; inset:0;
-      background:rgba(0,0,0,.55);
-      display:flex; align-items:center; justify-content:center;
-      padding:18px;
-      z-index:50;
-    }
-    .modal{
-      width:min(520px, 100%);
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(18,26,39,.85);
-      border-radius:18px;
-      box-shadow:var(--shadow);
-      padding:16px;
+      position:fixed; inset:0; z-index:1000;
+      display:none; place-items:center;
+      background: rgba(0,0,0,.45);
       backdrop-filter: blur(10px);
     }
-    .modal h3{margin:0 0 6px 0}
-    .modal .muted{margin:0 0 12px 0}
-    .footer-note{color:var(--muted); font-size:12px; margin-top:12px; line-height:1.4}
-    pre{
-      margin:0; padding:12px;
+    .overlay.isOn{ display:grid; }
+    .panel{
+      width:min(560px, 92vw);
+      border-radius: 22px;
       border:1px solid rgba(255,255,255,.12);
-      background:rgba(15,22,34,.9);
-      border-radius:14px;
-      overflow:auto;
-      font-size:12px;
-      line-height:1.45;
-      font-family:var(--mono);
+      background: rgba(10,13,22,.94);
+      box-shadow: var(--shadow);
+      overflow:hidden;
     }
+    .panelHead{
+      padding:14px 14px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .panelBody{ padding:14px; }
   </style>
 </head>
+
 <body>
+  <div class="overlay" id="loginOverlay" aria-hidden="true">
+    <div class="panel">
+      <div class="panelHead">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="logo" style="width:36px;height:36px;border-radius:14px"></div>
+          <div>
+            <div style="font-weight:1000">Login Admin</div>
+            <div class="muted" style="font-size:12px;font-weight:800">Buat akses endpoint ADMIN (voucher/monthly/tx)</div>
+          </div>
+        </div>
+        <button class="btn btnGhost" id="btnCloseLogin" type="button">✕</button>
+      </div>
+      <div class="panelBody grid" style="gap:12px">
+        <div class="field">
+          <div class="label">Base URL (optional)</div>
+          <input class="input" id="loginHost" placeholder="kosong = pakai origin sekarang" />
+          <div class="help">Contoh: https://levpay-api.vercel.app</div>
+        </div>
+        <div class="field">
+          <div class="label">Admin Key (header: <span class="kbd">X-Admin-Key</span>)</div>
+          <input class="input" id="loginKey" placeholder="mis: LEVIN6824" />
+        </div>
+        <div class="row">
+          <button class="btn btnPrimary" id="btnLogin" type="button" style="flex:1">Masuk</button>
+          <button class="btn btnGhost" id="btnLoginClear" type="button">Reset</button>
+        </div>
+        <div class="help">
+          Catatan:
+          - Page ini akan call: <span class="kbd">/api/levpay?action=...</span>
+          - Semua action admin butuh header <span class="kbd">X-Admin-Key</span> yang benar.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
   <div class="wrap">
-    <div class="topbar">
+    <div class="top">
       <div class="brand">
         <div class="logo"></div>
         <div>
           <h1>LevPay Admin Panel</h1>
-          <p class="muted">Kelola voucher, promo bulanan, dan transaksi (admin)</p>
+          <div class="sub">
+            Endpoint: <span class="kbd">/api/levpay</span> • Router actions: voucher.*, monthly.*, tx.*, discount.*
+          </div>
         </div>
       </div>
-      <div class="row">
-        <div class="pill">HOST: <code id="pillHost">—</code></div>
-        <div class="pill">Admin: <code id="pillAdmin">—</code></div>
-        <button class="btn" id="btnLogin">Login</button>
-        <button class="btn danger" id="btnLogout">Logout</button>
+
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn btnGhost" id="btnOpenLogin" type="button">Login / Settings</button>
+        <button class="btn btnGhost" id="btnPing" type="button">Ping</button>
+        <button class="btn btnPrimary" id="btnReloadAll" type="button">Reload</button>
       </div>
     </div>
 
-    <div class="tabs">
-      <div class="tab active" data-tab="vouchers">Vouchers</div>
-      <div class="tab" data-tab="monthly">Monthly Promo</div>
-      <div class="tab" data-tab="tx">Transactions</div>
-      <div class="tab" data-tab="debug">Debug</div>
+    <div class="card">
+      <div class="cardHead">
+        <div>
+          <div class="cardTitle">Connection</div>
+          <div class="muted" style="font-size:12px;font-weight:800;margin-top:4px">
+            Base: <span class="mono" id="connBase">—</span> • Admin: <span class="mono" id="connAdmin">—</span>
+          </div>
+        </div>
+        <div class="pill" id="connStatus">
+          <span class="dot" id="connDot"></span>
+          <span id="connText">Not checked</span>
+        </div>
+      </div>
+      <div class="cardBody">
+        <div class="tabs" id="tabs">
+          <div class="tab isActive" data-tab="vouchers">Vouchers</div>
+          <div class="tab" data-tab="monthly">Monthly Promo</div>
+          <div class="tab" data-tab="tx">TX Store</div>
+          <div class="tab" data-tab="discount">Discount Test</div>
+          <div class="tab" data-tab="raw">Raw / Debug</div>
+        </div>
+
+        <!-- VOUCHERS -->
+        <section id="tab-vouchers">
+          <div class="grid grid2">
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Voucher List</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnVoucherList" type="button">List</button>
+                </div>
+              </div>
+              <div class="cardBody">
+                <table class="table" id="voucherTable">
+                  <thead>
+                    <tr>
+                      <th style="width:150px">Code</th>
+                      <th>Name</th>
+                      <th style="width:90px">%</th>
+                      <th style="width:120px">MaxRp</th>
+                      <th style="width:120px">MaxUses</th>
+                      <th style="width:80px">Uses</th>
+                      <th style="width:120px">Enabled</th>
+                      <th style="width:160px">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="voucherTbody">
+                    <tr><td colspan="8" class="muted">Klik “List” buat load voucher.</td></tr>
+                  </tbody>
+                </table>
+                <div class="help">
+                  Tips:
+                  - Disable voucher = action <span class="kbd">voucher.disable</span> (ADMIN).
+                  - Upsert voucher = action <span class="kbd">voucher.upsert</span> (ADMIN).
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Upsert / Disable Voucher</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnVoucherGet" type="button">Get</button>
+                  <button class="btn btnPrimary" id="btnVoucherUpsert" type="button">Upsert</button>
+                  <button class="btn btnBad" id="btnVoucherDisable" type="button">Disable</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:12px">
+                <div class="field">
+                  <div class="label">Code</div>
+                  <input class="input" id="vCode" placeholder="KINGLEV" />
+                </div>
+                <div class="field">
+                  <div class="label">Name</div>
+                  <input class="input" id="vName" placeholder="Voucher 60%" />
+                </div>
+
+                <div class="row">
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">Percent (0-100)</div>
+                    <input class="input" id="vPercent" type="number" placeholder="60" />
+                  </div>
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">MaxRp (0 = no cap)</div>
+                    <input class="input" id="vMaxRp" type="number" placeholder="0" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">MaxUses (blank = unlimited)</div>
+                    <input class="input" id="vMaxUses" type="number" placeholder="100" />
+                  </div>
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">ExpiresAt (ISO, optional)</div>
+                    <input class="input" id="vExpiresAt" placeholder="2026-01-01T00:00:00.000Z" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <div class="label">Note (optional)</div>
+                  <input class="input" id="vNote" placeholder="Catatan internal" />
+                </div>
+
+                <div class="row" style="align-items:center">
+                  <label class="pill" style="cursor:pointer">
+                    <input type="checkbox" id="vEnabled" style="accent-color: #22d3ee" checked />
+                    Enabled
+                  </label>
+                  <div class="muted" style="font-size:12px;font-weight:800">
+                    Upsert akan otomatis uppercase code.
+                  </div>
+                </div>
+
+                <div class="help">
+                  Contoh voucher 60%:
+                  - Code: <span class="kbd">KINGLEV</span>
+                  - Percent: <span class="kbd">60</span>
+                  - MaxRp: <span class="kbd">0</span> (biar 60% full)
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- MONTHLY -->
+        <section id="tab-monthly" style="display:none">
+          <div class="grid grid2">
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Monthly Promo</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnMonthlyGet" type="button">Get</button>
+                  <button class="btn btnPrimary" id="btnMonthlySet" type="button">Set</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:12px">
+                <div class="row" style="align-items:center">
+                  <label class="pill" style="cursor:pointer">
+                    <input type="checkbox" id="mEnabled" style="accent-color:#22d3ee" checked />
+                    Enabled
+                  </label>
+                  <div class="muted" style="font-size:12px;font-weight:800">Action: <span class="kbd">monthly.get</span> / <span class="kbd">monthly.set</span> (ADMIN)</div>
+                </div>
+
+                <div class="field">
+                  <div class="label">Name</div>
+                  <input class="input" id="mName" placeholder="PROMO BULANAN" />
+                </div>
+
+                <div class="row">
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">Percent (0-100)</div>
+                    <input class="input" id="mPercent" type="number" placeholder="5" />
+                  </div>
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">MaxRp</div>
+                    <input class="input" id="mMaxRp" type="number" placeholder="2000" />
+                  </div>
+                </div>
+
+                <div class="help">
+                  Monthly promo dihitung setelah voucher (di engine). Kalau mau matiin: uncheck Enabled lalu Set.
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Unlimited Device Key</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnComputeDeviceKey" type="button">Compute</button>
+                  <button class="btn btnPrimary" id="btnAddUnlimited" type="button">Add</button>
+                  <button class="btn btnBad" id="btnRemoveUnlimited" type="button">Remove</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:12px">
+                <div class="field">
+                  <div class="label">Device ID (input)</div>
+                  <input class="input" id="uDeviceId" placeholder="dev_xxx_yyy" />
+                </div>
+                <div class="field">
+                  <div class="label">Pepper (harus sama dengan server: DEVICE_PEPPER)</div>
+                  <input class="input" id="uPepper" placeholder="ISI_PEPPER" />
+                </div>
+                <div class="field">
+                  <div class="label">Device Key (sha256(deviceId + '|' + pepper))</div>
+                  <input class="input mono" id="uDeviceKey" placeholder="(hasil compute akan muncul di sini)" />
+                </div>
+                <div class="help">
+                  API butuh <b>deviceKey</b> (bukan deviceId) untuk unlimited.
+                  Kalau kamu belum tau pepper servernya, isi sama dengan env <span class="kbd">DEVICE_PEPPER</span> yang kamu set di Vercel.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TX -->
+        <section id="tab-tx" style="display:none">
+          <div class="grid grid2">
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">TX Tools (ADMIN)</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnTxList" type="button">List</button>
+                  <button class="btn btnGhost" id="btnTxSearch" type="button">Search</button>
+                  <button class="btn btnGhost" id="btnTxGet" type="button">Get</button>
+                  <button class="btn btnBad" id="btnTxClear" type="button">Clear</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:12px">
+                <div class="row">
+                  <div class="field" style="flex:1;min-width:170px">
+                    <div class="label">List limit</div>
+                    <input class="input" id="txLimit" type="number" value="200" />
+                  </div>
+                  <div class="field" style="flex:1;min-width:170px">
+                    <div class="label">Get idTransaksi</div>
+                    <input class="input" id="txId" placeholder="TRX123..." />
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="label">Search query</div>
+                  <input class="input" id="txQ" placeholder="pending / paid / nama / etc" />
+                </div>
+                <div class="help">
+                  Actions:
+                  <span class="kbd">tx.list</span>,
+                  <span class="kbd">tx.search</span>,
+                  <span class="kbd">tx.get</span>,
+                  <span class="kbd">tx.clear</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">TX Upsert (ADMIN)</div>
+                <div class="row">
+                  <button class="btn btnPrimary" id="btnTxUpsert" type="button">Upsert</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:10px">
+                <div class="help">Isi JSON minimal harus punya <span class="kbd">idTransaksi</span></div>
+                <textarea id="txJson" spellcheck="false" class="mono">{ "idTransaksi": "TRX_DEMO", "status": "pending", "note": "manual upsert" }</textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DISCOUNT TEST -->
+        <section id="tab-discount" style="display:none">
+          <div class="grid grid2">
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">discount.apply</div>
+                <div class="row">
+                  <button class="btn btnPrimary" id="btnDiscountApply" type="button">Apply</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:12px">
+                <div class="row">
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">Amount</div>
+                    <input class="input" id="dAmount" type="number" value="10000" />
+                  </div>
+                  <div class="field" style="flex:1;min-width:160px">
+                    <div class="label">DeviceId</div>
+                    <input class="input" id="dDeviceId" placeholder="dev_xxx_yyy" />
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="label">Voucher Code (optional)</div>
+                  <input class="input" id="dVoucher" placeholder="KINGLEV" />
+                </div>
+                <div class="help">
+                  Ini buat ngetes engine:
+                  - result berisi <span class="kbd">reservations</span>
+                  - kalau transaksi selesai: call <span class="kbd">discount.commit</span>
+                  - kalau dibatalin: call <span class="kbd">discount.release</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Commit / Release</div>
+                <div class="row">
+                  <button class="btn btnPrimary" id="btnDiscountCommit" type="button">Commit</button>
+                  <button class="btn btnWarn" id="btnDiscountRelease" type="button">Release</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:10px">
+                <div class="help">Paste array <span class="kbd">reservations</span> dari response apply.</div>
+                <textarea id="dReservations" spellcheck="false" class="mono">[]</textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RAW -->
+        <section id="tab-raw" style="display:none">
+          <div class="grid grid2">
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Quick Call</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnHelp" type="button">help</button>
+                  <button class="btn btnGhost" id="btnPing2" type="button">ping</button>
+                </div>
+              </div>
+              <div class="cardBody grid" style="gap:10px">
+                <div class="field">
+                  <div class="label">Action</div>
+                  <input class="input mono" id="rawAction" placeholder="voucher.list" value="help" />
+                </div>
+                <div class="field">
+                  <div class="label">Body (JSON)</div>
+                  <textarea id="rawBody" spellcheck="false" class="mono">{}</textarea>
+                </div>
+                <div class="row">
+                  <button class="btn btnPrimary" id="btnRawSend" type="button" style="flex:1">Send</button>
+                </div>
+                <div class="help">
+                  Semua request di sini pakai POST JSON, ke:
+                  <span class="kbd">/api/levpay?action=...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin:0">
+              <div class="cardHead">
+                <div class="cardTitle">Response</div>
+                <div class="row">
+                  <button class="btn btnGhost" id="btnCopyResp" type="button">Copy</button>
+                  <button class="btn btnGhost" id="btnClearResp" type="button">Clear</button>
+                </div>
+              </div>
+              <div class="cardBody">
+                <textarea id="respBox" class="mono" spellcheck="false" style="min-height:340px">{}</textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
     </div>
 
-    <!-- VOUCHERS -->
-    <div id="tab-vouchers" class="grid">
-      <div class="card">
-        <h2>
-          <span>Voucher List</span>
-          <span class="row">
-            <button class="btn" id="btnVoucherList">Refresh</button>
-          </span>
-        </h2>
-        <div class="muted">Endpoint: <span class="mono">voucher.list</span> (ADMIN)</div>
-        <div class="spacer"></div>
-        <div id="voucherTableWrap"></div>
-      </div>
-
-      <div class="card">
-        <h2>Upsert / Disable / Get</h2>
-        <div class="muted">Upsert: <span class="mono">voucher.upsert</span> • Disable: <span class="mono">voucher.disable</span> • Get: <span class="mono">voucher.get</span></div>
-        <div class="spacer"></div>
-
-        <div class="form">
-          <div class="inline">
-            <div class="field">
-              <label>Code (wajib)</label>
-              <input id="v_code" placeholder="HEMAT10" />
-            </div>
-            <div class="field">
-              <label>Nama</label>
-              <input id="v_name" placeholder="HEMAT 10%" />
-            </div>
-          </div>
-
-          <div class="inline">
-            <div class="field">
-              <label>Percent (0-100)</label>
-              <input id="v_percent" type="number" step="1" placeholder="10" />
-            </div>
-            <div class="field">
-              <label>Max Rp</label>
-              <input id="v_maxRp" type="number" step="1" placeholder="5000" />
-            </div>
-          </div>
-
-          <div class="inline">
-            <div class="field">
-              <label>ExpiresAt (ISO, optional)</label>
-              <input id="v_expiresAt" placeholder="2026-12-31T23:59:59.000Z" />
-            </div>
-            <div class="field">
-              <label>Max Uses (optional)</label>
-              <input id="v_maxUses" type="number" step="1" placeholder="100" />
-            </div>
-          </div>
-
-          <div class="inline">
-            <div class="field">
-              <label>Enabled</label>
-              <select id="v_enabled">
-                <option value="true">true (aktif)</option>
-                <option value="false">false (mati)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Note (optional)</label>
-              <input id="v_note" placeholder="Voucher custom test" />
-            </div>
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="btnVoucherUpsert">Upsert</button>
-            <button class="btn danger" id="btnVoucherDisable">Disable</button>
-            <button class="btn" id="btnVoucherGet">Get</button>
-          </div>
-
-          <div class="muted">Tips: kalau mau “off”, paling aman pakai <span class="mono">voucher.disable</span>. Kalau mau on lagi, pakai <span class="mono">voucher.upsert</span> dengan enabled=true.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- MONTHLY -->
-    <div id="tab-monthly" class="grid hide">
-      <div class="card">
-        <h2>
-          <span>Monthly Promo Status</span>
-          <span class="row">
-            <button class="btn" id="btnMonthlyGet">Refresh</button>
-          </span>
-        </h2>
-        <div class="muted">Endpoint: <span class="mono">monthly.get</span> (ADMIN)</div>
-        <div class="spacer"></div>
-        <pre id="monthlyDump">{}</pre>
-      </div>
-
-      <div class="card">
-        <h2>Update Monthly Promo</h2>
-        <div class="muted">Endpoint: <span class="mono">monthly.set</span> (ADMIN)</div>
-        <div class="spacer"></div>
-
-        <div class="form">
-          <div class="inline">
-            <div class="field">
-              <label>Enabled</label>
-              <select id="m_enabled">
-                <option value="true">true (aktif)</option>
-                <option value="false">false (mati)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Name</label>
-              <input id="m_name" placeholder="PROMO BULANAN" />
-            </div>
-          </div>
-
-          <div class="inline">
-            <div class="field">
-              <label>Percent</label>
-              <input id="m_percent" type="number" step="1" placeholder="5" />
-            </div>
-            <div class="field">
-              <label>Max Rp</label>
-              <input id="m_maxRp" type="number" step="1" placeholder="2000" />
-            </div>
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="btnMonthlySet">Save</button>
-            <button class="btn danger" id="btnMonthlyOff">Quick OFF</button>
-            <button class="btn good" id="btnMonthlyOn">Quick ON</button>
-          </div>
-
-          <div class="spacer"></div>
-          <h2 style="margin:0 0 6px 0;font-size:14px">Unlimited DeviceKey (bypass limit bulanan)</h2>
-          <div class="muted">Add/Remove: <span class="mono">addUnlimitedDeviceKey</span> / <span class="mono">removeUnlimitedDeviceKey</span></div>
-          <div class="spacer"></div>
-
-          <div class="field">
-            <label>DeviceKey (sha256 deviceId|pepper)</label>
-            <input id="m_deviceKey" placeholder="paste deviceKey di sini" />
-          </div>
-          <div class="row">
-            <button class="btn good" id="btnMonthlyAddUnlimited">Add Unlimited</button>
-            <button class="btn danger" id="btnMonthlyRemoveUnlimited">Remove Unlimited</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TX -->
-    <div id="tab-tx" class="grid hide">
-      <div class="card">
-        <h2>
-          <span>TX List</span>
-          <span class="row">
-            <button class="btn" id="btnTxList">Refresh</button>
-          </span>
-        </h2>
-        <div class="muted">Endpoint: <span class="mono">tx.list</span> (ADMIN)</div>
-        <div class="spacer"></div>
-
-        <div class="inline">
-          <div class="field">
-            <label>Limit (1-1000)</label>
-            <input id="tx_limit" type="number" value="200" />
-          </div>
-          <div class="field">
-            <label>Search (q)</label>
-            <input id="tx_q" placeholder="LEVPay-..." />
-          </div>
-        </div>
-
-        <div class="row">
-          <button class="btn" id="btnTxSearch">Search</button>
-          <button class="btn danger" id="btnTxClear">Clear ALL</button>
-        </div>
-
-        <div class="spacer"></div>
-        <div id="txTableWrap"></div>
-      </div>
-
-      <div class="card">
-        <h2>TX Get</h2>
-        <div class="muted">Endpoint: <span class="mono">tx.get</span> (ADMIN)</div>
-        <div class="spacer"></div>
-
-        <div class="form">
-          <div class="field">
-            <label>ID Transaksi</label>
-            <input id="tx_id" placeholder="LEVPAY-20136" />
-          </div>
-          <div class="row">
-            <button class="btn primary" id="btnTxGet">Get</button>
-          </div>
-          <pre id="txDump">{}</pre>
-        </div>
-      </div>
-    </div>
-
-    <!-- DEBUG -->
-    <div id="tab-debug" class="grid hide">
-      <div class="card">
-        <h2>Quick Actions</h2>
-        <div class="muted">Buat ngetes API cepat (ADMIN key wajib di header)</div>
-        <div class="spacer"></div>
-        <div class="form">
-          <div class="field">
-            <label>Action</label>
-            <input id="dbg_action" placeholder="voucher.list / monthly.get / tx.list" />
-          </div>
-          <div class="field">
-            <label>Method</label>
-            <select id="dbg_method">
-              <option>GET</option>
-              <option>POST</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Body (JSON)</label>
-            <textarea id="dbg_body">{}</textarea>
-          </div>
-          <div class="row">
-            <button class="btn primary" id="btnDbgSend">Send</button>
-          </div>
-          <pre id="dbgDump">{}</pre>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Notes</h2>
-        <div class="muted">
-          Kalau admin panel ini disatuin dengan domain yang sama dengan API Vercel lu,
-          isi HOST boleh dikosongin (atau “/”).
-        </div>
-        <div class="footer-note">
-          <b>Keamanan:</b> Admin-Key di browser itu rawan. Untuk production, bikin endpoint auth beneran (session/JWT),
-          atau minimal Basic Auth + server side proxy.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LOGIN OVERLAY -->
-  <div id="loginOverlay" class="overlay hide">
-    <div class="modal">
-      <h3>Login Admin</h3>
-      <p class="muted">Masukin HOST API + Admin Key. Disimpan lokal di device.</p>
-
-      <div class="form">
-        <div class="field">
-          <label>HOST (contoh: https://your-vercel.app atau kosong kalau 1 domain)</label>
-          <input id="loginHost" placeholder="https://example.vercel.app" />
-        </div>
-        <div class="field">
-          <label>X-Admin-Key</label>
-          <input id="loginKey" placeholder="LEVIN6824" />
-        </div>
-        <div class="row">
-          <button class="btn primary" id="btnSaveLogin">Masuk</button>
-          <button class="btn" id="btnCloseLogin">Batal</button>
-        </div>
-      </div>
-
-      <div class="footer-note">
-        <b>Tips:</b> kalau API lu ada di path <span class="mono">/api/levpay</span>,
-        HOST cukup domain saja. Contoh: <span class="mono">https://abc.vercel.app</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOAST -->
-  <div id="toast" class="toast">
-    <div class="row">
-      <div>
-        <div id="toastTitle" style="font-weight:800">Info</div>
-        <div id="toastMsg" class="small">—</div>
-      </div>
-      <button class="btn" id="toastClose">OK</button>
+    <div class="muted" style="font-size:12px;font-weight:800;line-height:1.6;margin-top:10px">
+      Catatan penting:
+      <br>• Admin endpoints butuh header <span class="kbd">X-Admin-Key</span>.
+      <br>• Kalau kamu deploy Vercel, pastikan env <span class="kbd">ADMIN_KEY</span> (dan kalau perlu <span class="kbd">DEVICE_PEPPER</span>) sudah diset.
     </div>
   </div>
 
   <script>
-    // ========= storage =========
-    const LS_HOST = "levpay_admin_host";
-    const LS_KEY  = "levpay_admin_key";
+    (() => {
+      const $ = (id) => document.getElementById(id);
 
-    const el = (id) => document.getElementById(id);
-
-    const state = {
-      host: localStorage.getItem(LS_HOST) || "",
-      key:  localStorage.getItem(LS_KEY)  || "",
-    };
-
-    function normHost(h){
-      const s = String(h || "").trim();
-      if (!s || s === "/" ) return "";
-      return s.replace(/\/+$/, "");
-    }
-
-    function maskKey(k){
-      const s = String(k||"");
-      if (!s) return "—";
-      if (s.length <= 4) return "****";
-      return s.slice(0,2) + "****" + s.slice(-2);
-    }
-
-    function setPills(){
-      el("pillHost").textContent  = state.host ? state.host : "(same-domain)";
-      el("pillAdmin").textContent = maskKey(state.key);
-    }
-
-    // ========= toast =========
-    let toastTimer = null;
-    function toast(title, msg){
-      el("toastTitle").textContent = title || "Info";
-      el("toastMsg").textContent = msg || "";
-      el("toast").classList.add("show");
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(()=> el("toast").classList.remove("show"), 4500);
-    }
-    el("toastClose").addEventListener("click", ()=> el("toast").classList.remove("show"));
-
-    // ========= api helper =========
-    async function api(action, method="GET", body=null, qs={}){
-      const base = normHost(state.host);
-      const url = new URL((base ? base : "") + "/api/levpay", window.location.origin);
-
-      url.searchParams.set("action", action);
-
-      // extra querystring
-      Object.entries(qs || {}).forEach(([k,v])=>{
-        if (v == null || v === "") return;
-        url.searchParams.set(k, String(v));
-      });
-
-      const headers = {
-        "Accept": "application/json",
+      const LS = {
+        host: "levpay_admin_host_v1",
+        key: "levpay_admin_key_v1",
       };
-      if (state.key) headers["X-Admin-Key"] = state.key;
-      if (method !== "GET") headers["Content-Type"] = "application/json";
 
-      const res = await fetch(url.toString(), {
-        method,
-        headers,
-        body: method === "GET" ? null : JSON.stringify(body || {}),
-      });
+      const state = {
+        host: localStorage.getItem(LS.host) || "",
+        key: localStorage.getItem(LS.key) || "",
+        lastResponse: null,
+        busy: false,
+      };
 
-      const text = await res.text();
-      let json = null;
-      try { json = text ? JSON.parse(text) : null; } catch { json = { raw:text }; }
+      const ui = {
+        connBase: $("connBase"),
+        connAdmin: $("connAdmin"),
+        connDot: $("connDot"),
+        connText: $("connText"),
 
-      if (!res.ok || (json && json.success === false)){
-        const err = (json && (json.error || json.message)) ? (json.error || json.message) : ("HTTP " + res.status);
-        throw new Error(err);
+        toast: $("toast"),
+
+        loginOverlay: $("loginOverlay"),
+        loginHost: $("loginHost"),
+        loginKey: $("loginKey"),
+
+        respBox: $("respBox"),
+
+        voucherTbody: $("voucherTbody"),
+
+        // voucher form
+        vCode: $("vCode"), vName: $("vName"), vPercent: $("vPercent"), vMaxRp: $("vMaxRp"),
+        vMaxUses: $("vMaxUses"), vExpiresAt: $("vExpiresAt"), vNote: $("vNote"), vEnabled: $("vEnabled"),
+
+        // monthly
+        mEnabled: $("mEnabled"), mName: $("mName"), mPercent: $("mPercent"), mMaxRp: $("mMaxRp"),
+
+        // unlimited
+        uDeviceId: $("uDeviceId"), uPepper: $("uPepper"), uDeviceKey: $("uDeviceKey"),
+
+        // tx
+        txLimit: $("txLimit"), txId: $("txId"), txQ: $("txQ"), txJson: $("txJson"),
+
+        // discount
+        dAmount: $("dAmount"), dDeviceId: $("dDeviceId"), dVoucher: $("dVoucher"), dReservations: $("dReservations"),
+
+        // raw
+        rawAction: $("rawAction"), rawBody: $("rawBody"),
+      };
+
+      function toast(msg, tone="good"){
+        if (!ui.toast) return;
+        const t = String(msg || "");
+        ui.toast.innerHTML = `<b>${tone.toUpperCase()}</b> <span class="muted">•</span> ${escapeHtml(t)}`;
+        ui.toast.classList.add("isOn");
+        setTimeout(() => ui.toast.classList.remove("isOn"), 2400);
       }
-      return json;
-    }
 
-    // ========= tabs =========
-    function setTab(name){
-      document.querySelectorAll(".tab").forEach(t=>{
-        t.classList.toggle("active", t.dataset.tab === name);
-      });
-      ["vouchers","monthly","tx","debug"].forEach(k=>{
-        el("tab-"+k).classList.toggle("hide", k !== name);
-      });
-    }
-    document.querySelectorAll(".tab").forEach(t=>{
-      t.addEventListener("click", ()=> setTab(t.dataset.tab));
-    });
-
-    // ========= login overlay =========
-    function openLogin(){
-      el("loginHost").value = state.host || "";
-      el("loginKey").value  = state.key  || "";
-      el("loginOverlay").classList.remove("hide");
-    }
-    function closeLogin(){
-      el("loginOverlay").classList.add("hide");
-    }
-    el("btnLogin").addEventListener("click", openLogin);
-    el("btnCloseLogin").addEventListener("click", closeLogin);
-
-    el("btnSaveLogin").addEventListener("click", async ()=>{
-      state.host = normHost(el("loginHost").value);
-      state.key  = String(el("loginKey").value || "").trim();
-
-      localStorage.setItem(LS_HOST, state.host);
-      localStorage.setItem(LS_KEY,  state.key);
-
-      setPills();
-      closeLogin();
-      toast("Login", "Tersimpan. Coba refresh list voucher.");
-      // auto refresh
-      try { await voucherList(); } catch(e){ toast("Error", e.message); }
-    });
-
-    el("btnLogout").addEventListener("click", ()=>{
-      localStorage.removeItem(LS_HOST);
-      localStorage.removeItem(LS_KEY);
-      state.host=""; state.key="";
-      setPills();
-      toast("Logout", "Admin key dihapus dari device.");
-    });
-
-    // ========= render helpers =========
-    function escapeHtml(s){
-      return String(s ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#39;");
-    }
-
-    function badgeEnabled(enabled){
-      const on = enabled !== false;
-      return `<span class="badge"><span class="dot ${on?'good':'bad'}"></span>${on ? "enabled" : "disabled"}</span>`;
-    }
-
-    function setLoading(targetId, on=true){
-      const w = el(targetId);
-      if (!w) return;
-      if (on) w.innerHTML = `<div class="muted">Loading…</div>`;
-    }
-
-    // ========= vouchers =========
-    async function voucherList(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      setLoading("voucherTableWrap", true);
-      const out = await api("voucher.list", "POST", {});
-      const items = out?.data || [];
-      if (!items.length){
-        el("voucherTableWrap").innerHTML = `<div class="muted">Belum ada voucher.</div>`;
-        return;
+      function escapeHtml(s){
+        return String(s || "")
+          .replaceAll("&","&amp;")
+          .replaceAll("<","&lt;")
+          .replaceAll(">","&gt;")
+          .replaceAll('"',"&quot;")
+          .replaceAll("'","&#039;");
       }
-      const rows = items.map(v=>{
+
+      function setConnStatus(tone, text){
+        const dot = ui.connDot;
+        const txt = ui.connText;
+        if (dot){
+          dot.classList.remove("good","warn","bad");
+          if (tone) dot.classList.add(tone);
+        }
+        if (txt) txt.textContent = text || "—";
+      }
+
+      function baseUrl(){
+        const h = String(state.host || "").trim().replace(/\/+$/,"");
+        if (h) return h;
+        // default to current origin
+        return location.origin;
+      }
+
+      function apiUrl(action){
+        const b = baseUrl();
+        return `${b}/api/levpay?action=${encodeURIComponent(String(action||"").trim())}`;
+      }
+
+      function setConnText(){
+        ui.connBase.textContent = baseUrl();
+        ui.connAdmin.textContent = state.key ? "SET" : "EMPTY";
+      }
+
+      async function request(action, body={}, { admin=false } = {}){
+        const url = apiUrl(action);
+        const headers = { "Content-Type":"application/json" };
+        if (admin){
+          if (!state.key) throw new Error("Admin key kosong. Klik Login/Settings dulu.");
+          headers["X-Admin-Key"] = state.key;
+        }
+
+        const r = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body || {}),
+          cache: "no-store",
+        });
+
+        const text = await r.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : {}; } catch { json = { success:false, raw:text }; }
+
+        state.lastResponse = { url, status: r.status, ok: r.ok, data: json };
+        ui.respBox.value = JSON.stringify(state.lastResponse, null, 2);
+
+        return json;
+      }
+
+      // ---- sha256 helper (for unlimited device key) ----
+      async function sha256Hex(str){
+        const enc = new TextEncoder().encode(String(str||""));
+        const buf = await crypto.subtle.digest("SHA-256", enc);
+        const arr = Array.from(new Uint8Array(buf));
+        return arr.map(b=>b.toString(16).padStart(2,"0")).join("");
+      }
+
+      // ---- tabs ----
+      function setTab(name){
+        document.querySelectorAll(".tab").forEach(el => {
+          el.classList.toggle("isActive", el.dataset.tab === name);
+        });
+        const ids = ["vouchers","monthly","tx","discount","raw"];
+        ids.forEach(id=>{
+          const sec = document.getElementById("tab-"+id);
+          if (sec) sec.style.display = (id===name) ? "" : "none";
+        });
+      }
+
+      // ---- vouchers ----
+      function voucherRow(v){
+        const code = v?.code || "—";
+        const enabled = v?.enabled !== false;
+        const percent = Number(v?.percent || 0);
+        const maxRp = Number(v?.maxRp || 0);
+        const maxUses = (v?.maxUses == null) ? "∞" : String(v.maxUses);
+        const uses = Number(v?.uses || 0);
+
+        const badge = enabled
+          ? `<span class="pill" style="border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.10)"><span class="dot good"></span> ON</span>`
+          : `<span class="pill" style="border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.10)"><span class="dot bad"></span> OFF</span>`;
+
         return `
           <tr>
-            <td class="mono">${escapeHtml(v.code)}</td>
-            <td>${escapeHtml(v.name || v.code)}</td>
-            <td>${badgeEnabled(v.enabled)}</td>
-            <td class="mono">${escapeHtml(String(v.percent ?? ""))}%</td>
-            <td class="mono">${escapeHtml(String(v.maxRp ?? ""))}</td>
-            <td class="mono">${escapeHtml(String(v.uses ?? 0))}/${escapeHtml(String(v.maxUses ?? "∞"))}</td>
-            <td class="mono">${escapeHtml(v.expiresAt || "—")}</td>
+            <td class="mono"><b>${escapeHtml(code)}</b></td>
+            <td>${escapeHtml(v?.name || code)}</td>
+            <td>${percent}</td>
+            <td class="mono">${maxRp}</td>
+            <td class="mono">${escapeHtml(maxUses)}</td>
+            <td class="mono">${uses}</td>
+            <td>${badge}</td>
             <td>
-              <div class="row">
-                <button class="btn" data-act="fill" data-code="${escapeHtml(v.code)}">Fill</button>
-                <button class="btn danger" data-act="disable" data-code="${escapeHtml(v.code)}">Disable</button>
+              <div class="row" style="gap:8px">
+                <button class="btn btnGhost" data-act="edit" data-code="${escapeHtml(code)}" type="button">Edit</button>
+                <button class="btn btnBad" data-act="disable" data-code="${escapeHtml(code)}" type="button">Off</button>
               </div>
             </td>
           </tr>
         `;
-      }).join("");
-
-      el("voucherTableWrap").innerHTML = `
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Code</th><th>Name</th><th>Status</th><th>%</th><th>MaxRp</th><th>Uses</th><th>ExpiresAt</th><th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-
-      el("voucherTableWrap").querySelectorAll("button[data-act]").forEach(btn=>{
-        btn.addEventListener("click", async ()=>{
-          const act = btn.dataset.act;
-          const code = btn.dataset.code;
-          if (act === "fill"){
-            el("v_code").value = code;
-            await voucherGet();
-          }
-          if (act === "disable"){
-            el("v_code").value = code;
-            await voucherDisable();
-            await voucherList();
-          }
-        });
-      });
-    }
-
-    function collectVoucherPayload(){
-      const code = String(el("v_code").value||"").trim();
-      if (!code) throw new Error("code required");
-      const enabledStr = el("v_enabled").value;
-      const payload = {
-        code,
-        name: String(el("v_name").value||"").trim() || undefined,
-        enabled: enabledStr === "true",
-        percent: el("v_percent").value === "" ? undefined : Number(el("v_percent").value),
-        maxRp:   el("v_maxRp").value   === "" ? undefined : Number(el("v_maxRp").value),
-        expiresAt: String(el("v_expiresAt").value||"").trim() || null,
-        maxUses: el("v_maxUses").value === "" ? undefined : Number(el("v_maxUses").value),
-        note: String(el("v_note").value||"").trim() || null,
-      };
-      // clean undefined
-      Object.keys(payload).forEach(k=> payload[k] === undefined && delete payload[k]);
-      return payload;
-    }
-
-    async function voucherUpsert(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const payload = collectVoucherPayload();
-      const out = await api("voucher.upsert", "POST", payload);
-      toast("Voucher", "Upsert OK: " + (out?.data?.code || payload.code));
-    }
-
-    async function voucherDisable(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const code = String(el("v_code").value||"").trim();
-      if (!code) { toast("Voucher", "Isi code dulu"); return; }
-      const out = await api("voucher.disable", "POST", { code });
-      toast("Voucher", "Disabled: " + (out?.data?.code || code));
-    }
-
-    async function voucherGet(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const code = String(el("v_code").value||"").trim();
-      if (!code) { toast("Voucher", "Isi code dulu"); return; }
-      // prefer GET with query param code (body also supported)
-      const out = await api("voucher.get", "GET", null, { code });
-      const v = out?.data;
-      if (!v) { toast("Voucher", "Tidak ditemukan"); return; }
-      el("v_name").value = v.name || "";
-      el("v_percent").value = v.percent ?? "";
-      el("v_maxRp").value = v.maxRp ?? "";
-      el("v_expiresAt").value = v.expiresAt || "";
-      el("v_maxUses").value = v.maxUses ?? "";
-      el("v_note").value = v.note || "";
-      el("v_enabled").value = (v.enabled !== false) ? "true" : "false";
-      toast("Voucher", "Loaded: " + v.code);
-    }
-
-    el("btnVoucherList").addEventListener("click", ()=> voucherList().catch(e=>toast("Error", e.message)));
-    el("btnVoucherUpsert").addEventListener("click", async ()=> {
-      try { await voucherUpsert(); await voucherList(); } catch(e){ toast("Error", e.message); }
-    });
-    el("btnVoucherDisable").addEventListener("click", async ()=> {
-      try { await voucherDisable(); await voucherList(); } catch(e){ toast("Error", e.message); }
-    });
-    el("btnVoucherGet").addEventListener("click", ()=> voucherGet().catch(e=>toast("Error", e.message)));
-
-    // ========= monthly =========
-    async function monthlyGet(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const out = await api("monthly.get", "GET");
-      el("monthlyDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
-      const p = out?.data || {};
-      el("m_enabled").value = (p.enabled !== false) ? "true" : "false";
-      el("m_name").value = p.name || "";
-      el("m_percent").value = p.percent ?? "";
-      el("m_maxRp").value = p.maxRp ?? "";
-      toast("Monthly", "Loaded");
-    }
-
-    async function monthlySet(payload){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const out = await api("monthly.set", "POST", payload);
-      el("monthlyDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
-      toast("Monthly", "Saved");
-    }
-
-    el("btnMonthlyGet").addEventListener("click", ()=> monthlyGet().catch(e=>toast("Error", e.message)));
-
-    el("btnMonthlySet").addEventListener("click", async ()=>{
-      try{
-        const payload = {
-          enabled: el("m_enabled").value === "true",
-          name: String(el("m_name").value||"").trim(),
-          percent: el("m_percent").value === "" ? undefined : Number(el("m_percent").value),
-          maxRp: el("m_maxRp").value === "" ? undefined : Number(el("m_maxRp").value),
-        };
-        Object.keys(payload).forEach(k=> payload[k] === undefined && delete payload[k]);
-        await monthlySet(payload);
-        await monthlyGet();
-      }catch(e){ toast("Error", e.message); }
-    });
-
-    el("btnMonthlyOff").addEventListener("click", async ()=>{
-      try{ await monthlySet({ enabled:false }); await monthlyGet(); }catch(e){ toast("Error", e.message); }
-    });
-
-    el("btnMonthlyOn").addEventListener("click", async ()=>{
-      try{ await monthlySet({ enabled:true }); await monthlyGet(); }catch(e){ toast("Error", e.message); }
-    });
-
-    el("btnMonthlyAddUnlimited").addEventListener("click", async ()=>{
-      try{
-        const k = String(el("m_deviceKey").value||"").trim();
-        if (!k) { toast("Monthly", "Isi deviceKey dulu"); return; }
-        await monthlySet({ addUnlimitedDeviceKey: k });
-        await monthlyGet();
-      }catch(e){ toast("Error", e.message); }
-    });
-
-    el("btnMonthlyRemoveUnlimited").addEventListener("click", async ()=>{
-      try{
-        const k = String(el("m_deviceKey").value||"").trim();
-        if (!k) { toast("Monthly", "Isi deviceKey dulu"); return; }
-        await monthlySet({ removeUnlimitedDeviceKey: k });
-        await monthlyGet();
-      }catch(e){ toast("Error", e.message); }
-    });
-
-    // ========= tx =========
-    function txRow(t){
-      const st = String(t.status || "pending").toLowerCase();
-      const dotClass = (st === "paid") ? "good" : (st === "expired" || st === "failed") ? "bad" : "";
-      return `
-        <tr>
-          <td class="mono">${escapeHtml(t.idTransaksi || t.id || "—")}</td>
-          <td>${escapeHtml(st)}</td>
-          <td class="mono">${escapeHtml(String(t.amountFinal ?? t.amount ?? "—"))}</td>
-          <td class="mono">${escapeHtml(t.updatedAt || t.createdAt || "—")}</td>
-          <td>${escapeHtml(t.voucher || (t.pricing?.applied?.[0]?.code) || "—")}</td>
-          <td><span class="badge"><span class="dot ${dotClass}"></span>${escapeHtml(st)}</span></td>
-          <td>
-            <button class="btn" data-tx="${escapeHtml(t.idTransaksi || t.id || "")}">Open</button>
-          </td>
-        </tr>
-      `;
-    }
-
-    async function txList(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      setLoading("txTableWrap", true);
-      const limit = Number(el("tx_limit").value || 200);
-      const out = await api("tx.list", "GET", null, { limit });
-      const items = out?.data || [];
-      if (!items.length){
-        el("txTableWrap").innerHTML = `<div class="muted">Belum ada transaksi.</div>`;
-        return;
       }
-      el("txTableWrap").innerHTML = `
-        <table class="table">
-          <thead>
-            <tr><th>ID</th><th>Status</th><th>Amount</th><th>Updated</th><th>Voucher</th><th>Badge</th><th></th></tr>
-          </thead>
-          <tbody>${items.map(txRow).join("")}</tbody>
-        </table>
-      `;
-      el("txTableWrap").querySelectorAll("button[data-tx]").forEach(btn=>{
-        btn.addEventListener("click", async ()=>{
-          el("tx_id").value = btn.dataset.tx;
-          await txGet();
-        });
-      });
-    }
 
-    async function txSearch(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      setLoading("txTableWrap", true);
-      const q = String(el("tx_q").value||"").trim();
-      const out = await api("tx.search", "GET", null, { q });
-      const items = out?.data || [];
-      if (!items.length){
-        el("txTableWrap").innerHTML = `<div class="muted">Tidak ada hasil untuk: <span class="mono">${escapeHtml(q)}</span></div>`;
-        return;
-      }
-      el("txTableWrap").innerHTML = `
-        <table class="table">
-          <thead>
-            <tr><th>ID</th><th>Status</th><th>Amount</th><th>Updated</th><th>Voucher</th><th>Badge</th><th></th></tr>
-          </thead>
-          <tbody>${items.map(txRow).join("")}</tbody>
-        </table>
-      `;
-      el("txTableWrap").querySelectorAll("button[data-tx]").forEach(btn=>{
-        btn.addEventListener("click", async ()=>{
-          el("tx_id").value = btn.dataset.tx;
-          await txGet();
-        });
-      });
-    }
-
-    async function txGet(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const idTransaksi = String(el("tx_id").value||"").trim();
-      if (!idTransaksi) { toast("TX", "Isi idTransaksi dulu"); return; }
-      const out = await api("tx.get", "GET", null, { idTransaksi });
-      el("txDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
-      toast("TX", "Loaded: " + idTransaksi);
-    }
-
-    async function txClear(){
-      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-      const ok = confirm("Yakin mau clear semua tx di /tmp? (ini bakal hilang semua transaksi di instance itu)");
-      if (!ok) return;
-      await api("tx.clear", "POST", {});
-      toast("TX", "Cleared");
-      el("txDump").textContent = "{}";
-      await txList();
-    }
-
-    el("btnTxList").addEventListener("click", ()=> txList().catch(e=>toast("Error", e.message)));
-    el("btnTxSearch").addEventListener("click", ()=> txSearch().catch(e=>toast("Error", e.message)));
-    el("btnTxGet").addEventListener("click", ()=> txGet().catch(e=>toast("Error", e.message)));
-    el("btnTxClear").addEventListener("click", ()=> txClear().catch(e=>toast("Error", e.message)));
-
-    // ========= debug =========
-    el("btnDbgSend").addEventListener("click", async ()=>{
-      try{
-        if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
-        const action = String(el("dbg_action").value||"").trim();
-        if (!action) { toast("Debug", "Isi action dulu"); return; }
-        const method = String(el("dbg_method").value||"GET").toUpperCase();
-        let body = null;
-        if (method !== "GET"){
-          try { body = JSON.parse(el("dbg_body").value || "{}"); }
-          catch { throw new Error("Body JSON invalid"); }
+      async function loadVouchers(){
+        setConnText();
+        setConnStatus("warn", "Loading vouchers…");
+        try{
+          const res = await request("voucher.list", {}, { admin:true });
+          const items = res?.data || [];
+          if (!Array.isArray(items)) throw new Error("Response list tidak valid");
+          ui.voucherTbody.innerHTML = items.length
+            ? items.map(voucherRow).join("")
+            : `<tr><td colspan="8" class="muted">Kosong.</td></tr>`;
+          setConnStatus("good", `OK • ${items.length} voucher`);
+          toast(`Loaded ${items.length} voucher`, "good");
+        }catch(e){
+          setConnStatus("bad", "Error");
+          toast(e.message || "Gagal list voucher", "bad");
         }
-        const out = await api(action, method, body);
-        el("dbgDump").textContent = JSON.stringify(out, null, 2);
-        toast("Debug", "OK: " + action);
-      }catch(e){
-        el("dbgDump").textContent = JSON.stringify({error:e.message}, null, 2);
-        toast("Error", e.message);
       }
-    });
 
-    // ========= init =========
-    setPills();
+      function fillVoucherForm(v){
+        ui.vCode.value = String(v?.code || "");
+        ui.vName.value = String(v?.name || "");
+        ui.vPercent.value = (v?.percent != null) ? String(v.percent) : "";
+        ui.vMaxRp.value = (v?.maxRp != null) ? String(v.maxRp) : "";
+        ui.vMaxUses.value = (v?.maxUses != null) ? String(v.maxUses) : "";
+        ui.vExpiresAt.value = String(v?.expiresAt || "");
+        ui.vNote.value = String(v?.note || "");
+        ui.vEnabled.checked = (v?.enabled !== false);
+      }
 
-    // auto open login if missing key
-    if (!state.key){
-      openLogin();
-    } else {
-      // preload
-      voucherList().catch(()=>{});
-      monthlyGet().catch(()=>{});
-      txList().catch(()=>{});
-    }
+      async function voucherGet(){
+        const code = String(ui.vCode.value || "").trim().toUpperCase();
+        if (!code) return toast("Isi code dulu", "warn");
+        try{
+          const res = await request("voucher.get", { code }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "voucher.get failed");
+          fillVoucherForm(res.data || {});
+          toast("Loaded voucher", "good");
+        }catch(e){
+          toast(e.message || "Gagal get voucher", "bad");
+        }
+      }
+
+      async function voucherUpsert(){
+        const code = String(ui.vCode.value || "").trim().toUpperCase();
+        if (!code) return toast("Code wajib diisi", "warn");
+
+        const body = {
+          code,
+          name: String(ui.vName.value || "").trim() || code,
+          enabled: !!ui.vEnabled.checked,
+          percent: Number(ui.vPercent.value || 0),
+          maxRp: Number(ui.vMaxRp.value || 0),
+          expiresAt: String(ui.vExpiresAt.value || "").trim() || null,
+          note: String(ui.vNote.value || "").trim() || null,
+        };
+
+        const maxUsesRaw = String(ui.vMaxUses.value || "").trim();
+        if (maxUsesRaw !== "") body.maxUses = Number(maxUsesRaw);
+
+        try{
+          const res = await request("voucher.upsert", body, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "voucher.upsert failed");
+          toast("Upsert OK", "good");
+          await loadVouchers();
+        }catch(e){
+          toast(e.message || "Gagal upsert", "bad");
+        }
+      }
+
+      async function voucherDisable(codeOverride){
+        const code = String(codeOverride || ui.vCode.value || "").trim().toUpperCase();
+        if (!code) return toast("Code wajib diisi", "warn");
+
+        const ok = confirm(`Off / disable voucher?\n\nCODE: ${code}`);
+        if (!ok) return;
+
+        try{
+          const res = await request("voucher.disable", { code }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "voucher.disable failed");
+          toast("Voucher OFF", "good");
+          await loadVouchers();
+        }catch(e){
+          toast(e.message || "Gagal disable", "bad");
+        }
+      }
+
+      // ---- monthly ----
+      async function monthlyGet(){
+        try{
+          const res = await request("monthly.get", {}, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "monthly.get failed");
+          const p = res.data || {};
+          ui.mEnabled.checked = !!p.enabled;
+          ui.mName.value = String(p.name || "");
+          ui.mPercent.value = (p.percent != null) ? String(p.percent) : "";
+          ui.mMaxRp.value = (p.maxRp != null) ? String(p.maxRp) : "";
+          toast("Monthly loaded", "good");
+        }catch(e){
+          toast(e.message || "Gagal monthly.get", "bad");
+        }
+      }
+
+      async function monthlySet(){
+        const body = {
+          enabled: !!ui.mEnabled.checked,
+          name: String(ui.mName.value || "").trim() || "PROMO BULANAN",
+          percent: Number(ui.mPercent.value || 0),
+          maxRp: Number(ui.mMaxRp.value || 0),
+        };
+        try{
+          const res = await request("monthly.set", body, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "monthly.set failed");
+          toast("Monthly updated", "good");
+          await monthlyGet();
+        }catch(e){
+          toast(e.message || "Gagal monthly.set", "bad");
+        }
+      }
+
+      async function computeDeviceKey(){
+        const did = String(ui.uDeviceId.value || "").trim();
+        const pepper = String(ui.uPepper.value || "").trim();
+        if (!did) return toast("Isi deviceId dulu", "warn");
+        if (!pepper) return toast("Isi pepper dulu", "warn");
+        const key = await sha256Hex(did + "|" + pepper);
+        ui.uDeviceKey.value = key;
+        toast("Computed deviceKey", "good");
+      }
+
+      async function addUnlimited(){
+        const k = String(ui.uDeviceKey.value || "").trim();
+        if (!k) return toast("DeviceKey kosong", "warn");
+        try{
+          const res = await request("monthly.set", { addUnlimitedDeviceKey: k }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "add unlimited failed");
+          toast("Unlimited added", "good");
+          await monthlyGet();
+        }catch(e){
+          toast(e.message || "Gagal add unlimited", "bad");
+        }
+      }
+
+      async function removeUnlimited(){
+        const k = String(ui.uDeviceKey.value || "").trim();
+        if (!k) return toast("DeviceKey kosong", "warn");
+        const ok = confirm("Remove unlimited untuk deviceKey ini?");
+        if (!ok) return;
+        try{
+          const res = await request("monthly.set", { removeUnlimitedDeviceKey: k }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "remove unlimited failed");
+          toast("Unlimited removed", "good");
+          await monthlyGet();
+        }catch(e){
+          toast(e.message || "Gagal remove unlimited", "bad");
+        }
+      }
+
+      // ---- tx ----
+      async function txList(){
+        const limit = Number(ui.txLimit.value || 200);
+        try{
+          const res = await request("tx.list", { limit }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "tx.list failed");
+          toast(`TX list: ${Array.isArray(res.data) ? res.data.length : 0}`, "good");
+        }catch(e){
+          toast(e.message || "Gagal tx.list", "bad");
+        }
+      }
+
+      async function txGet(){
+        const idTransaksi = String(ui.txId.value || "").trim();
+        if (!idTransaksi) return toast("Isi idTransaksi", "warn");
+        try{
+          const res = await request("tx.get", { idTransaksi }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "tx.get failed");
+          toast("TX loaded", "good");
+        }catch(e){
+          toast(e.message || "Gagal tx.get", "bad");
+        }
+      }
+
+      async function txSearch(){
+        const q = String(ui.txQ.value || "").trim();
+        if (!q) return toast("Isi query", "warn");
+        try{
+          const res = await request("tx.search", { q }, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "tx.search failed");
+          toast(`TX found: ${Array.isArray(res.data) ? res.data.length : 0}`, "good");
+        }catch(e){
+          toast(e.message || "Gagal tx.search", "bad");
+        }
+      }
+
+      async function txClear(){
+        const ok = confirm("Yakin mau CLEAR semua tx? (tx.clear)");
+        if (!ok) return;
+        try{
+          const res = await request("tx.clear", {}, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "tx.clear failed");
+          toast("TX cleared", "good");
+        }catch(e){
+          toast(e.message || "Gagal tx.clear", "bad");
+        }
+      }
+
+      async function txUpsert(){
+        let obj = {};
+        try{ obj = JSON.parse(String(ui.txJson.value || "{}")); }catch{
+          return toast("JSON invalid", "bad");
+        }
+        if (!obj?.idTransaksi && !obj?.id) return toast("JSON harus ada idTransaksi", "warn");
+        try{
+          const res = await request("tx.upsert", obj, { admin:true });
+          if (!res?.success) throw new Error(res?.error || "tx.upsert failed");
+          toast("TX upsert OK", "good");
+        }catch(e){
+          toast(e.message || "Gagal tx.upsert", "bad");
+        }
+      }
+
+      // ---- discount test ----
+      async function discountApply(){
+        const amount = Number(ui.dAmount.value || 0);
+        const deviceId = String(ui.dDeviceId.value || "").trim();
+        const voucher = String(ui.dVoucher.value || "").trim();
+
+        if (!amount || amount < 1) return toast("Amount invalid", "warn");
+
+        try{
+          const res = await request("discount.apply", {
+            amount,
+            deviceId,
+            voucher,
+          }, { admin:false }); // discount.apply gak butuh admin
+          if (!res?.success) throw new Error(res?.error || "discount.apply failed");
+
+          // auto copy reservations to box
+          ui.dReservations.value = JSON.stringify(res?.data?.reservations || [], null, 2);
+          toast("Apply OK", "good");
+        }catch(e){
+          toast(e.message || "Gagal apply", "bad");
+        }
+      }
+
+      async function discountCommit(){
+        let arr = [];
+        try{ arr = JSON.parse(String(ui.dReservations.value || "[]")); }catch{
+          return toast("Reservations JSON invalid", "bad");
+        }
+        if (!Array.isArray(arr)) return toast("Reservations harus array", "warn");
+        try{
+          const res = await request("discount.commit", { reservations: arr }, { admin:false });
+          if (!res?.success) throw new Error(res?.error || "commit failed");
+          toast("Commit OK", "good");
+        }catch(e){
+          toast(e.message || "Gagal commit", "bad");
+        }
+      }
+
+      async function discountRelease(){
+        let arr = [];
+        try{ arr = JSON.parse(String(ui.dReservations.value || "[]")); }catch{
+          return toast("Reservations JSON invalid", "bad");
+        }
+        if (!Array.isArray(arr)) return toast("Reservations harus array", "warn");
+        try{
+          const res = await request("discount.release", { reservations: arr }, { admin:false });
+          if (!res?.success) throw new Error(res?.error || "release failed");
+          toast("Release OK", "good");
+        }catch(e){
+          toast(e.message || "Gagal release", "bad");
+        }
+      }
+
+      // ---- raw ----
+      async function rawSend(){
+        const action = String(ui.rawAction.value || "").trim();
+        if (!action) return toast("Action kosong", "warn");
+
+        let body = {};
+        try{ body = JSON.parse(String(ui.rawBody.value || "{}")); }catch{
+          return toast("Body JSON invalid", "bad");
+        }
+        const needAdmin = action.startsWith("voucher.") || action.startsWith("monthly.") || action.startsWith("tx.");
+        try{
+          const res = await request(action, body, { admin: needAdmin });
+          if (res?.success) toast("OK", "good");
+          else toast(res?.error || "Request done (success=false)", "warn");
+        }catch(e){
+          toast(e.message || "Request error", "bad");
+        }
+      }
+
+      async function ping(){
+        try{
+          setConnStatus("warn", "Pinging…");
+          const res = await request("ping", {}, { admin:false });
+          if (!res?.success) throw new Error("ping failed");
+          setConnStatus("good", "OK");
+          toast("Ping OK", "good");
+        }catch(e){
+          setConnStatus("bad", "Error");
+          toast(e.message || "Ping error", "bad");
+        }
+      }
+
+      async function help(){
+        try{
+          const res = await request("help", {}, { admin:false });
+          if (!res?.success) throw new Error("help failed");
+          toast("Help loaded", "good");
+        }catch(e){
+          toast(e.message || "Help error", "bad");
+        }
+      }
+
+      // ---- login overlay ----
+      function openLogin(){
+        ui.loginOverlay.classList.add("isOn");
+        ui.loginOverlay.setAttribute("aria-hidden","false");
+        ui.loginHost.value = state.host;
+        ui.loginKey.value = state.key;
+      }
+      function closeLogin(){
+        ui.loginOverlay.classList.remove("isOn");
+        ui.loginOverlay.setAttribute("aria-hidden","true");
+      }
+      function saveLogin(){
+        state.host = String(ui.loginHost.value || "").trim();
+        state.key = String(ui.loginKey.value || "").trim();
+
+        localStorage.setItem(LS.host, state.host);
+        localStorage.setItem(LS.key, state.key);
+
+        setConnText();
+        toast("Saved settings", "good");
+        closeLogin();
+      }
+      function clearLogin(){
+        localStorage.removeItem(LS.host);
+        localStorage.removeItem(LS.key);
+        state.host = "";
+        state.key = "";
+        ui.loginHost.value = "";
+        ui.loginKey.value = "";
+        setConnText();
+        toast("Reset done", "good");
+      }
+
+      // ---- events wiring ----
+      $("tabs").addEventListener("click", (e) => {
+        const t = e.target.closest(".tab");
+        if (!t) return;
+        setTab(t.dataset.tab);
+      });
+
+      $("btnOpenLogin").addEventListener("click", openLogin);
+      $("btnCloseLogin").addEventListener("click", closeLogin);
+      $("btnLogin").addEventListener("click", saveLogin);
+      $("btnLoginClear").addEventListener("click", clearLogin);
+
+      $("btnPing").addEventListener("click", ping);
+      $("btnPing2").addEventListener("click", ping);
+      $("btnHelp").addEventListener("click", help);
+      $("btnReloadAll").addEventListener("click", async () => {
+        await ping();
+        await loadVouchers();
+        await monthlyGet();
+      });
+
+      $("btnVoucherList").addEventListener("click", loadVouchers);
+      $("btnVoucherGet").addEventListener("click", voucherGet);
+      $("btnVoucherUpsert").addEventListener("click", voucherUpsert);
+      $("btnVoucherDisable").addEventListener("click", () => voucherDisable());
+
+      $("voucherTable").addEventListener("click", async (e) => {
+        const b = e.target.closest("button[data-act]");
+        if (!b) return;
+        const act = b.dataset.act;
+        const code = b.dataset.code;
+        if (act === "disable") return voucherDisable(code);
+        if (act === "edit"){
+          ui.vCode.value = String(code || "");
+          await voucherGet();
+        }
+      });
+
+      $("btnMonthlyGet").addEventListener("click", monthlyGet);
+      $("btnMonthlySet").addEventListener("click", monthlySet);
+
+      $("btnComputeDeviceKey").addEventListener("click", computeDeviceKey);
+      $("btnAddUnlimited").addEventListener("click", addUnlimited);
+      $("btnRemoveUnlimited").addEventListener("click", removeUnlimited);
+
+      $("btnTxList").addEventListener("click", txList);
+      $("btnTxSearch").addEventListener("click", txSearch);
+      $("btnTxGet").addEventListener("click", txGet);
+      $("btnTxClear").addEventListener("click", txClear);
+      $("btnTxUpsert").addEventListener("click", txUpsert);
+
+      $("btnDiscountApply").addEventListener("click", discountApply);
+      $("btnDiscountCommit").addEventListener("click", discountCommit);
+      $("btnDiscountRelease").addEventListener("click", discountRelease);
+
+      $("btnRawSend").addEventListener("click", rawSend);
+      $("btnCopyResp").addEventListener("click", async () => {
+        try{
+          await navigator.clipboard.writeText(ui.respBox.value || "");
+          toast("Copied", "good");
+        }catch{
+          toast("Copy gagal", "bad");
+        }
+      });
+      $("btnClearResp").addEventListener("click", () => {
+        ui.respBox.value = "{}";
+        toast("Cleared", "good");
+      });
+
+      // init
+      setConnText();
+      (async () => {
+        // auto ping; kalau key kosong, biarin aja (user bisa login)
+        await ping();
+        // auto load list biar keliatan cepat
+        try { await loadVouchers(); } catch {}
+        try { await monthlyGet(); } catch {}
+      })();
+
+      // if opened as file://, show login to set host
+      if (location.protocol === "file:") openLogin();
+    })();
   </script>
 </body>
 </html>
+```0
