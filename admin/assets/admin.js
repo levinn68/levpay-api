@@ -66,6 +66,7 @@
   const mName = $("mName");
   const mPercent = $("mPercent");
   const mMaxRp = $("mMaxRp");
+  const mMaxUses = $("mMaxUses");
 
   // tester
   const btnGenDevice = $("btnGenDevice");
@@ -241,6 +242,7 @@
       mName.value = String(monthly.name ?? "");
       mPercent.value = String(Number(monthly.percent ?? 0));
       mMaxRp.value = String(Number(monthly.maxRp ?? 0));
+      mMaxUses.value = (monthly.maxUses == null ? "" : String(Number(monthly.maxUses)));
     } else {
       setPill(pillMonthly, "bad", "Monthly: invalid");
     }
@@ -256,7 +258,7 @@
         name: String(monthly.name || "PROMO BULANAN"),
         percent: Number(monthly.percent||0),
         maxRp: Number(monthly.maxRp||0),
-        maxUses: "1x/device/bulan",
+        maxUses: (monthly?.maxUses == null ? "1x/device/bulan" : `1x/device/bulan • total ${monthly.maxUses} uses`),
         expiresAt: null
       });
     }
@@ -566,11 +568,20 @@
 
   btnSetMonthly.addEventListener("click", async ()=>{
     const body = {
-      enabled: (mEnabled.value === "true"),
-      name: String(mName.value||"").trim(),
-      percent: Number(String(mPercent.value||"0").trim()),
-      maxRp: Number(String(mMaxRp.value||"0").trim())
-    };
+  enabled: (mEnabled.value === "true"),
+  name: String(mName.value||"").trim(),
+  percent: Number(String(mPercent.value||"0").trim()),
+  maxRp: Number(String(mMaxRp.value||"0").trim())
+};
+
+const mu = String(mMaxUses.value || "").trim();
+if (mu !== "") {
+  const n = Number(mu);
+  if (Number.isFinite(n) && n > 0) body.maxUses = n;
+} else {
+  // kosong = unlimited
+  body.maxUses = null;
+}
     await callAction("monthly.set", { method:"POST", body });
     await loadMonthly();
     renderActive();
