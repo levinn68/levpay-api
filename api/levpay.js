@@ -1,4 +1,4 @@
-// api/levpay.js  (Vercel SINGLE-FILE ROUTER)
+// api/levpay.js (Vercel SINGLE-FILE ROUTER) — FINAL (GH DB + flexible monthly + tutor)
 // Endpoints via query action (recommended):
 // - /api/levpay?action=ping | help | tutor
 // - /api/levpay?action=discount.apply|discount.commit|discount.release
@@ -9,48 +9,48 @@
 //
 // Notes:
 // - Admin endpoints require header: X-Admin-Key: <ADMIN_KEY>
-// - Default DB stored in /tmp (ephemeral per instance).
-// - Optional persistent DB via GitHub Contents API (recommended for monthly anti-abuse).
+// - DB stored in GitHub file (recommended). /tmp fallback only if GH config missing.
+//
+// ===== GH ENV (WAJIB GH_*, JANGAN GITHUB_*) =====
+// - GH_TOKEN  : GitHub PAT (repo scope for private / contents:write)
+// - GH_OWNER  : owner/org
+// - GH_REPO   : repo name
+// - GH_BRANCH : default "main"
+// - GH_DB_PATH: default "db/levpay-db.json"  (bebas, tapi harus file json)
+// Optional:
+// - GH_API_BASE: default "https://api.github.com" (kalau enterprise, isi base API)
+// =================================================================
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 // ====== CONFIG ======
-const DB_PATH = path.join("/tmp", "levpay-db.json");
+const TMP_DB_PATH = path.join("/tmp", "levpay-db.json");
 
 // Admin key untuk ADMIN endpoints (voucher/monthly/tx admin ops)
-const ADMIN_KEY = process.env.ADMIN_KEY || "";
+const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
 
 // Secret optional buat callback/hook (kalau lu mau proteksi paidhook)
 const CALLBACK_SECRET = process.env.CALLBACK_SECRET || ""; // kosong = off
 
 // Pepper buat bikin deviceKey (monthly promo tracking)
-const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "";
+const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "ISI_PEPPER";
 
-// ====== OPTIONAL: Persist DB to GitHub (RECOMMENDED) ======
-// Set env berikut biar DB gak ilang pas cold-start:
-// - DB_PROVIDER=github
-// - GITHUB_TOKEN=ghp_xxx (token yang punya access repo)
-// - GITHUB_OWNER=levinn68
-// - GITHUB_REPO=db-levpay
-// - GITHUB_PATH=levpay-db.json  (atau folder/levpay-db.json)
-// - GITHUB_BRANCH=main (optional)
-const DB_PROVIDER = (process.env.DB_PROVIDER || "tmp").toLowerCase();
-const GH_TOKEN = process.env.GITHUB_TOKEN || "";
-const GH_OWNER = process.env.GITHUB_OWNER || "";
-const GH_REPO = process.env.GITHUB_REPO || "";
-const GH_PATH = process.env.GITHUB_PATH || "levpay-db.json";
-const GH_BRANCH = process.env.GITHUB_BRANCH || "main";
+// ====== GH CONFIG (WAJIB pakai GH_) ======
+const GH_API_BASE = process.env.GH_API_BASE || "https://api.github.com";
+const GH_TOKEN = process.env.GH_TOKEN || "";
+const GH_OWNER = process.env.GH_OWNER || "";
+const GH_REPO = process.env.GH_REPO || "";
+const GH_BRANCH = process.env.GH_BRANCH || "main";
+const GH_DB_PATH = process.env.GH_DB_PATH || "db/levpay-db.json";
 
 // DeviceKey yang unlimited (bypass limit promo bulanan)
 // MASUKIN HASIL SHA256(deviceId + "|" + DEVICE_PEPPER)
-const UNLIMITED_DEVICE_KEYS = new Set(
-  (process.env.UNLIMITED_DEVICE_KEYS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-);
+const UNLIMITED_DEVICE_KEYS = new Set([
+  // contoh:
+  // "58b370dda7d9575e05bcaa5ce4a0c63725185b492fd39e4ba0b372ef86e9488e",
+]);
 
 // ====== utils ======
 function send(res, code, obj) {
@@ -123,119 +123,106 @@ async function readBody(req) {
   });
 }
 
-// ====== DB (tmp) ======
-function readDBTmp() {
+// ====== GH DB helpers ======
+function ghConfigured() {
+  return !!(GH_TOKEN && GH_OWNER && GH_REPO && GH_DB_PATH);
+}
+
+function ghHeaders() {
+  return {
+    Authorization: `token ${GH_TOKEN}`,
+    "User-Agent": "levpay-api",
+    Accept: "application/vnd.github+json",
+  };
+}
+
+async function ghGetFile() {
+  const url =
+    `${GH_API_BASE}/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(
+      GH_REPO
+    )}/contents/${GH_DB_PATH}` + `?ref=${encodeURIComponent(GH_BRANCH)}`;
+
+  const r = await fetch(url, { method: "GET", headers: ghHeaders() });
+  if (r.status === 404) return { exists: false, sha: null, content: null };
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`GH read failed (${r.status}): ${t || "unknown"}`);
+  }
+  const j = await r.json();
+  const b64 = String(j?.content || "").replace(/\n/g, "");
+  const raw = b64 ? Buffer.from(b64, "base64").toString("utf8") : "";
+  return { exists: true, sha: j?.sha || null, content: raw || "" };
+}
+
+async function ghPutFile(jsonObj, shaMaybe) {
+  const url = `${GH_API_BASE}/repos/${encodeURIComponent(
+    GH_OWNER
+  )}/${encodeURIComponent(GH_REPO)}/contents/${GH_DB_PATH}`;
+
+  const content = Buffer.from(JSON.stringify(jsonObj, null, 2), "utf8").toString(
+    "base64"
+  );
+
+  const body = {
+    message: `levpay db update ${new Date().toISOString()}`,
+    content,
+    branch: GH_BRANCH,
+  };
+  if (shaMaybe) body.sha = shaMaybe;
+
+  const r = await fetch(url, {
+    method: "PUT",
+    headers: { ...ghHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`GH write failed (${r.status}): ${t || "unknown"}`);
+  }
+  return true;
+}
+
+// ====== DB read/write ======
+async function readDB() {
+  // prefer GitHub
+  if (ghConfigured()) {
+    try {
+      const f = await ghGetFile();
+      if (!f.exists) return {};
+      const raw = f.content || "";
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      // fallback /tmp kalau GH error
+    }
+  }
+
+  // fallback /tmp (testing)
   try {
-    if (!fs.existsSync(DB_PATH)) return {};
-    const raw = fs.readFileSync(DB_PATH, "utf8");
+    if (!fs.existsSync(TMP_DB_PATH)) return {};
+    const raw = fs.readFileSync(TMP_DB_PATH, "utf8");
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-function writeDBTmp(db) {
+async function writeDB(db) {
+  // prefer GitHub
+  if (ghConfigured()) {
+    const f = await ghGetFile().catch(() => ({ exists: false, sha: null }));
+    const sha = f.exists ? f.sha : null;
+    await ghPutFile(db, sha);
+    return true;
+  }
+
+  // fallback /tmp (testing)
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    fs.writeFileSync(TMP_DB_PATH, JSON.stringify(db, null, 2));
     return true;
   } catch {
     return false;
   }
-}
-
-// ====== DB (github) ======
-async function ghFetch(url, init = {}) {
-  const headers = Object.assign(
-    {
-      "User-Agent": "levpay-api",
-      Accept: "application/vnd.github+json",
-    },
-    init.headers || {}
-  );
-  if (GITHUB_TOKEN) headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
-  const r = await fetch(url, { ...init, headers });
-  const txt = await r.text();
-  let json = null;
-  try {
-    json = txt ? JSON.parse(txt) : null;
-  } catch {}
-  return { ok: r.ok, status: r.status, text: txt, json };
-}
-
-function ghEnabled() {
-  if (DB_PROVIDER !== "github") return false;
-  return !!(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO && GITHUB_PATH);
-}
-
-function ghContentUrl() {
-  const p = encodeURIComponent(GITHUB_PATH).replace(/%2F/g, "/");
-  return `https://api.github.com/repos/${encodeURIComponent(
-    GITHUB_OWNER
-  )}/${encodeURIComponent(GITHUB_REPO)}/contents/${p}?ref=${encodeURIComponent(
-    GITHUB_BRANCH
-  )}`;
-}
-
-async function readDBGithub() {
-  try {
-    const { ok, json } = await ghFetch(ghContentUrl(), { method: "GET" });
-    if (!ok || !json || !json.content) return {};
-    const b64 = String(json.content || "").replace(/\n/g, "");
-    const raw = Buffer.from(b64, "base64").toString("utf8");
-    const db = raw ? JSON.parse(raw) : {};
-    // simpan sha buat write berikutnya
-    if (json.sha) {
-      db._meta = db._meta || {};
-      db._meta.githubSha = json.sha;
-    }
-    return db;
-  } catch {
-    return {};
-  }
-}
-
-async function writeDBGithub(db) {
-  try {
-    const sha = db?._meta?.githubSha || null;
-
-    const payload = {
-      message: `levpay-db update ${new Date().toISOString()}`,
-      content: Buffer.from(JSON.stringify(db, null, 2), "utf8").toString("base64"),
-      branch: GITHUB_BRANCH,
-    };
-    if (sha) payload.sha = sha;
-
-    const p = encodeURIComponent(GITHUB_PATH).replace(/%2F/g, "/");
-    const url = `https://api.github.com/repos/${encodeURIComponent(
-      GITHUB_OWNER
-    )}/${encodeURIComponent(GITHUB_REPO)}/contents/${p}`;
-
-    const { ok, json } = await ghFetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (ok && json?.content?.sha) {
-      db._meta = db._meta || {};
-      db._meta.githubSha = json.content.sha;
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// ====== DB (router) ======
-async function loadDB() {
-  if (ghEnabled()) return await readDBGithub();
-  return readDBTmp();
-}
-
-async function saveDB(db) {
-  if (ghEnabled()) return await writeDBGithub(db);
-  return writeDBTmp(db);
 }
 
 // ====== DB init / ensure ======
@@ -244,20 +231,26 @@ function ensure(db) {
   db.promo = db.promo || {};
   db.tx = db.tx || {};
 
-  // monthly promo fleksibel (bisa di-set dari admin page)
+  // MONTHLY PROMO — flexible
+  // - enabled: on/off
+  // - name: label tampil
+  // - percent/maxRp: diskon
+  // - requireCode: kalau true, monthly hanya jalan jika voucherCode == code
+  // - code: kode monthly kalau requireCode = true
   db.promo.monthly =
     db.promo.monthly || {
       enabled: true,
-      code: "MONTHLY", // ✅ fleksibel: bisa diganti di monthly.set (buat tampil di applied)
       name: "PROMO BULANAN",
       percent: 5,
       maxRp: 2000,
 
-      // anti-abuse per device per bulan
-      used: {}, // deviceKey -> YYYYMM
-      reserved: {}, // deviceKey -> {token, month, expiresAt}
-      unlimited: {}, // deviceKey -> true
+      // NEW (flex)
+      requireCode: false,
+      code: "",
 
+      used: {},
+      reserved: {},
+      unlimited: {},
       updatedAt: null,
     };
 
@@ -265,7 +258,7 @@ function ensure(db) {
   db.promo.monthly.reserved = db.promo.monthly.reserved || {};
   db.promo.monthly.unlimited = db.promo.monthly.unlimited || {};
 
-  // seed unlimited keys (env + hardcoded set)
+  // seed unlimited keys
   for (const k of UNLIMITED_DEVICE_KEYS) db.promo.monthly.unlimited[k] = true;
 
   return db;
@@ -293,12 +286,19 @@ function cleanupExpiredReservations(db) {
 }
 
 // ====== Discount engine (reserve/apply/commit/release) ======
-function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
+function reserveMonthlyPromo(db, amount, deviceKey, ttlMs, voucherCodeMaybe) {
   ensure(db);
   cleanupExpiredReservations(db);
 
   const p = db.promo.monthly;
   if (!p.enabled) return { ok: false, discountRp: 0 };
+
+  // FLEX: requireCode mode
+  if (p.requireCode) {
+    const want = String(p.code || "").trim().toUpperCase();
+    const got = String(voucherCodeMaybe || "").trim().toUpperCase();
+    if (!want || got !== want) return { ok: false, discountRp: 0 };
+  }
 
   const cur = yyyymm();
   const isUnlimited = !!(p.unlimited && p.unlimited[deviceKey]);
@@ -325,12 +325,19 @@ function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
       discountRp,
       info: {
         type: "monthly",
-        code: p.code || "MONTHLY", // ✅ tampil di applied
         name: p.name || "PROMO BULANAN",
         percent,
         maxRp,
+        code: p.requireCode ? String(p.code || "").trim().toUpperCase() : null,
       },
-      reservation: { type: "monthly", deviceKey, token: t, month: cur, expiresAt, discountRp },
+      reservation: {
+        type: "monthly",
+        deviceKey,
+        token: t,
+        month: cur,
+        expiresAt,
+        discountRp,
+      },
     };
   }
 
@@ -404,8 +411,8 @@ function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 6
     reservations.push(v.reservation);
   }
 
-  // monthly setelah voucher
-  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs);
+  // monthly setelah voucher (atau requireCode mode, voucherCode bisa jadi monthly code)
+  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs, voucherCode);
   if (m.ok) {
     finalAmount = Math.max(1, finalAmount - m.discountRp);
     discountRp += m.discountRp;
@@ -472,12 +479,17 @@ function adminUpsertVoucher(db, body) {
   db.vouchers[code] = {
     code,
     name: body.name ? String(body.name) : prev.name || code,
-    enabled: body.enabled !== false,
+
+    // allow toggle via admin page
+    enabled: body.enabled != null ? !!body.enabled : prev.enabled !== false,
+
     percent: clamp(Number(body.percent || 0), 0, 100),
     maxRp: Math.max(0, Number(body.maxRp || 0)),
-    expiresAt: body.expiresAt ? String(body.expiresAt) : null,
+    expiresAt: body.expiresAt ? String(body.expiresAt) : prev.expiresAt || null,
+
     uses: Number(prev.uses || 0),
-    maxUses: body.maxUses != null ? Number(body.maxUses) : prev.maxUses ?? null, // null => unlimited
+    maxUses: body.maxUses != null ? Number(body.maxUses) : prev.maxUses ?? null,
+
     note: body.note ? String(body.note) : prev.note || null,
     updatedAt: new Date().toISOString(),
     reserved: prev.reserved || undefined,
@@ -485,12 +497,16 @@ function adminUpsertVoucher(db, body) {
   return db.vouchers[code];
 }
 
+// voucher.disable (admin) — by default OFF, but can also toggle if body.enabled provided
 function adminDisableVoucher(db, body) {
   ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
   if (!code) throw new Error("code required");
   if (!db.vouchers[code]) throw new Error("voucher not found");
-  db.vouchers[code].enabled = false;
+
+  if (body.enabled != null) db.vouchers[code].enabled = !!body.enabled;
+  else db.vouchers[code].enabled = false;
+
   db.vouchers[code].updatedAt = new Date().toISOString();
   return db.vouchers[code];
 }
@@ -500,10 +516,14 @@ function adminSetMonthlyPromo(db, body) {
   const p = db.promo.monthly;
 
   if (body.enabled != null) p.enabled = !!body.enabled;
-  if (body.code != null) p.code = String(body.code || "").trim() || p.code || "MONTHLY"; // ✅ fleksibel
   if (body.name != null) p.name = String(body.name);
+
   if (body.percent != null) p.percent = clamp(Number(body.percent), 0, 100);
   if (body.maxRp != null) p.maxRp = Math.max(0, Number(body.maxRp));
+
+  // FLEX: monthly code config
+  if (body.requireCode != null) p.requireCode = !!body.requireCode;
+  if (body.code != null) p.code = String(body.code || "").trim().toUpperCase();
 
   // add/remove unlimited by deviceKey (sha256)
   if (body.addUnlimitedDeviceKey != null) {
@@ -513,22 +533,6 @@ function adminSetMonthlyPromo(db, body) {
   if (body.removeUnlimitedDeviceKey != null) {
     const k = String(body.removeUnlimitedDeviceKey).trim();
     if (k && p.unlimited) delete p.unlimited[k];
-  }
-
-  // helper: add unlimited by deviceId (server will hash)
-  if (body.addUnlimitedDeviceId != null) {
-    const deviceId = String(body.addUnlimitedDeviceId || "").trim();
-    if (deviceId) {
-      const k = getDeviceKey(deviceId);
-      p.unlimited[k] = true;
-    }
-  }
-  if (body.removeUnlimitedDeviceId != null) {
-    const deviceId = String(body.removeUnlimitedDeviceId || "").trim();
-    if (deviceId) {
-      const k = getDeviceKey(deviceId);
-      if (p.unlimited) delete p.unlimited[k];
-    }
   }
 
   p.updatedAt = new Date().toISOString();
@@ -583,10 +587,15 @@ function help() {
     success: true,
     service: "levpay-api (single file)",
     storage: {
-      provider: ghEnabled() ? "github" : "tmp",
-      note: ghEnabled()
-        ? "persistent via GitHub Contents API"
-        : "ephemeral (/tmp). set DB_PROVIDER=github for persistence",
+      gh: {
+        enabled: ghConfigured(),
+        owner: GH_OWNER || null,
+        repo: GH_REPO || null,
+        branch: GH_BRANCH || "main",
+        path: GH_DB_PATH || null,
+        apiBase: GH_API_BASE || "https://api.github.com",
+      },
+      tmpFallback: !ghConfigured(),
     },
     paths: { recommended: "/api/levpay?action=..." },
     actions: [
@@ -614,43 +623,146 @@ function help() {
 
       "paidhook",
     ],
-    admin: {
-      header: "X-Admin-Key",
-      requiredFor: ["voucher.*", "monthly.*", "tx.*"],
-    },
+    admin: { header: "X-Admin-Key", requiredFor: ["voucher.*", "monthly.*", "tx.*"] },
   };
 }
 
-function tutor(hostExample = "https://levpay-api.vercel.app") {
-  const HOST = hostExample.replace(/\/+$/, "");
+function tutor(hostHint) {
+  const HOST = hostHint || "https://YOUR-VERCEL-DOMAIN";
   return {
     success: true,
-    note: "Copy-paste curl per endpoint. ADMIN endpoints require -H 'X-Admin-Key: <ADMIN_KEY>'",
-    curl: {
-      ping: `curl -sS "${HOST}/api/levpay?action=ping" | jq`,
-      help: `curl -sS "${HOST}/api/levpay?action=help" | jq`,
-      tutor: `curl -sS "${HOST}/api/levpay?action=tutor" | jq`,
+    note: "Copy-paste curl sesuai endpoint. ADMIN endpoints wajib header X-Admin-Key.",
+    host: HOST,
+    examples: {
+      ping: {
+        method: "GET",
+        curl: `curl -sS "${HOST}/api/levpay?action=ping" | jq`,
+      },
+      help: {
+        method: "GET",
+        curl: `curl -sS "${HOST}/api/levpay?action=help" | jq`,
+      },
+      discount_apply: {
+        method: "POST",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=discount.apply" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"amount":10000,"deviceId":"dev_1","voucher":"LEVPAYVIP"}' | jq`,
+      },
+      discount_commit: {
+        method: "POST",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=discount.commit" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"reservations":[{"type":"voucher","code":"LEVPAYVIP","token":"..."}]}' | jq`,
+      },
+      discount_release: {
+        method: "POST",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=discount.release" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"reservations":[{"type":"voucher","code":"LEVPAYVIP","token":"..."}]}' | jq`,
+      },
 
-      "discount.apply": `curl -sS -X POST "${HOST}/api/levpay?action=discount.apply" -H "Content-Type: application/json" -d '{"amount":10000,"deviceId":"dev_test_1","voucher":"KODEVOUCHER"}' | jq`,
-      "discount.commit": `curl -sS -X POST "${HOST}/api/levpay?action=discount.commit" -H "Content-Type: application/json" -d '{"reservations":[{"type":"voucher","code":"KODE","token":"...","expiresAt":"..."},{"type":"monthly","deviceKey":"...","token":"...","month":"YYYYMM","expiresAt":"..."}]}' | jq`,
-      "discount.release": `curl -sS -X POST "${HOST}/api/levpay?action=discount.release" -H "Content-Type: application/json" -d '{"reservations":[{"type":"voucher","code":"KODE","token":"...","expiresAt":"..."}]}' | jq`,
+      voucher_upsert: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.upsert" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"code":"KINGLEV","name":"KINGLEV 60%","enabled":true,"percent":60,"maxRp":0,"maxUses":null,"expiresAt":null,"note":"custom"}' | jq`,
+      },
+      voucher_disable: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"code":"KINGLEV"}' | jq`,
+      },
+      voucher_enable_again: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"code":"KINGLEV","enabled":true}' | jq`,
+      },
+      voucher_list: {
+        method: "GET (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.list" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" -d '{}' | jq`,
+      },
+      voucher_get: {
+        method: "GET/POST (ADMIN)",
+        curl:
+          `curl -sS "${HOST}/api/levpay?action=voucher.get&code=KINGLEV" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
+      },
 
-      "voucher.upsert": `curl -sS -X POST "${HOST}/api/levpay?action=voucher.upsert" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"code":"HEMAT10","name":"HEMAT 10%","enabled":true,"percent":10,"maxRp":5000,"maxUses":null,"expiresAt":"2026-12-31T23:59:59.000Z","note":"unlimited example (maxUses=null)"}' | jq`,
-      "voucher.disable": `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"code":"HEMAT10"}' | jq`,
-      "voucher.list": `curl -sS -X POST "${HOST}/api/levpay?action=voucher.list" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{}' | jq`,
-      "voucher.get": `curl -sS "${HOST}/api/levpay?action=voucher.get&code=HEMAT10" -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
+      monthly_get: {
+        method: "GET (ADMIN)",
+        curl: `curl -sS "${HOST}/api/levpay?action=monthly.get" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
+      },
+      monthly_set_auto: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"enabled":true,"name":"PROMO BULANAN","percent":10,"maxRp":5000,"requireCode":false}' | jq`,
+      },
+      monthly_set_require_code: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"enabled":true,"name":"PROMO BULANAN KODE","percent":15,"maxRp":7000,"requireCode":true,"code":"MONTHLYVIP"}' | jq`,
+      },
+      monthly_add_unlimited_deviceKey: {
+        method: "POST (ADMIN)",
+        note: "deviceKey = SHA256(deviceId + '|' + DEVICE_PEPPER)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"addUnlimitedDeviceKey":"<DEVICE_KEY_SHA256>"}' | jq`,
+      },
 
-      "monthly.get": `curl -sS -X POST "${HOST}/api/levpay?action=monthly.get" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{}' | jq`,
-      "monthly.set": `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"enabled":true,"code":"LEVPAYVIP","name":"PROMO BULANAN","percent":5,"maxRp":2000}' | jq`,
-      "monthly.addUnlimitedDeviceId": `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"addUnlimitedDeviceId":"dev_test_1"}' | jq`,
+      tx_upsert: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=tx.upsert" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"idTransaksi":"TRX123","status":"paid","amount":10000}' | jq`,
+      },
+      tx_list: {
+        method: "GET (ADMIN)",
+        curl: `curl -sS "${HOST}/api/levpay?action=tx.list&limit=50" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
+      },
+      tx_search: {
+        method: "GET (ADMIN)",
+        curl: `curl -sS "${HOST}/api/levpay?action=tx.search&q=TRX" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
+      },
+      tx_clear: {
+        method: "POST (ADMIN)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=tx.clear" ` +
+          `-H "X-Admin-Key: ${ADMIN_KEY}" -H "Content-Type: application/json" -d '{}' | jq`,
+      },
 
-      "tx.upsert": `curl -sS -X POST "${HOST}/api/levpay?action=tx.upsert" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"idTransaksi":"LEV-1","status":"pending","amount":10000}' | jq`,
-      "tx.get": `curl -sS "${HOST}/api/levpay?action=tx.get&idTransaksi=LEV-1" -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
-      "tx.list": `curl -sS "${HOST}/api/levpay?action=tx.list&limit=50" -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
-      "tx.search": `curl -sS -X POST "${HOST}/api/levpay?action=tx.search" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{"q":"LEV"}' | jq`,
-      "tx.clear": `curl -sS -X POST "${HOST}/api/levpay?action=tx.clear" -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{}' | jq`,
-
-      paidhook: `curl -sS -X POST "${HOST}/api/levpay?action=paidhook" -H "Content-Type: application/json" -H "X-Callback-Secret: <CALLBACK_SECRET>" -d '{"idTransaksi":"LEV-1","paidAt":"2025-01-01T00:00:00Z"}' | jq`,
+      paidhook: {
+        method: "POST (optional secret)",
+        curl:
+          `curl -sS -X POST "${HOST}/api/levpay?action=paidhook" ` +
+          (CALLBACK_SECRET ? `-H "X-Callback-Secret: ${CALLBACK_SECRET}" ` : "") +
+          `-H "Content-Type: application/json" ` +
+          `-d '{"idTransaksi":"TRX123","status":"paid","paidAt":"${new Date().toISOString()}"}' | jq`,
+      },
     },
   };
 }
@@ -666,15 +778,15 @@ module.exports = async (req, res) => {
   const body = await readBody(req);
 
   // db
-  const db = ensure(await loadDB());
+  const db = ensure(await readDB());
 
   // ping/help/tutor
   if (!action || action === "help") return send(res, 200, help());
-  if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
   if (action === "tutor") {
-    const host = String(url.searchParams.get("host") || "").trim() || "";
-    return send(res, 200, tutor(host || "https://levpay-api.vercel.app"));
+    const host = url.searchParams.get("host") || "";
+    return send(res, 200, tutor(host));
   }
+  if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
 
   try {
     // ===== DISCOUNT =====
@@ -695,7 +807,7 @@ module.exports = async (req, res) => {
         reserveTtlMs: Number(body.reserveTtlMs || 6 * 60 * 1000),
       });
 
-      await saveDB(db);
+      await writeDB(db);
 
       return send(res, 200, {
         success: true,
@@ -712,14 +824,14 @@ module.exports = async (req, res) => {
     if (action === "discount.commit" || action === "commit") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       commitReservations(db, reservations);
-      await saveDB(db);
+      await writeDB(db);
       return send(res, 200, { success: true, data: { committed: reservations.length } });
     }
 
     if (action === "discount.release" || action === "release") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       releaseReservations(db, reservations);
-      await saveDB(db);
+      await writeDB(db);
       return send(res, 200, { success: true, data: { released: reservations.length } });
     }
 
@@ -729,13 +841,13 @@ module.exports = async (req, res) => {
 
       if (action === "voucher.upsert") {
         const out = adminUpsertVoucher(db, body || {});
-        await saveDB(db);
+        await writeDB(db);
         return send(res, 200, { success: true, data: out });
       }
 
       if (action === "voucher.disable") {
         const out = adminDisableVoucher(db, body || {});
-        await saveDB(db);
+        await writeDB(db);
         return send(res, 200, { success: true, data: out });
       }
 
@@ -768,7 +880,7 @@ module.exports = async (req, res) => {
 
       if (action === "monthly.set") {
         const out = adminSetMonthlyPromo(db, body || {});
-        await saveDB(db);
+        await writeDB(db);
         return send(res, 200, { success: true, data: out });
       }
 
@@ -781,7 +893,7 @@ module.exports = async (req, res) => {
 
       if (action === "tx.upsert") {
         const out = txUpsert(db, body || {});
-        await saveDB(db);
+        await writeDB(db);
         return send(res, 200, { success: true, data: out });
       }
 
@@ -807,7 +919,7 @@ module.exports = async (req, res) => {
 
       if (action === "tx.clear") {
         txClear(db);
-        await saveDB(db);
+        await writeDB(db);
         return send(res, 200, { success: true, data: { cleared: true } });
       }
 
@@ -822,7 +934,7 @@ module.exports = async (req, res) => {
       const id = String(body.idTransaksi || body.id || "").trim();
       if (id) {
         txUpsert(db, { ...body, idTransaksi: id });
-        await saveDB(db);
+        await writeDB(db);
       }
 
       return send(res, 200, { success: true, data: { received: true, idTransaksi: id || null } });
