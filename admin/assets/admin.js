@@ -1,970 +1,712 @@
 (() => {
-  // ✅ Hidden: jangan tampilkan endpoint di UI
-  const API_PATH = "/api/levpay";
-  const KEY_STORAGE = "levpay_admin_key";
+  // ===== CONFIG =====
+  // Default sesuai hint HTML lu
+  const API_PATH = "/api/levpay"; // ganti ke "/api/levpay" kalau backend lu pakai itu
+  const API_ORIGIN = "https://levpay-api.vercel.app"; // kosong = same origin. Kalau beda domain: "https://levpay-api.vercel.app"
+  const LS_ADMIN = "levpay_admin_key_v1";
 
-  // ====== helpers ======
+  // ===== DOM =====
   const $ = (id) => document.getElementById(id);
 
-  const lock = $("lock");
+  const gate = $("gate");
+  const app = $("app");
+
   const adminKeyInput = $("adminKeyInput");
-  const btnUnlock = $("btnUnlock");
-  const lockMsg = $("lockMsg");
-
+  const btnLogin = $("btnLogin");
   const btnLogout = $("btnLogout");
-  const btnPing = $("btnPing");
-  const btnHelp = $("btnHelp");
+  const btnOpenGate = $("btnOpenGate");
+  const btnRefreshAll = $("btnRefreshAll");
+  const loginMsg = $("loginMsg");
 
-  const toast = $("toast");
+  const apiBaseText = $("apiBaseText");
+  const sysStatus = $("sysStatus");
+  const lastSync = $("lastSync");
 
-  const pillStatus = $("pillStatus");
-  const statService = $("statService");
-  const statTime = $("statTime");
-
-  const pillVoucherOn = $("pillVoucherOn");
-  const statVoucherTotal = $("statVoucherTotal");
-  const statVoucherActive = $("statVoucherActive");
-
+  const pillVoucherCount = $("pillVoucherCount");
   const pillMonthly = $("pillMonthly");
-  const statMonthlyName = $("statMonthlyName");
-  const statMonthlyMaxUses = $("statMonthlyMaxUses");
 
-  // Tabs
-  const tabButtons = Array.from(document.querySelectorAll(".tab"));
-  const panels = {
-    vouchers: $("tab-vouchers"),
-    monthly: $("tab-monthly"),
-    tools: $("tab-tools"),
-    tutor: $("tab-tutor"),
-  };
+  // tabs
+  const navItems = Array.from(document.querySelectorAll(".navItem"));
+  const tabVouchers = $("tab-vouchers");
+  const tabMonthly = $("tab-monthly");
+  const tabTools = $("tab-tools");
 
-  // Voucher form
-  const vCode = $("vCode");
-  const vName = $("vName");
-  const vPercent = $("vPercent");
-  const vMaxRp = $("vMaxRp");
-  const vMaxUses = $("vMaxUses");
-  const vExpired = $("vExpired");
-  const vEnabled = $("vEnabled");
-
-  const btnVoucherUpsert = $("btnVoucherUpsert");
-  const btnVoucherDisable = $("btnVoucherDisable");
-  const btnRefreshVouchers = $("btnRefreshVouchers");
-
+  // vouchers list
+  const onlyActiveToggle = $("onlyActiveToggle");
+  const btnLoadVouchers = $("btnLoadVouchers");
   const voucherTbody = $("voucherTbody");
-  const voucherCurlBox = $("voucherCurlBox");
-  const voucherJsonBox = $("voucherJsonBox");
-  const btnCopyCurlVoucher = $("btnCopyCurlVoucher");
-  const btnCopyJsonVoucher = $("btnCopyJsonVoucher");
 
-  // Monthly
-  const mEnabled = $("mEnabled");
-  const mName = $("mName");
-  const mPercent = $("mPercent");
-  const mMaxRp = $("mMaxRp");
-  const mMaxUses = $("mMaxUses");
+  // voucher form
+  const v_code = $("v_code");
+  const v_name = $("v_name");
+  const v_percent = $("v_percent");
+  const v_maxRp = $("v_maxRp");
+  const v_maxUses = $("v_maxUses");
+  const v_expiresAt = $("v_expiresAt");
+  const v_enabled = $("v_enabled");
 
-  const btnMonthlyLoad = $("btnMonthlyLoad");
-  const btnMonthlySave = $("btnMonthlySave");
-  const monthlyCurlBox = $("monthlyCurlBox");
-  const monthlyJsonBox = $("monthlyJsonBox");
-  const btnCopyCurlMonthly = $("btnCopyCurlMonthly");
-  const btnCopyJsonMonthly = $("btnCopyJsonMonthly");
+  const btnUpsertVoucher = $("btnUpsertVoucher");
+  const btnDisableVoucher = $("btnDisableVoucher");
+  const curlVoucher = $("curlVoucher");
+  const jsonVoucher = $("jsonVoucher");
+  const msgVoucher = $("msgVoucher");
 
-  const mDeviceKey = $("mDeviceKey");
-  const btnUnlimitedAdd = $("btnUnlimitedAdd");
-  const btnUnlimitedRemove = $("btnUnlimitedRemove");
-  const btnCopyCurlUnlimitedAdd = $("btnCopyCurlUnlimitedAdd");
-  const btnCopyCurlUnlimitedRemove = $("btnCopyCurlUnlimitedRemove");
+  // monthly form
+  const btnLoadMonthly = $("btnLoadMonthly");
+  const btnSaveMonthly = $("btnSaveMonthly");
+  const m_enabled = $("m_enabled");
+  const m_name = $("m_name");
+  const m_percent = $("m_percent");
+  const m_maxRp = $("m_maxRp");
+  const m_maxUses = $("m_maxUses");
+  const curlMonthly = $("curlMonthly");
+  const jsonMonthly = $("jsonMonthly");
+  const msgMonthly = $("msgMonthly");
 
-  const mSummaryPill = $("mSummaryPill");
-  const mUsedCount = $("mUsedCount");
-  const mReservedCount = $("mReservedCount");
-  const mUnlimitedCount = $("mUnlimitedCount");
+  // unlimited
+  const dev_id = $("dev_id");
+  const dev_pepper = $("dev_pepper");
+  const dev_key = $("dev_key");
+  const btnGenKey = $("btnGenKey");
+  const btnAddUnlimited = $("btnAddUnlimited");
+  const btnRemoveUnlimited = $("btnRemoveUnlimited");
+  const unlimitedTbody = $("unlimitedTbody");
+  const msgUnlimited = $("msgUnlimited");
 
-  // Tools
-  const tDeviceId = $("tDeviceId");
-  const tPepper = $("tPepper");
-  const tDeviceKey = $("tDeviceKey");
-  const btnGenDeviceId = $("btnGenDeviceId");
-  const btnCopyDeviceKey = $("btnCopyDeviceKey");
+  // tools
+  const btnRunApply = $("btnRunApply");
+  const t_amount = $("t_amount");
+  const t_deviceId = $("t_deviceId");
+  const t_voucher = $("t_voucher");
+  const t_ttl = $("t_ttl");
+  const curlApply = $("curlApply");
+  const jsonApply = $("jsonApply");
 
-  const tAmount = $("tAmount");
-  const tVoucher = $("tVoucher");
-  const applyCurlBox = $("applyCurlBox");
-  const applyJsonBox = $("applyJsonBox");
-  const btnCopyCurlApply = $("btnCopyCurlApply");
-  const btnCopyJsonApply = $("btnCopyJsonApply");
-
-  // Tutor
-  const tutorBox = $("tutorBox");
-  const btnTutorRefresh = $("btnTutorRefresh");
-  const btnCopyTutor = $("btnCopyTutor");
-
-  // Filter
-  const vFilterInputs = Array.from(document.querySelectorAll('input[name="vFilter"]'));
-
+  // ===== STATE =====
   let ADMIN_KEY = "";
-  let vouchersCache = [];
-  let monthlyCache = null;
+  let vouchers = [];
+  let monthly = null;
 
-  function toastShow(text, type = "info") {
-    toast.textContent = text;
-    toast.classList.add("is-on");
-    toast.dataset.type = type;
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => toast.classList.remove("is-on"), 1800);
+  // ===== HELPERS =====
+  function nowStr() {
+    return new Date().toLocaleString("id-ID");
+  }
+
+  function setStatus(locked) {
+    if (locked) {
+      sysStatus.textContent = "LOCKED";
+      app.classList.add("is-locked");
+    } else {
+      sysStatus.textContent = "READY";
+      app.classList.remove("is-locked");
+    }
+  }
+
+  function showGate(show) {
+    gate.classList.toggle("is-on", !!show);
+    gate.setAttribute("aria-hidden", show ? "false" : "true");
+  }
+
+  function showMsg(el, text, warn = false) {
+    if (!el) return;
+    el.style.display = text ? "block" : "none";
+    el.textContent = text || "";
+    el.classList.toggle("msg--warn", !!warn);
+  }
+
+  function apiBase() {
+    const origin = (API_ORIGIN || "").trim();
+    if (origin) return origin.replace(/\/+$/,"") + API_PATH;
+    return location.origin + API_PATH;
+  }
+
+  function apiUrl(action) {
+    return apiBase() + "?action=" + encodeURIComponent(action);
+  }
+
+  function isAdminAction(action) {
+    return /^(voucher\.|monthly\.|tx\.)/.test(String(action || ""));
+  }
+
+  function sanitizeCode(s) {
+    return String(s || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function numOrNull(v) {
+    const s = String(v ?? "").trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
   }
 
   function fmtRp(n) {
     const x = Number(n || 0);
-    if (!Number.isFinite(x)) return "0";
-    return Math.round(x).toLocaleString("id-ID");
+    if (!x) return "∞";
+    return x.toLocaleString("id-ID");
   }
 
-  function safeUpper(v) {
-    return String(v || "").trim().toUpperCase();
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "—";
+    return d.toLocaleString("id-ID");
   }
 
-  function maskCode(code) {
-    const s = safeUpper(code);
-    if (s.length <= 4) return s[0] + "***";
-    return s.slice(0, 2) + "****" + s.slice(-2);
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
   }
 
-  function toIsoFromDatetimeLocal(v) {
-    // datetime-local: "2025-12-20T16:30"
-    const s = String(v || "").trim();
-    if (!s) return null;
-    const d = new Date(s);
-    if (!Number.isFinite(d.getTime())) return null;
-    return d.toISOString();
-  }
-
-  function datetimeLocalFromIso(iso) {
-    if (!iso) return "";
-    const t = Date.parse(iso);
-    if (!Number.isFinite(t)) return "";
-    const d = new Date(t);
-    const pad = (x) => String(x).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const mm = pad(d.getMonth() + 1);
-    const dd = pad(d.getDate());
-    const hh = pad(d.getHours());
-    const mi = pad(d.getMinutes());
-    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-  }
-
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(String(text || ""));
-      toastShow("Copied ✅");
-      return true;
-    } catch {
-      toastShow("Gagal copy", "warn");
-      return false;
-    }
-  }
-
-  function getHostPlaceholder() {
-    return "$HOST"; // jangan hardcode endpoint/host di UI
-  }
-
-  function apiUrl(action, extraQuery = "") {
-    const q = extraQuery ? "&" + extraQuery.replace(/^\&/, "") : "";
-    return `${API_PATH}?action=${encodeURIComponent(action)}${q}`;
-  }
-
-  async function apiPost(action, bodyObj, admin = false, extraQuery = "") {
-    const headers = { "Content-Type": "application/json" };
-    if (admin) headers["X-Admin-Key"] = ADMIN_KEY;
-
-    const r = await fetch(apiUrl(action, extraQuery), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(bodyObj || {}),
-    });
-
-    const text = await r.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-
-    if (!r.ok) {
-      const msg = json?.error || json?.message || `HTTP ${r.status}`;
-      throw new Error(msg);
-    }
-    return json;
-  }
-
-  // ====== login/lock ======
-  function showLock(on) {
-    lock.classList.toggle("is-on", !!on);
-  }
-
-  function loadKey() {
-    const k = sessionStorage.getItem(KEY_STORAGE) || "";
-    ADMIN_KEY = String(k || "");
-    return ADMIN_KEY;
-  }
-
-  function saveKey(k) {
-    ADMIN_KEY = String(k || "").trim();
-    sessionStorage.setItem(KEY_STORAGE, ADMIN_KEY);
-  }
-
-  function clearKey() {
-    ADMIN_KEY = "";
-    sessionStorage.removeItem(KEY_STORAGE);
-  }
-
-  function lockError(msg) {
-    lockMsg.hidden = false;
-    lockMsg.textContent = msg;
-  }
-
-  function lockClear() {
-    lockMsg.hidden = true;
-    lockMsg.textContent = "";
-  }
-
-  async function unlockFlow() {
-    lockClear();
-    const k = String(adminKeyInput.value || "").trim();
-    if (!k) return lockError("Admin Key wajib diisi.");
-    saveKey(k);
-
-    // test minimal: voucher.list (admin)
-    try {
-      await apiPost("voucher.list", {}, true);
-      showLock(false);
-      toastShow("Login OK ✅");
-      await boot();
-    } catch (e) {
-      clearKey();
-      lockError("Key salah / unauthorized.");
-    }
-  }
-
-  // ====== tabs ======
   function setTab(name) {
-    tabButtons.forEach((b) => b.classList.toggle("is-active", b.dataset.tab === name));
-    Object.entries(panels).forEach(([k, el]) => {
-      el.classList.toggle("is-active", k === name);
+    navItems.forEach(btn => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-tab") === name);
+    });
+
+    tabVouchers.classList.toggle("is-on", name === "vouchers");
+    tabMonthly.classList.toggle("is-on", name === "monthly");
+    tabTools.classList.toggle("is-on", name === "tools");
+  }
+
+  async function jfetch(url, opts) {
+    const r = await fetch(url, opts);
+    const txt = await r.text();
+    let json = {};
+    try { json = txt ? JSON.parse(txt) : {}; } catch { json = { raw: txt }; }
+    return { ok: r.ok, status: r.status, json };
+  }
+
+  function curlExample(action, method, body) {
+    const base = "$HOST" + API_PATH;
+    const admin = isAdminAction(action);
+    const head = [];
+    if (admin) head.push(`-H "X-Admin-Key: $ADMIN"`);
+    if (method !== "GET") head.push(`-H "Content-Type: application/json"`);
+    const h = head.length ? (" \\\n  " + head.join(" \\\n  ")) : "";
+    const data = (method === "GET" || body == null) ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
+    return `curl -sS -X ${method} "${base}?action=${action}"${h}${data} | jq`;
+  }
+
+  async function callAction(action, { method="GET", body=null } = {}) {
+    const headers = {};
+    if (method !== "GET") headers["Content-Type"] = "application/json";
+    if (isAdminAction(action)) headers["X-Admin-Key"] = ADMIN_KEY;
+
+    return jfetch(apiUrl(action), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined
     });
   }
 
-  tabButtons.forEach((b) => {
-    b.addEventListener("click", () => setTab(b.dataset.tab));
-  });
-
-  // ====== header actions ======
-  btnLogout.addEventListener("click", () => {
-    clearKey();
-    showLock(true);
-    toastShow("Logout");
-  });
-
-  btnPing.addEventListener("click", async () => {
-    try {
-      const r = await apiPost("ping", {}, false);
-      pillStatus.textContent = "OK";
-      pillStatus.className = "pill pill--ok";
-      statService.textContent = r?.service || "levpay-api";
-      statTime.textContent = r?.time || new Date().toISOString();
-      toastShow("Ping OK");
-    } catch (e) {
-      pillStatus.textContent = "ERR";
-      pillStatus.className = "pill pill--muted";
-      toastShow("Ping gagal", "warn");
-    }
-  });
-
-  btnHelp.addEventListener("click", async () => {
-    try {
-      const r = await apiPost("help", {}, false);
-      toastShow("Help loaded");
-      // Build tutor content from help
-      tutorBox.textContent = buildTutorText(r);
-      setTab("tutor");
-    } catch {
-      tutorBox.textContent = buildTutorText(null);
-      setTab("tutor");
-    }
-  });
-
-  // ====== vouchers ======
-  function readVoucherForm() {
-    const code = safeUpper(vCode.value);
-    const name = String(vName.value || "").trim();
-    const percent = Number(vPercent.value || 0);
-    const maxRp = Number(vMaxRp.value || 0);
-    const maxUsesRaw = String(vMaxUses.value || "").trim();
-    const maxUses = maxUsesRaw === "" ? null : Number(maxUsesRaw);
-    const expiresAt = toIsoFromDatetimeLocal(vExpired.value);
-    const enabled = !!vEnabled.checked;
-
-    return { code, name, percent, maxRp, maxUses, expiresAt, enabled };
+  async function validateKey() {
+    const r = await callAction("voucher.list", { method:"GET" });
+    if (r.status === 401) return false;
+    return !!r.ok;
   }
 
-  function voucherUpsertCurl(body) {
-    const host = getHostPlaceholder();
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=voucher.upsert" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  function voucherDisableCurl(code) {
-    const host = getHostPlaceholder();
-    const body = { code: safeUpper(code) };
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=voucher.disable" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  function setVoucherCurlJsonPreview() {
-    const body = readVoucherForm();
-    const bodySafe = { ...body };
-    // safety: jangan taruh undefined
-    if (!bodySafe.name) delete bodySafe.name;
-    if (!bodySafe.expiresAt) delete bodySafe.expiresAt;
-    if (bodySafe.maxUses == null || !Number.isFinite(bodySafe.maxUses)) delete bodySafe.maxUses;
-
-    voucherCurlBox.textContent = voucherUpsertCurl(bodySafe);
-    voucherJsonBox.textContent = JSON.stringify(bodySafe, null, 2);
-  }
-
-  ["input", "change"].forEach((evt) => {
-    [vCode, vName, vPercent, vMaxRp, vMaxUses, vExpired, vEnabled].forEach((el) => {
-      el.addEventListener(evt, setVoucherCurlJsonPreview);
-    });
-  });
-
-  btnCopyCurlVoucher.addEventListener("click", () => copyText(voucherCurlBox.textContent));
-  btnCopyJsonVoucher.addEventListener("click", () => copyText(voucherJsonBox.textContent));
-
-  btnVoucherUpsert.addEventListener("click", async () => {
-    const body = readVoucherForm();
-    if (!body.code) return toastShow("Code wajib diisi", "warn");
-
-    const payload = {
-      code: body.code,
-      name: body.name || body.code,
-      enabled: body.enabled !== false,
-      percent: clamp(body.percent, 0, 100),
-      maxRp: Math.max(0, Number(body.maxRp || 0)),
-      ...(body.maxUses != null && Number.isFinite(body.maxUses) ? { maxUses: Number(body.maxUses) } : {}),
-      ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
-    };
-
-    try {
-      await apiPost("voucher.upsert", payload, true);
-      toastShow("Voucher tersimpan ✅");
-      await refreshVouchers();
-      // keep form preview updated
-      setVoucherCurlJsonPreview();
-    } catch (e) {
-      toastShow("Gagal: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  btnVoucherDisable.addEventListener("click", async () => {
-    const code = safeUpper(vCode.value);
-    if (!code) return toastShow("Isi code dulu", "warn");
-
-    const ok = window.confirm(`Disable voucher ${code}?`);
-    if (!ok) return;
-
-    try {
-      await apiPost("voucher.disable", { code }, true);
-      toastShow("Voucher disabled ✅");
-      await refreshVouchers();
-    } catch (e) {
-      toastShow("Gagal: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  btnRefreshVouchers.addEventListener("click", refreshVouchers);
-  vFilterInputs.forEach((r) => r.addEventListener("change", renderVouchers));
-
-  function clamp(n, a, b) {
-    const x = Number(n);
-    if (!Number.isFinite(x)) return a;
-    return Math.max(a, Math.min(b, x));
-  }
-
+  // ===== VOUCHERS =====
   function renderVouchers() {
-    const mode = (vFilterInputs.find((x) => x.checked)?.value || "active").toLowerCase();
-    const items = Array.isArray(vouchersCache) ? vouchersCache : [];
+    const onlyActive = !!onlyActiveToggle?.checked;
+    const list = onlyActive ? vouchers.filter(v => v.enabled !== false) : vouchers.slice();
 
-    const filtered = mode === "active"
-      ? items.filter((v) => v && v.enabled !== false)
-      : items;
+    pillVoucherCount.textContent = String(list.filter(v => v.enabled !== false).length);
 
-    // Stats
-    const total = items.length;
-    const active = items.filter((v) => v && v.enabled !== false).length;
-
-    pillVoucherOn.textContent = String(active);
-    statVoucherTotal.textContent = String(total);
-    statVoucherActive.textContent = String(active);
-
-    if (!filtered.length) {
-      voucherTbody.innerHTML = `<tr><td colspan="8" class="mutedCell">Tidak ada data</td></tr>`;
+    if (!list.length) {
+      voucherTbody.innerHTML = `<tr><td colspan="8" class="mutedCell">Belum ada data.</td></tr>`;
       return;
     }
 
-    voucherTbody.innerHTML = filtered.map((v) => {
-      const code = safeUpper(v.code);
-      const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
+    voucherTbody.innerHTML = list.map(v => {
       const enabled = v.enabled !== false;
-      const st = enabled ? "ON" : "OFF";
-
-      const maxUses = (v.maxUses == null) ? "—" : String(v.maxUses);
-      const maxRp = fmtRp(v.maxRp || 0);
-
+      const exp = v.expiresAt ? fmtDate(v.expiresAt) : "—";
+      const maxUses = (v.maxUses == null ? "∞" : String(v.maxUses));
       return `
-        <tr>
-          <td>
-            <div class="mono">${maskCode(code)}</div>
-            <div class="miniAction">
-              <button class="miniBtn" data-act="pick" data-code="${code}">Edit</button>
-              <button class="miniBtn" data-act="reveal" data-code="${code}">Reveal</button>
+        <tr data-code="${escapeHtml(v.code)}">
+          <td class="mono">${escapeHtml(v.code)}</td>
+          <td>${escapeHtml(v.name || v.code)}</td>
+          <td>${enabled ? `<span class="pill pill--ok">ON</span>` : `<span class="pill pill--muted">OFF</span>`}</td>
+          <td class="mono">${escapeHtml(String(Number(v.percent||0)))}</td>
+          <td class="mono">${escapeHtml(fmtRp(v.maxRp))}</td>
+          <td class="mono">${escapeHtml(maxUses)}</td>
+          <td class="mono">${escapeHtml(exp)}</td>
+          <td class="tRight">
+            <div class="row row--gap" style="justify-content:flex-end;">
+              <button class="btn btn--ghost btnEdit" type="button">Edit</button>
+              <button class="btn btn--danger btnDisable" type="button">Disable</button>
             </div>
-          </td>
-          <td>${escapeHtml(v.name || code)}</td>
-          <td><b>${Number(v.percent || 0)}%</b></td>
-          <td>${maxRp}</td>
-          <td>${maxUses}</td>
-          <td>${exp}</td>
-          <td>
-            <span class="badge ${enabled ? "badge--on" : "badge--off"}">${st}</span>
-          </td>
-          <td>
-            <button class="miniBtn miniBtn--primary" data-act="curl" data-code="${code}">Curl</button>
-            ${enabled
-              ? `<button class="miniBtn miniBtn--danger" data-act="off" data-code="${code}">Off</button>`
-              : `<button class="miniBtn miniBtn--primary" data-act="on" data-code="${code}">On</button>`}
           </td>
         </tr>
       `;
     }).join("");
 
-    // bind actions
-    voucherTbody.querySelectorAll("button[data-act]").forEach((btn) => {
-      btn.addEventListener("click", () => handleVoucherRowAction(btn.dataset.act, btn.dataset.code));
+    Array.from(voucherTbody.querySelectorAll("tr")).forEach(tr => {
+      const code = tr.getAttribute("data-code") || "";
+      tr.querySelector(".btnEdit")?.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        pickVoucher(code);
+      });
+      tr.querySelector(".btnDisable")?.addEventListener("click", async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        await disableVoucher(code);
+      });
+      tr.addEventListener("click", () => pickVoucher(code));
     });
   }
 
-  function escapeHtml(s) {
-    return String(s || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+  function pickVoucher(code) {
+    const c = sanitizeCode(code);
+    const v = vouchers.find(x => x.code === c);
+    if (!v) return;
 
-  async function handleVoucherRowAction(act, code) {
-    const v = vouchersCache.find((x) => safeUpper(x?.code) === safeUpper(code));
-    if (!v) return toastShow("Voucher tidak ditemukan", "warn");
+    setTab("vouchers");
 
-    if (act === "pick") {
-      // fill form
-      vCode.value = safeUpper(v.code);
-      vName.value = v.name || "";
-      vPercent.value = String(v.percent ?? "");
-      vMaxRp.value = String(v.maxRp ?? "");
-      vMaxUses.value = (v.maxUses == null ? "" : String(v.maxUses));
-      vExpired.value = datetimeLocalFromIso(v.expiresAt);
-      vEnabled.checked = v.enabled !== false;
-      setVoucherCurlJsonPreview();
-      toastShow("Form diisi ✅");
-      return;
-    }
+    v_code.value = v.code || "";
+    v_name.value = v.name || "";
+    v_percent.value = String(Number(v.percent || 0));
+    v_maxRp.value = String(Number(v.maxRp || 0));
+    v_maxUses.value = (v.maxUses == null ? "" : String(Number(v.maxUses)));
+    v_enabled.checked = (v.enabled !== false);
 
-    if (act === "reveal") {
-      const ok = window.confirm("Reveal kode voucher? (disarankan hanya saat perlu)");
-      if (!ok) return;
-      toastShow("Kode: " + safeUpper(v.code));
-      return;
-    }
-
-    if (act === "curl") {
-      // show curl/json in preview using current row voucher (masked in list; full in curl via confirm)
-      const ok = window.confirm("Buat curl untuk voucher ini?");
-      if (!ok) return;
-
-      const body = {
-        code: safeUpper(v.code),
-        name: v.name || safeUpper(v.code),
-        enabled: v.enabled !== false,
-        percent: clamp(v.percent, 0, 100),
-        maxRp: Math.max(0, Number(v.maxRp || 0)),
-        ...(v.maxUses != null ? { maxUses: Number(v.maxUses) } : {}),
-        ...(v.expiresAt ? { expiresAt: String(v.expiresAt) } : {}),
-      };
-
-      voucherCurlBox.textContent = voucherUpsertCurl(body);
-      voucherJsonBox.textContent = JSON.stringify(body, null, 2);
-      toastShow("Curl siap ✅");
-      return;
-    }
-
-    if (act === "off") {
-      const ok = window.confirm(`Matikan voucher ${safeUpper(code)}?`);
-      if (!ok) return;
-      try {
-        await apiPost("voucher.disable", { code: safeUpper(code) }, true);
-        toastShow("OFF ✅");
-        await refreshVouchers();
-      } catch (e) {
-        toastShow("Gagal: " + (e?.message || "error"), "warn");
-      }
-      return;
-    }
-
-    if (act === "on") {
-      const ok = window.confirm(`Hidupkan voucher ${safeUpper(code)}?`);
-      if (!ok) return;
-
-      // on = upsert enabled true pakai value existing
-      const body = {
-        code: safeUpper(v.code),
-        name: v.name || safeUpper(v.code),
-        enabled: true,
-        percent: clamp(v.percent, 0, 100),
-        maxRp: Math.max(0, Number(v.maxRp || 0)),
-        ...(v.maxUses != null ? { maxUses: Number(v.maxUses) } : {}),
-        ...(v.expiresAt ? { expiresAt: String(v.expiresAt) } : {}),
-      };
-
-      try {
-        await apiPost("voucher.upsert", body, true);
-        toastShow("ON ✅");
-        await refreshVouchers();
-      } catch (e) {
-        toastShow("Gagal: " + (e?.message || "error"), "warn");
-      }
-      return;
-    }
-  }
-
-  async function refreshVouchers() {
-    try {
-      const r = await apiPost("voucher.list", {}, true);
-      vouchersCache = Array.isArray(r?.data) ? r.data : (Array.isArray(r) ? r : []);
-      renderVouchers();
-      toastShow("Voucher refreshed");
-    } catch (e) {
-      toastShow("Gagal list voucher: " + (e?.message || "error"), "warn");
-      voucherTbody.innerHTML = `<tr><td colspan="8" class="mutedCell">Gagal load</td></tr>`;
-    }
-  }
-
-  // ====== monthly ======
-  function monthlySetCurl(body) {
-    const host = getHostPlaceholder();
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=monthly.set" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  function monthlyGetCurl() {
-    const host = getHostPlaceholder();
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=monthly.get" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
-    ].join("\n");
-  }
-
-  function readMonthlyForm() {
-    const enabled = !!mEnabled.checked;
-    const name = String(mName.value || "").trim();
-    const percent = Number(mPercent.value || 0);
-    const maxRp = Number(mMaxRp.value || 0);
-    const maxUsesRaw = String(mMaxUses.value || "").trim();
-    const maxUses = maxUsesRaw === "" ? null : Number(maxUsesRaw);
-    return { enabled, name, percent, maxRp, maxUses };
-  }
-
-  function renderMonthlySummary(p) {
-    const used = p?.used ? Object.keys(p.used).length : 0;
-    const reserved = p?.reserved ? Object.keys(p.reserved).length : 0;
-    const unlimited = p?.unlimited ? Object.keys(p.unlimited).length : 0;
-
-    mUsedCount.textContent = String(used);
-    mReservedCount.textContent = String(reserved);
-    mUnlimitedCount.textContent = String(unlimited);
-
-    mSummaryPill.textContent = (p?.enabled ? "ON" : "OFF");
-    mSummaryPill.className = p?.enabled ? "pill pill--ok" : "pill pill--muted";
-
-    pillMonthly.textContent = (p?.enabled ? "ON" : "OFF");
-    pillMonthly.className = p?.enabled ? "pill pill--ok" : "pill pill--muted";
-
-    statMonthlyName.textContent = p?.name || "—";
-    statMonthlyMaxUses.textContent = (p?.maxUses == null ? "—" : String(p.maxUses));
-  }
-
-  function setMonthlyCurlJsonPreview() {
-    const form = readMonthlyForm();
-    const payload = {
-      ...(form.enabled != null ? { enabled: !!form.enabled } : {}),
-      ...(form.name ? { name: form.name } : {}),
-      ...(Number.isFinite(form.percent) ? { percent: clamp(form.percent, 0, 100) } : {}),
-      ...(Number.isFinite(form.maxRp) ? { maxRp: Math.max(0, Number(form.maxRp || 0)) } : {}),
-      ...(form.maxUses != null && Number.isFinite(form.maxUses) ? { maxUses: Number(form.maxUses) } : {}),
-    };
-
-    monthlyCurlBox.textContent = monthlySetCurl(payload) + "\n\n# get:\n" + monthlyGetCurl();
-    monthlyJsonBox.textContent = JSON.stringify(payload, null, 2);
-
-    statMonthlyName.textContent = form.name || statMonthlyName.textContent;
-    statMonthlyMaxUses.textContent = (form.maxUses == null ? statMonthlyMaxUses.textContent : String(form.maxUses));
-  }
-
-  ["input", "change"].forEach((evt) => {
-    [mEnabled, mName, mPercent, mMaxRp, mMaxUses].forEach((el) => {
-      el.addEventListener(evt, setMonthlyCurlJsonPreview);
-    });
-  });
-
-  btnCopyCurlMonthly.addEventListener("click", () => copyText(monthlyCurlBox.textContent));
-  btnCopyJsonMonthly.addEventListener("click", () => copyText(monthlyJsonBox.textContent));
-
-  btnMonthlyLoad.addEventListener("click", async () => {
-    try {
-      const r = await apiPost("monthly.get", {}, true);
-      const p = r?.data || r;
-      monthlyCache = p;
-
-      mEnabled.checked = !!p?.enabled;
-      mName.value = p?.name || "";
-      mPercent.value = String(p?.percent ?? "");
-      mMaxRp.value = String(p?.maxRp ?? "");
-      mMaxUses.value = (p?.maxUses == null ? "" : String(p.maxUses));
-
-      renderMonthlySummary(p);
-      setMonthlyCurlJsonPreview();
-      toastShow("Monthly loaded");
-    } catch (e) {
-      toastShow("Gagal load monthly: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  btnMonthlySave.addEventListener("click", async () => {
-    const form = readMonthlyForm();
-    const payload = {
-      enabled: !!form.enabled,
-      name: form.name || "PROMO BULANAN",
-      percent: clamp(form.percent, 0, 100),
-      maxRp: Math.max(0, Number(form.maxRp || 0)),
-      ...(form.maxUses != null && Number.isFinite(form.maxUses) ? { maxUses: Number(form.maxUses) } : { maxUses: null }),
-    };
-
-    try {
-      const r = await apiPost("monthly.set", payload, true);
-      const p = r?.data || r;
-      monthlyCache = p;
-      renderMonthlySummary(p);
-      setMonthlyCurlJsonPreview();
-      toastShow("Monthly saved ✅");
-    } catch (e) {
-      toastShow("Gagal save: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  function monthlyUnlimitedAddCurl(deviceKey) {
-    const host = getHostPlaceholder();
-    const body = { addUnlimitedDeviceKey: String(deviceKey || "").trim() };
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=monthly.set" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  function monthlyUnlimitedRemoveCurl(deviceKey) {
-    const host = getHostPlaceholder();
-    const body = { removeUnlimitedDeviceKey: String(deviceKey || "").trim() };
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=monthly.set" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  btnCopyCurlUnlimitedAdd.addEventListener("click", () => {
-    const dk = String(mDeviceKey.value || "").trim();
-    copyText(monthlyUnlimitedAddCurl(dk || "<DEVICE_KEY_SHA256>"));
-  });
-
-  btnCopyCurlUnlimitedRemove.addEventListener("click", () => {
-    const dk = String(mDeviceKey.value || "").trim();
-    copyText(monthlyUnlimitedRemoveCurl(dk || "<DEVICE_KEY_SHA256>"));
-  });
-
-  btnUnlimitedAdd.addEventListener("click", async () => {
-    const dk = String(mDeviceKey.value || "").trim();
-    if (!dk) return toastShow("Isi deviceKey dulu", "warn");
-    try {
-      const r = await apiPost("monthly.set", { addUnlimitedDeviceKey: dk }, true);
-      renderMonthlySummary(r?.data || r);
-      toastShow("Unlimited added ✅");
-    } catch (e) {
-      toastShow("Gagal: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  btnUnlimitedRemove.addEventListener("click", async () => {
-    const dk = String(mDeviceKey.value || "").trim();
-    if (!dk) return toastShow("Isi deviceKey dulu", "warn");
-    try {
-      const r = await apiPost("monthly.set", { removeUnlimitedDeviceKey: dk }, true);
-      renderMonthlySummary(r?.data || r);
-      toastShow("Unlimited removed ✅");
-    } catch (e) {
-      toastShow("Gagal: " + (e?.message || "error"), "warn");
-    }
-  });
-
-  // ====== tools ======
-  function randId(len = 18) {
-    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let out = "dev_";
-    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
-    return out;
-  }
-
-  async function sha256Hex(str) {
-    const enc = new TextEncoder().encode(String(str || ""));
-    const buf = await crypto.subtle.digest("SHA-256", enc);
-    const arr = Array.from(new Uint8Array(buf));
-    return arr.map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  async function recomputeDeviceKey() {
-    const deviceId = String(tDeviceId.value || "").trim();
-    const pepper = String(tPepper.value || "").trim();
-    if (!deviceId || !pepper) {
-      tDeviceKey.value = "";
-      return;
-    }
-    const dk = await sha256Hex(deviceId + "|" + pepper);
-    tDeviceKey.value = dk;
-    // prefill monthly field for convenience
-    mDeviceKey.value = dk;
-  }
-
-  btnGenDeviceId.addEventListener("click", async () => {
-    tDeviceId.value = randId(14);
-    await recomputeDeviceKey();
-    toastShow("DeviceId generated");
-  });
-
-  btnCopyDeviceKey.addEventListener("click", () => copyText(tDeviceKey.value || ""));
-
-  tDeviceId.addEventListener("input", recomputeDeviceKey);
-  tPepper.addEventListener("input", recomputeDeviceKey);
-
-  function applyCurl(body) {
-    const host = getHostPlaceholder();
-    return [
-      `curl -sS -X POST "${host}${API_PATH}?action=discount.apply" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -d '${JSON.stringify(body)}' | jq`,
-    ].join("\n");
-  }
-
-  function setApplyPreview() {
-    const amount = Number(tAmount.value || 0);
-    const deviceId = String(tDeviceId.value || "").trim() || "dev_test_1";
-    const voucher = String(tVoucher.value || "").trim();
-
-    const body = { amount: Math.max(1, Number.isFinite(amount) ? amount : 1), deviceId, voucher };
-    applyCurlBox.textContent = applyCurl(body);
-    applyJsonBox.textContent = JSON.stringify(body, null, 2);
-  }
-
-  tAmount.addEventListener("input", setApplyPreview);
-  tVoucher.addEventListener("input", setApplyPreview);
-  tDeviceId.addEventListener("input", setApplyPreview);
-
-  btnCopyCurlApply.addEventListener("click", () => copyText(applyCurlBox.textContent));
-  btnCopyJsonApply.addEventListener("click", () => copyText(applyJsonBox.textContent));
-
-  // ====== tutor ======
-  function buildTutorText(helpJson) {
-    const host = "$HOST";
-    const lines = [];
-
-    lines.push(`# LevPay Tutor (Termux)`);
-    lines.push(`HOST="${host}"`);
-    lines.push(``);
-    lines.push(`## Public`);
-    lines.push([
-      `curl -sS -X POST "$HOST${API_PATH}?action=ping" | jq`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=help" | jq`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=discount.apply" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -d '{"amount":10000,"deviceId":"dev_demo_1","voucher":"VIPL"}' | jq`,
-    ].join("\n"));
-
-    lines.push(``);
-    lines.push(`## Admin (butuh X-Admin-Key)`);
-    lines.push([
-      `# list vouchers`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=voucher.list" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
-      ``,
-      `# upsert voucher`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=voucher.upsert" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '{"code":"VIPL","name":"VIPL","percent":60,"maxRp":0,"maxUses":null,"enabled":true,"expiresAt":null}' | jq`,
-      ``,
-      `# disable voucher`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=voucher.disable" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '{"code":"VIPL"}' | jq`,
-      ``,
-      `# monthly get`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=monthly.get" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" | jq`,
-      ``,
-      `# monthly set (+ maxUses)`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=monthly.set" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '{"enabled":true,"name":"PROMO BULANAN","percent":10,"maxRp":5000,"maxUses":100}' | jq`,
-      ``,
-      `# unlimited add deviceKey`,
-      `curl -sS -X POST "$HOST${API_PATH}?action=monthly.set" \\`,
-      `  -H "Content-Type: application/json" \\`,
-      `  -H "X-Admin-Key: <ADMIN_KEY>" \\`,
-      `  -d '{"addUnlimitedDeviceKey":"<SHA256_DEVICE_KEY>"}' | jq`,
-    ].join("\n"));
-
-    if (helpJson?.actions && Array.isArray(helpJson.actions)) {
-      lines.push(``);
-      lines.push(`## Actions (detected)`);
-      lines.push(helpJson.actions.map((x) => `- ${x}`).join("\n"));
-    }
-
-    return lines.join("\n");
-  }
-
-  btnTutorRefresh.addEventListener("click", async () => {
-    try {
-      const r = await apiPost("help", {}, false);
-      tutorBox.textContent = buildTutorText(r);
-      toastShow("Tutor updated");
-    } catch {
-      tutorBox.textContent = buildTutorText(null);
-      toastShow("Tutor fallback");
-    }
-  });
-
-  btnCopyTutor.addEventListener("click", () => copyText(tutorBox.textContent));
-
-  // ====== boot ======
-  async function boot() {
-    // initial previews
-    setVoucherCurlJsonPreview();
-    setMonthlyCurlJsonPreview();
-    setApplyPreview();
-
-    // load voucher list & monthly
-    await refreshVouchers();
-    await btnMonthlyLoad.click?.();
-
-    // ping
-    await btnPing.click?.();
-  }
-
-  // ====== init ======
-  (function init() {
-    const k = loadKey();
-    if (k) {
-      showLock(false);
-      boot().catch(() => {});
+    // datetime-local expects "YYYY-MM-DDTHH:MM"
+    if (v.expiresAt) {
+      const d = new Date(v.expiresAt);
+      if (Number.isFinite(d.getTime())) {
+        const pad = (n) => String(n).padStart(2,"0");
+        const yyyy = d.getFullYear();
+        const mm = pad(d.getMonth()+1);
+        const dd = pad(d.getDate());
+        const hh = pad(d.getHours());
+        const mi = pad(d.getMinutes());
+        v_expiresAt.value = `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+      } else v_expiresAt.value = "";
     } else {
-      showLock(true);
+      v_expiresAt.value = "";
+    }
+  }
+
+  async function loadVouchers() {
+    showMsg(msgVoucher, "", false);
+
+    const r = await callAction("voucher.list", { method:"GET" });
+
+    // show curl/json
+    curlVoucher.textContent = curlExample("voucher.list", "GET", null);
+    jsonVoucher.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) {
+      showMsg(msgVoucher, `Gagal load voucher (HTTP ${r.status}).`, true);
+      vouchers = [];
+      renderVouchers();
+      return false;
     }
 
-    btnUnlock.addEventListener("click", unlockFlow);
-    adminKeyInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") unlockFlow();
+    const raw = r.json?.data ?? r.json ?? [];
+    const list = Array.isArray(raw) ? raw : [];
+
+    vouchers = list.map(v => ({
+      code: sanitizeCode(v.code || ""),
+      name: String(v.name || ""),
+      enabled: v.enabled !== false,
+      percent: Number(v.percent || 0),
+      maxRp: Number(v.maxRp || 0),
+      maxUses: (v.maxUses == null ? null : Number(v.maxUses)),
+      expiresAt: v.expiresAt || null,
+      updatedAt: v.updatedAt || null,
+      note: v.note || null,
+    })).filter(v => v.code);
+
+    renderVouchers();
+    return true;
+  }
+
+  function buildVoucherPayload() {
+    const code = sanitizeCode(v_code.value);
+    if (!code) throw new Error("Voucher code wajib");
+
+    const percent = Number(String(v_percent.value || "").trim());
+    if (!Number.isFinite(percent)) throw new Error("Percent wajib angka");
+
+    const payload = {
+      code,
+      name: String(v_name.value || "").trim() || code,
+      enabled: !!v_enabled.checked,
+      percent: Math.max(0, Math.min(100, percent)),
+      maxRp: Math.max(0, Number(String(v_maxRp.value || "0").trim() || "0")),
+    };
+
+    const mu = numOrNull(v_maxUses.value);
+    if (mu != null && mu > 0) payload.maxUses = mu;
+    else payload.maxUses = null;
+
+    const expRaw = String(v_expiresAt.value || "").trim();
+    if (expRaw) {
+      const dt = new Date(expRaw);
+      if (Number.isFinite(dt.getTime())) payload.expiresAt = dt.toISOString();
+    } else {
+      payload.expiresAt = null;
+    }
+
+    return payload;
+  }
+
+  async function upsertVoucher() {
+    showMsg(msgVoucher, "", false);
+
+    let body;
+    try {
+      body = buildVoucherPayload();
+    } catch (e) {
+      showMsg(msgVoucher, e.message || "Form invalid", true);
+      return;
+    }
+
+    const r = await callAction("voucher.upsert", { method:"POST", body });
+
+    curlVoucher.textContent = curlExample("voucher.upsert", "POST", body);
+    jsonVoucher.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) {
+      showMsg(msgVoucher, `Gagal upsert voucher (HTTP ${r.status}).`, true);
+      return;
+    }
+
+    showMsg(msgVoucher, "Voucher tersimpan ✅", false);
+    await loadVouchers();
+  }
+
+  async function disableVoucher(codeMaybe) {
+    showMsg(msgVoucher, "", false);
+
+    const code = sanitizeCode(codeMaybe || v_code.value);
+    if (!code) {
+      showMsg(msgVoucher, "Voucher code kosong", true);
+      return;
+    }
+    if (!confirm(`Disable voucher ${code}?`)) return;
+
+    const body = { code };
+    const r = await callAction("voucher.disable", { method:"POST", body });
+
+    curlVoucher.textContent = curlExample("voucher.disable", "POST", body);
+    jsonVoucher.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) {
+      showMsg(msgVoucher, `Gagal disable (HTTP ${r.status}).`, true);
+      return;
+    }
+
+    showMsg(msgVoucher, `Voucher ${code} disabled ✅`, false);
+    await loadVouchers();
+  }
+
+  // ===== MONTHLY =====
+  function renderMonthlyPill() {
+    if (!monthly || typeof monthly !== "object") {
+      pillMonthly.textContent = "—";
+      return;
+    }
+    pillMonthly.textContent = monthly.enabled ? "ON" : "OFF";
+  }
+
+  function renderUnlimitedList() {
+    const obj = monthly?.unlimited || {};
+    const keys = Object.keys(obj || {}).filter(k => obj[k]).sort();
+
+    if (!keys.length) {
+      unlimitedTbody.innerHTML = `<tr><td colspan="2" class="mutedCell">Belum ada data.</td></tr>`;
+      return;
+    }
+
+    unlimitedTbody.innerHTML = keys.map(k => `
+      <tr data-key="${escapeHtml(k)}">
+        <td class="mono" style="font-size:12px;">${escapeHtml(k)}</td>
+        <td class="tRight">
+          <button class="btn btn--danger btnRemoveOne" type="button">Remove</button>
+        </td>
+      </tr>
+    `).join("");
+
+    Array.from(unlimitedTbody.querySelectorAll(".btnRemoveOne")).forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const tr = btn.closest("tr");
+        const k = tr?.getAttribute("data-key") || "";
+        if (!k) return;
+        dev_key.value = k;
+        await removeUnlimited(k);
+      });
     });
+  }
+
+  async function loadMonthly() {
+    showMsg(msgMonthly, "", false);
+    showMsg(msgUnlimited, "", false);
+
+    const r = await callAction("monthly.get", { method:"GET" });
+
+    curlMonthly.textContent = curlExample("monthly.get", "GET", null);
+    jsonMonthly.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) {
+      showMsg(msgMonthly, `Gagal load monthly (HTTP ${r.status}).`, true);
+      monthly = null;
+      renderMonthlyPill();
+      renderUnlimitedList();
+      return false;
+    }
+
+    monthly = r.json?.data ?? r.json ?? null;
+
+    if (monthly && typeof monthly === "object") {
+      m_enabled.checked = !!monthly.enabled;
+      m_name.value = String(monthly.name ?? "");
+      m_percent.value = String(Number(monthly.percent ?? 0));
+      m_maxRp.value = String(Number(monthly.maxRp ?? 0));
+      m_maxUses.value = (monthly.maxUses == null ? "" : String(Number(monthly.maxUses)));
+    }
+
+    renderMonthlyPill();
+    renderUnlimitedList();
+    return true;
+  }
+
+  function buildMonthlyPayload(extra = {}) {
+    const payload = {
+      enabled: !!m_enabled.checked,
+      name: String(m_name.value || "").trim(),
+      percent: Number(String(m_percent.value || "0").trim()),
+      maxRp: Number(String(m_maxRp.value || "0").trim()),
+    };
+
+    const mu = numOrNull(m_maxUses.value);
+    payload.maxUses = (mu != null && mu > 0) ? mu : null;
+
+    return { ...payload, ...extra };
+  }
+
+  async function saveMonthly(extra = {}) {
+    showMsg(msgMonthly, "", false);
+
+    const body = buildMonthlyPayload(extra);
+    const r = await callAction("monthly.set", { method:"POST", body });
+
+    curlMonthly.textContent = curlExample("monthly.set", "POST", body);
+    jsonMonthly.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) {
+      showMsg(msgMonthly, `Gagal save monthly (HTTP ${r.status}).`, true);
+      return false;
+    }
+
+    showMsg(msgMonthly, "Monthly tersimpan ✅", false);
+    await loadMonthly();
+    return true;
+  }
+
+  // ===== SHA256 deviceKey =====
+  async function sha256Hex(input) {
+    const enc = new TextEncoder();
+    const buf = enc.encode(input);
+    const hash = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
+  }
+
+  async function generateDeviceKey() {
+    const id = String(dev_id.value || "").trim();
+    const pep = String(dev_pepper.value || "").trim();
+
+    if (!id || !pep) {
+      showMsg(msgUnlimited, "Device ID & Pepper wajib diisi untuk generate deviceKey.", true);
+      return "";
+    }
+
+    const key = await sha256Hex(id + "|" + pep);
+    dev_key.value = key;
+    showMsg(msgUnlimited, "deviceKey tergenerate ✅", false);
+    return key;
+  }
+
+  async function addUnlimited(keyMaybe) {
+    showMsg(msgUnlimited, "", false);
+    const k = String(keyMaybe || dev_key.value || "").trim();
+    if (!k) { showMsg(msgUnlimited, "deviceKey kosong.", true); return; }
+
+    const body = { addUnlimitedDeviceKey: k };
+    const r = await callAction("monthly.set", { method:"POST", body });
+
+    curlMonthly.textContent = curlExample("monthly.set", "POST", body);
+    jsonMonthly.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) { showMsg(msgUnlimited, `Gagal add unlimited (HTTP ${r.status}).`, true); return; }
+    showMsg(msgUnlimited, "Unlimited deviceKey ditambahkan ✅", false);
+    await loadMonthly();
+  }
+
+  async function removeUnlimited(keyMaybe) {
+    showMsg(msgUnlimited, "", false);
+    const k = String(keyMaybe || dev_key.value || "").trim();
+    if (!k) { showMsg(msgUnlimited, "deviceKey kosong.", true); return; }
+    if (!confirm("Remove unlimited deviceKey ini?")) return;
+
+    const body = { removeUnlimitedDeviceKey: k };
+    const r = await callAction("monthly.set", { method:"POST", body });
+
+    curlMonthly.textContent = curlExample("monthly.set", "POST", body);
+    jsonMonthly.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    if (!r.ok) { showMsg(msgUnlimited, `Gagal remove unlimited (HTTP ${r.status}).`, true); return; }
+    showMsg(msgUnlimited, "Unlimited deviceKey dihapus ✅", false);
+    await loadMonthly();
+  }
+
+  // ===== TOOLS: discount.apply =====
+  async function runApply() {
+    const body = {
+      amount: Number(String(t_amount.value || "0").trim()),
+      deviceId: String(t_deviceId.value || "").trim(),
+      voucher: String(t_voucher.value || "").trim(),
+      reserveTtlMs: Number(String(t_ttl.value || "360000").trim()),
+    };
+
+    const r = await callAction("discount.apply", { method:"POST", body });
+
+    curlApply.textContent = curlExample("discount.apply", "POST", body);
+    jsonApply.textContent = JSON.stringify({ ok:r.ok, status:r.status, data:r.json }, null, 2);
+
+    // kalau fail, tetap tampil json nya
+  }
+
+  // ===== AUTH FLOW =====
+  async function loginFlow() {
+    showMsg(loginMsg, "", false);
+
+    const key = String(adminKeyInput.value || "").trim();
+    if (!key) {
+      showMsg(loginMsg, "Admin key kosong.", true);
+      return;
+    }
+
+    ADMIN_KEY = key;
+
+    // test admin
+    const ok = await validateKey();
+    if (!ok) {
+      showMsg(loginMsg, "Admin key salah / unauthorized (401).", true);
+      ADMIN_KEY = "";
+      return;
+    }
+
+    localStorage.setItem(LS_ADMIN, ADMIN_KEY);
+
+    btnLogout.disabled = false;
+    showMsg(loginMsg, "Login OK ✅", false);
+
+    // unlock UI
+    setStatus(false);
+    showGate(false);
+
+    await refreshAll();
+  }
+
+  function logoutFlow() {
+    ADMIN_KEY = "";
+    localStorage.removeItem(LS_ADMIN);
+    btnLogout.disabled = true;
+    adminKeyInput.value = "";
+    showMsg(loginMsg, "", false);
+
+    setStatus(true);
+    showGate(true);
+  }
+
+  async function refreshAll() {
+    if (!ADMIN_KEY) return;
+    await loadVouchers();
+    await loadMonthly();
+    lastSync.textContent = nowStr();
+  }
+
+  // ===== EVENTS =====
+  navItems.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const t = btn.getAttribute("data-tab");
+      if (t) setTab(t);
+    });
+  });
+
+  btnLogin?.addEventListener("click", loginFlow);
+  btnLogout?.addEventListener("click", () => {
+    if (!confirm("Keluar (hapus key dari browser ini)?")) return;
+    logoutFlow();
+  });
+
+  btnOpenGate?.addEventListener("click", () => {
+    showGate(true);
+  });
+
+  btnRefreshAll?.addEventListener("click", async () => {
+    await refreshAll();
+  });
+
+  btnLoadVouchers?.addEventListener("click", loadVouchers);
+  onlyActiveToggle?.addEventListener("change", renderVouchers);
+
+  btnUpsertVoucher?.addEventListener("click", upsertVoucher);
+  btnDisableVoucher?.addEventListener("click", async () => {
+    await disableVoucher(v_code.value);
+  });
+
+  btnLoadMonthly?.addEventListener("click", loadMonthly);
+  btnSaveMonthly?.addEventListener("click", () => saveMonthly());
+
+  btnGenKey?.addEventListener("click", generateDeviceKey);
+  btnAddUnlimited?.addEventListener("click", async () => {
+    if (!dev_key.value) await generateDeviceKey();
+    await addUnlimited(dev_key.value);
+  });
+  btnRemoveUnlimited?.addEventListener("click", async () => {
+    await removeUnlimited(dev_key.value);
+  });
+
+  btnRunApply?.addEventListener("click", runApply);
+
+  // ===== INIT =====
+  function init() {
+    apiBaseText.textContent = apiBase();
+    lastSync.textContent = "—";
 
     // default tab
     setTab("vouchers");
 
-    // tutor default content
-    tutorBox.textContent = buildTutorText(null);
-  })();
-})();
+    // preload admin from storage
+    const saved = String(localStorage.getItem(LS_ADMIN) || "").trim();
+    if (saved) {
+      ADMIN_KEY = saved;
+      btnLogout.disabled = false;
 
-/* ====== small UI-only CSS injected via JS for row actions badges ====== */
-(() => {
-  const style = document.createElement("style");
-  style.textContent = `
-    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; font-weight: 900; }
-    .miniAction{ margin-top: 6px; display:flex; gap: 6px; flex-wrap: wrap; }
-    .miniBtn{
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.05);
-      color: rgba(255,255,255,.88);
-      padding: 7px 9px;
-      font-weight: 900;
-      font-size: 12px;
-      cursor:pointer;
-      transition: transform .12s ease, border-color .12s ease, background .12s ease;
-      -webkit-tap-highlight-color: transparent;
+      // unlock but still validate in background
+      setStatus(false);
+      showGate(false);
+
+      (async () => {
+        const ok = await validateKey();
+        if (!ok) {
+          // invalid key
+          logoutFlow();
+          showMsg(loginMsg, "Admin key tersimpan tapi invalid (401).", true);
+          return;
+        }
+        await refreshAll();
+      })();
+    } else {
+      setStatus(true);
+      showGate(true);
     }
-    .miniBtn:active{ transform: scale(.98); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); }
-    .miniBtn--primary{
-      color:#061022;
-      background: linear-gradient(90deg, rgba(124,58,237,1), rgba(34,211,238,1));
-      border-color: transparent;
-    }
-    .miniBtn--danger{
-      color: rgba(255,255,255,.95);
-      background: rgba(239,68,68,.16);
-      border-color: rgba(239,68,68,.35);
-    }
-    .badge{
-      display:inline-flex; align-items:center; justify-content:center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-weight: 900;
-      font-size: 12px;
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.04);
-    }
-    .badge--on{
-      background: rgba(34,197,94,.12);
-      border-color: rgba(34,197,94,.35);
-      color: rgba(209,255,224,.95);
-    }
-    .badge--off{
-      background: rgba(239,68,68,.12);
-      border-color: rgba(239,68,68,.30);
-      color: rgba(255,235,235,.92);
-    }
-  `;
-  document.head.appendChild(style);
+  }
+
+  init();
 })();
