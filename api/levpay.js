@@ -37,11 +37,11 @@ const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "";
 // - GITHUB_PATH=levpay-db.json  (atau folder/levpay-db.json)
 // - GITHUB_BRANCH=main (optional)
 const DB_PROVIDER = (process.env.DB_PROVIDER || "tmp").toLowerCase();
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
-const GITHUB_OWNER = process.env.GITHUB_OWNER || "";
-const GITHUB_REPO = process.env.GITHUB_REPO || "";
-const GITHUB_PATH = process.env.GITHUB_PATH || "levpay-db.json";
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
+const GH_TOKEN = process.env.GITHUB_TOKEN || "";
+const GH_OWNER = process.env.GITHUB_OWNER || "";
+const GH_REPO = process.env.GITHUB_REPO || "";
+const GH_PATH = process.env.GITHUB_PATH || "levpay-db.json";
+const GH_BRANCH = process.env.GITHUB_BRANCH || "main";
 
 // DeviceKey yang unlimited (bypass limit promo bulanan)
 // MASUKIN HASIL SHA256(deviceId + "|" + DEVICE_PEPPER)
