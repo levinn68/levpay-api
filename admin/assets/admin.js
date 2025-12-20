@@ -1,6 +1,6 @@
 (() => {
   // ✅ Hidden: jangan tampilkan endpoint di UI
-  const API_PATH = "/api/levpay";
+  const API_PATH = "/api/orkut";
   const KEY_STORAGE = "levpay_admin_key";
 
   // ====== helpers ======
