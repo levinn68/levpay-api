@@ -33,7 +33,7 @@
           Default API: <code class="mono">/api/orkut</code> (ubah di file <code class="mono">admin.js</code> kalau kamu pakai <code class="mono">/api/levpay</code>)
         </div>
 
-        <div id="loginMsg" class="msg"></div>
+        <div id="loginMsg" class="msg" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -120,7 +120,7 @@
                       </tr>
                     </thead>
                     <tbody id="voucherTbody">
-                      <tr><td colspan="8" class="muted">Belum ada data.</td></tr>
+                      <tr><td colspan="8" class="mutedCell">Belum ada data.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -190,7 +190,7 @@
                   </div>
                 </div>
 
-                <div id="msgVoucher" class="msg"></div>
+                <div id="msgVoucher" class="msg" style="display:none;"></div>
               </div>
             </div>
           </div>
@@ -237,7 +237,7 @@
 
                   <div class="field">
                     <label class="label">Max Uses / bulan (kosong = unlimited)</label>
-                    <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 1 (per device tetap 1×), ini limit total pemakaian global" />
+                    <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 999 (limit global/bulan)" />
                     <div class="hint">Ini limit total pemakaian promo per bulan (global). Device tetap 1×/bulan.</div>
                   </div>
                 </div>
@@ -253,7 +253,7 @@
                   </div>
                 </div>
 
-                <div id="msgMonthly" class="msg"></div>
+                <div id="msgMonthly" class="msg" style="display:none;"></div>
               </div>
             </div>
 
@@ -299,12 +299,12 @@
                       </tr>
                     </thead>
                     <tbody id="unlimitedTbody">
-                      <tr><td colspan="2" class="muted">Belum ada data.</td></tr>
+                      <tr><td colspan="2" class="mutedCell">Belum ada data.</td></tr>
                     </tbody>
                   </table>
                 </div>
 
-                <div id="msgUnlimited" class="msg"></div>
+                <div id="msgUnlimited" class="msg" style="display:none;"></div>
               </div>
             </div>
           </div>
