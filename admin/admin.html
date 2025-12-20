@@ -576,4 +576,374 @@
         el("tab-"+k).classList.toggle("hide", k !== name);
       });
     }
-    document.querySelectorAll(".tab").forE
+    document.querySelectorAll(".tab").forEach(t=>{
+      t.addEventListener("click", ()=> setTab(t.dataset.tab));
+    });
+
+    // ========= login overlay =========
+    function openLogin(){
+      el("loginHost").value = state.host || "";
+      el("loginKey").value  = state.key  || "";
+      el("loginOverlay").classList.remove("hide");
+    }
+    function closeLogin(){
+      el("loginOverlay").classList.add("hide");
+    }
+    el("btnLogin").addEventListener("click", openLogin);
+    el("btnCloseLogin").addEventListener("click", closeLogin);
+
+    el("btnSaveLogin").addEventListener("click", async ()=>{
+      state.host = normHost(el("loginHost").value);
+      state.key  = String(el("loginKey").value || "").trim();
+
+      localStorage.setItem(LS_HOST, state.host);
+      localStorage.setItem(LS_KEY,  state.key);
+
+      setPills();
+      closeLogin();
+      toast("Login", "Tersimpan. Coba refresh list voucher.");
+      // auto refresh
+      try { await voucherList(); } catch(e){ toast("Error", e.message); }
+    });
+
+    el("btnLogout").addEventListener("click", ()=>{
+      localStorage.removeItem(LS_HOST);
+      localStorage.removeItem(LS_KEY);
+      state.host=""; state.key="";
+      setPills();
+      toast("Logout", "Admin key dihapus dari device.");
+    });
+
+    // ========= render helpers =========
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
+    }
+
+    function badgeEnabled(enabled){
+      const on = enabled !== false;
+      return `<span class="badge"><span class="dot ${on?'good':'bad'}"></span>${on ? "enabled" : "disabled"}</span>`;
+    }
+
+    function setLoading(targetId, on=true){
+      const w = el(targetId);
+      if (!w) return;
+      if (on) w.innerHTML = `<div class="muted">Loading…</div>`;
+    }
+
+    // ========= vouchers =========
+    async function voucherList(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      setLoading("voucherTableWrap", true);
+      const out = await api("voucher.list", "POST", {});
+      const items = out?.data || [];
+      if (!items.length){
+        el("voucherTableWrap").innerHTML = `<div class="muted">Belum ada voucher.</div>`;
+        return;
+      }
+      const rows = items.map(v=>{
+        return `
+          <tr>
+            <td class="mono">${escapeHtml(v.code)}</td>
+            <td>${escapeHtml(v.name || v.code)}</td>
+            <td>${badgeEnabled(v.enabled)}</td>
+            <td class="mono">${escapeHtml(String(v.percent ?? ""))}%</td>
+            <td class="mono">${escapeHtml(String(v.maxRp ?? ""))}</td>
+            <td class="mono">${escapeHtml(String(v.uses ?? 0))}/${escapeHtml(String(v.maxUses ?? "∞"))}</td>
+            <td class="mono">${escapeHtml(v.expiresAt || "—")}</td>
+            <td>
+              <div class="row">
+                <button class="btn" data-act="fill" data-code="${escapeHtml(v.code)}">Fill</button>
+                <button class="btn danger" data-act="disable" data-code="${escapeHtml(v.code)}">Disable</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      el("voucherTableWrap").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Code</th><th>Name</th><th>Status</th><th>%</th><th>MaxRp</th><th>Uses</th><th>ExpiresAt</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+
+      el("voucherTableWrap").querySelectorAll("button[data-act]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const act = btn.dataset.act;
+          const code = btn.dataset.code;
+          if (act === "fill"){
+            el("v_code").value = code;
+            await voucherGet();
+          }
+          if (act === "disable"){
+            el("v_code").value = code;
+            await voucherDisable();
+            await voucherList();
+          }
+        });
+      });
+    }
+
+    function collectVoucherPayload(){
+      const code = String(el("v_code").value||"").trim();
+      if (!code) throw new Error("code required");
+      const enabledStr = el("v_enabled").value;
+      const payload = {
+        code,
+        name: String(el("v_name").value||"").trim() || undefined,
+        enabled: enabledStr === "true",
+        percent: el("v_percent").value === "" ? undefined : Number(el("v_percent").value),
+        maxRp:   el("v_maxRp").value   === "" ? undefined : Number(el("v_maxRp").value),
+        expiresAt: String(el("v_expiresAt").value||"").trim() || null,
+        maxUses: el("v_maxUses").value === "" ? undefined : Number(el("v_maxUses").value),
+        note: String(el("v_note").value||"").trim() || null,
+      };
+      // clean undefined
+      Object.keys(payload).forEach(k=> payload[k] === undefined && delete payload[k]);
+      return payload;
+    }
+
+    async function voucherUpsert(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const payload = collectVoucherPayload();
+      const out = await api("voucher.upsert", "POST", payload);
+      toast("Voucher", "Upsert OK: " + (out?.data?.code || payload.code));
+    }
+
+    async function voucherDisable(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const code = String(el("v_code").value||"").trim();
+      if (!code) { toast("Voucher", "Isi code dulu"); return; }
+      const out = await api("voucher.disable", "POST", { code });
+      toast("Voucher", "Disabled: " + (out?.data?.code || code));
+    }
+
+    async function voucherGet(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const code = String(el("v_code").value||"").trim();
+      if (!code) { toast("Voucher", "Isi code dulu"); return; }
+      // prefer GET with query param code (body also supported)
+      const out = await api("voucher.get", "GET", null, { code });
+      const v = out?.data;
+      if (!v) { toast("Voucher", "Tidak ditemukan"); return; }
+      el("v_name").value = v.name || "";
+      el("v_percent").value = v.percent ?? "";
+      el("v_maxRp").value = v.maxRp ?? "";
+      el("v_expiresAt").value = v.expiresAt || "";
+      el("v_maxUses").value = v.maxUses ?? "";
+      el("v_note").value = v.note || "";
+      el("v_enabled").value = (v.enabled !== false) ? "true" : "false";
+      toast("Voucher", "Loaded: " + v.code);
+    }
+
+    el("btnVoucherList").addEventListener("click", ()=> voucherList().catch(e=>toast("Error", e.message)));
+    el("btnVoucherUpsert").addEventListener("click", async ()=> {
+      try { await voucherUpsert(); await voucherList(); } catch(e){ toast("Error", e.message); }
+    });
+    el("btnVoucherDisable").addEventListener("click", async ()=> {
+      try { await voucherDisable(); await voucherList(); } catch(e){ toast("Error", e.message); }
+    });
+    el("btnVoucherGet").addEventListener("click", ()=> voucherGet().catch(e=>toast("Error", e.message)));
+
+    // ========= monthly =========
+    async function monthlyGet(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const out = await api("monthly.get", "GET");
+      el("monthlyDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
+      const p = out?.data || {};
+      el("m_enabled").value = (p.enabled !== false) ? "true" : "false";
+      el("m_name").value = p.name || "";
+      el("m_percent").value = p.percent ?? "";
+      el("m_maxRp").value = p.maxRp ?? "";
+      toast("Monthly", "Loaded");
+    }
+
+    async function monthlySet(payload){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const out = await api("monthly.set", "POST", payload);
+      el("monthlyDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
+      toast("Monthly", "Saved");
+    }
+
+    el("btnMonthlyGet").addEventListener("click", ()=> monthlyGet().catch(e=>toast("Error", e.message)));
+
+    el("btnMonthlySet").addEventListener("click", async ()=>{
+      try{
+        const payload = {
+          enabled: el("m_enabled").value === "true",
+          name: String(el("m_name").value||"").trim(),
+          percent: el("m_percent").value === "" ? undefined : Number(el("m_percent").value),
+          maxRp: el("m_maxRp").value === "" ? undefined : Number(el("m_maxRp").value),
+        };
+        Object.keys(payload).forEach(k=> payload[k] === undefined && delete payload[k]);
+        await monthlySet(payload);
+        await monthlyGet();
+      }catch(e){ toast("Error", e.message); }
+    });
+
+    el("btnMonthlyOff").addEventListener("click", async ()=>{
+      try{ await monthlySet({ enabled:false }); await monthlyGet(); }catch(e){ toast("Error", e.message); }
+    });
+
+    el("btnMonthlyOn").addEventListener("click", async ()=>{
+      try{ await monthlySet({ enabled:true }); await monthlyGet(); }catch(e){ toast("Error", e.message); }
+    });
+
+    el("btnMonthlyAddUnlimited").addEventListener("click", async ()=>{
+      try{
+        const k = String(el("m_deviceKey").value||"").trim();
+        if (!k) { toast("Monthly", "Isi deviceKey dulu"); return; }
+        await monthlySet({ addUnlimitedDeviceKey: k });
+        await monthlyGet();
+      }catch(e){ toast("Error", e.message); }
+    });
+
+    el("btnMonthlyRemoveUnlimited").addEventListener("click", async ()=>{
+      try{
+        const k = String(el("m_deviceKey").value||"").trim();
+        if (!k) { toast("Monthly", "Isi deviceKey dulu"); return; }
+        await monthlySet({ removeUnlimitedDeviceKey: k });
+        await monthlyGet();
+      }catch(e){ toast("Error", e.message); }
+    });
+
+    // ========= tx =========
+    function txRow(t){
+      const st = String(t.status || "pending").toLowerCase();
+      const dotClass = (st === "paid") ? "good" : (st === "expired" || st === "failed") ? "bad" : "";
+      return `
+        <tr>
+          <td class="mono">${escapeHtml(t.idTransaksi || t.id || "—")}</td>
+          <td>${escapeHtml(st)}</td>
+          <td class="mono">${escapeHtml(String(t.amountFinal ?? t.amount ?? "—"))}</td>
+          <td class="mono">${escapeHtml(t.updatedAt || t.createdAt || "—")}</td>
+          <td>${escapeHtml(t.voucher || (t.pricing?.applied?.[0]?.code) || "—")}</td>
+          <td><span class="badge"><span class="dot ${dotClass}"></span>${escapeHtml(st)}</span></td>
+          <td>
+            <button class="btn" data-tx="${escapeHtml(t.idTransaksi || t.id || "")}">Open</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    async function txList(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      setLoading("txTableWrap", true);
+      const limit = Number(el("tx_limit").value || 200);
+      const out = await api("tx.list", "GET", null, { limit });
+      const items = out?.data || [];
+      if (!items.length){
+        el("txTableWrap").innerHTML = `<div class="muted">Belum ada transaksi.</div>`;
+        return;
+      }
+      el("txTableWrap").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr><th>ID</th><th>Status</th><th>Amount</th><th>Updated</th><th>Voucher</th><th>Badge</th><th></th></tr>
+          </thead>
+          <tbody>${items.map(txRow).join("")}</tbody>
+        </table>
+      `;
+      el("txTableWrap").querySelectorAll("button[data-tx]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          el("tx_id").value = btn.dataset.tx;
+          await txGet();
+        });
+      });
+    }
+
+    async function txSearch(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      setLoading("txTableWrap", true);
+      const q = String(el("tx_q").value||"").trim();
+      const out = await api("tx.search", "GET", null, { q });
+      const items = out?.data || [];
+      if (!items.length){
+        el("txTableWrap").innerHTML = `<div class="muted">Tidak ada hasil untuk: <span class="mono">${escapeHtml(q)}</span></div>`;
+        return;
+      }
+      el("txTableWrap").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr><th>ID</th><th>Status</th><th>Amount</th><th>Updated</th><th>Voucher</th><th>Badge</th><th></th></tr>
+          </thead>
+          <tbody>${items.map(txRow).join("")}</tbody>
+        </table>
+      `;
+      el("txTableWrap").querySelectorAll("button[data-tx]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          el("tx_id").value = btn.dataset.tx;
+          await txGet();
+        });
+      });
+    }
+
+    async function txGet(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const idTransaksi = String(el("tx_id").value||"").trim();
+      if (!idTransaksi) { toast("TX", "Isi idTransaksi dulu"); return; }
+      const out = await api("tx.get", "GET", null, { idTransaksi });
+      el("txDump").textContent = JSON.stringify(out?.data ?? out, null, 2);
+      toast("TX", "Loaded: " + idTransaksi);
+    }
+
+    async function txClear(){
+      if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+      const ok = confirm("Yakin mau clear semua tx di /tmp? (ini bakal hilang semua transaksi di instance itu)");
+      if (!ok) return;
+      await api("tx.clear", "POST", {});
+      toast("TX", "Cleared");
+      el("txDump").textContent = "{}";
+      await txList();
+    }
+
+    el("btnTxList").addEventListener("click", ()=> txList().catch(e=>toast("Error", e.message)));
+    el("btnTxSearch").addEventListener("click", ()=> txSearch().catch(e=>toast("Error", e.message)));
+    el("btnTxGet").addEventListener("click", ()=> txGet().catch(e=>toast("Error", e.message)));
+    el("btnTxClear").addEventListener("click", ()=> txClear().catch(e=>toast("Error", e.message)));
+
+    // ========= debug =========
+    el("btnDbgSend").addEventListener("click", async ()=>{
+      try{
+        if (!state.key) { toast("Butuh Login", "Masukin X-Admin-Key dulu."); openLogin(); return; }
+        const action = String(el("dbg_action").value||"").trim();
+        if (!action) { toast("Debug", "Isi action dulu"); return; }
+        const method = String(el("dbg_method").value||"GET").toUpperCase();
+        let body = null;
+        if (method !== "GET"){
+          try { body = JSON.parse(el("dbg_body").value || "{}"); }
+          catch { throw new Error("Body JSON invalid"); }
+        }
+        const out = await api(action, method, body);
+        el("dbgDump").textContent = JSON.stringify(out, null, 2);
+        toast("Debug", "OK: " + action);
+      }catch(e){
+        el("dbgDump").textContent = JSON.stringify({error:e.message}, null, 2);
+        toast("Error", e.message);
+      }
+    });
+
+    // ========= init =========
+    setPills();
+
+    // auto open login if missing key
+    if (!state.key){
+      openLogin();
+    } else {
+      // preload
+      voucherList().catch(()=>{});
+      monthlyGet().catch(()=>{});
+      txList().catch(()=>{});
+    }
+  </script>
+</body>
+</html>
