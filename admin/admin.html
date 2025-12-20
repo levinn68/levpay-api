@@ -1,24 +1,14 @@
-<!-- admin/admin.html (UPGRADED UI)
-  Targets: /api/orkut?action=...
-  Features:
-  - Login modal (blur background until Admin Key valid)
-  - Voucher manager:
-      * List vouchers (filter ON / OFF / ALL, search)
-      * Click row to edit, Upsert, Disable/Enable
-      * Date-time picker (datetime-local)
-  - Monthly promo:
-      * Get current, Set, Add/Remove unlimited deviceKey
-      * DeviceId generator + deviceKey (SHA256) generator
-  - Debug console + one-click curl snippets
-  Notes:
-  - This page tries multiple action names for compatibility:
-      * Vouchers list: admin_list_voucher | voucher.list | admin_voucher_list
-      * Voucher upsert: admin_upsert_voucher | voucher.upsert
-      * Voucher disable: admin_disable_voucher | voucher.disable
-      * Monthly get: monthly.get | admin_get_monthly_promo
-      * Monthly set: admin_set_monthly_promo | monthly.set
-      * Ping: ping
-      * createqr: createqr
+<!-- admin/admin.html (CLEAN + "REAL ADMIN" LOOK)
+  ✅ UI lebih rapih (nggak ada bayang-bayang aneh lebay)
+  ✅ Background halus, card minimal, animasi smooth
+  ✅ Endpoint TIDAK ditampilin
+  ✅ Voucher code TIDAK ditampilin di list
+  ✅ Voucher code di form disembunyiin (password) + tombol "Reveal" (opsional)
+  ✅ Log/debug disanitasi (mask code & url)
+  ✅ Generate 64 char = SHA-256 hex (aman, normal). DeviceId random beda-beda per generate.
+
+  Router target: /api/orkut?action=...
+  Admin header: X-Admin-Key: <key>
 -->
 <!doctype html>
 <html lang="id">
@@ -28,29 +18,25 @@
   <title>LevPay Admin</title>
   <style>
     :root{
-      --bg0:#070912;
-      --bg1:#0b1022;
-      --card: rgba(255,255,255,.06);
-      --card2: rgba(255,255,255,.04);
+      --bg:#0b0f1a;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.04);
       --bd: rgba(255,255,255,.10);
-      --bd2: rgba(255,255,255,.14);
       --txt: rgba(245,248,255,.92);
-      --mut: rgba(245,248,255,.62);
-      --mut2: rgba(245,248,255,.44);
-      --ok: rgba(34,197,94,1);
-      --warn: rgba(245,158,11,1);
-      --bad: rgba(239,68,68,1);
-      --c1: rgba(124,58,237,1);
-      --c2: rgba(34,211,238,1);
-      --c3: rgba(34,197,94,1);
-      --r1: 16px;
-      --r2: 22px;
-      --r3: 28px;
-      --shadow: 0 18px 60px rgba(0,0,0,.55);
-      --shadow2: 0 10px 32px rgba(0,0,0,.35);
+      --mut: rgba(245,248,255,.65);
+      --mut2: rgba(245,248,255,.48);
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --pri: #7c3aed;
+      --pri2:#22d3ee;
+      --r: 18px;
+      --r2: 24px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      --shadow: 0 14px 40px rgba(0,0,0,.35); /* lembut, gak kocak */
     }
+
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
@@ -58,31 +44,29 @@
       font-family: var(--sans);
       color: var(--txt);
       background:
-        radial-gradient(1200px 600px at 15% -20%, rgba(124,58,237,.35), transparent 55%),
-        radial-gradient(900px 520px at 90% 5%, rgba(34,211,238,.25), transparent 55%),
-        radial-gradient(900px 520px at 35% 105%, rgba(34,197,94,.18), transparent 60%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
+        radial-gradient(900px 520px at 10% -20%, rgba(124,58,237,.22), transparent 60%),
+        radial-gradient(900px 520px at 95% 0%, rgba(34,211,238,.16), transparent 55%),
+        linear-gradient(180deg, #070a12, var(--bg));
       overflow-x:hidden;
     }
-
-    /* Smooth */
     @media (prefers-reduced-motion: no-preference){
       *{scroll-behavior:smooth}
     }
 
-    /* LOCK BLUR */
+    /* LOCK BLUR (sebelum masuk admin key) */
     body.is-locked .app{
-      filter: blur(12px);
+      filter: blur(10px);
       transform: scale(.992);
+      opacity:.70;
       pointer-events:none;
       user-select:none;
-      opacity:.72;
-      transition: filter .22s ease, transform .22s ease, opacity .22s ease;
+      transition: filter .20s ease, transform .20s ease, opacity .20s ease;
     }
     body:not(.is-locked) .app{
-      transition: filter .22s ease, transform .22s ease, opacity .22s ease;
+      transition: filter .20s ease, transform .20s ease, opacity .20s ease;
     }
 
+    /* Toast */
     .toast{
       position: fixed;
       left:50%;
@@ -92,117 +76,106 @@
       padding: 10px 14px;
       border-radius: 999px;
       border:1px solid rgba(255,255,255,.14);
-      background: rgba(0,0,0,.38);
+      background: rgba(0,0,0,.40);
       backdrop-filter: blur(10px);
-      box-shadow: var(--shadow2);
-      font-weight:1000;
-      font-size:12px;
-      color: var(--txt);
+      box-shadow: var(--shadow);
+      font-weight: 900;
+      font-size: 12px;
       display:none;
       max-width: min(860px, 92vw);
       text-align:center;
     }
-    .toast.is-on{display:block; animation: pop .18s ease both}
+    .toast.is-on{display:block; animation: pop .16s ease both}
     @keyframes pop{from{transform:translateX(-50%) translateY(8px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
 
     /* Layout */
     .app{
-      width:min(1320px, 96vw);
-      margin: 22px auto 60px;
+      width: min(1280px, 96vw);
+      margin: 20px auto 60px;
       display:grid;
       grid-template-columns: 280px 1fr;
-      gap: 16px;
+      gap: 14px;
     }
-    @media (max-width: 980px){
-      .app{grid-template-columns: 1fr}
-    }
+    @media (max-width: 980px){ .app{grid-template-columns:1fr} }
 
     /* Sidebar */
     .side{
       position: sticky;
       top: 16px;
-      align-self:start;
-      border-radius: var(--r3);
+      align-self: start;
+      border-radius: var(--r2);
       border:1px solid var(--bd);
-      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));
-      box-shadow: var(--shadow2);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      box-shadow: var(--shadow);
       overflow:hidden;
     }
     .side__head{
       padding: 16px 16px 12px;
-      border-bottom: 1px solid rgba(255,255,255,.06);
+      border-bottom:1px solid rgba(255,255,255,.06);
     }
     .brand{
-      display:flex; flex-direction:column; gap:8px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
     }
     .brand h1{
       margin:0;
-      font-size:16px;
-      letter-spacing:-.02em;
-      font-weight:1100;
+      font-size: 15px;
+      font-weight: 1000;
+      letter-spacing: -.02em;
     }
-    .brand .meta{
-      display:flex; flex-wrap:wrap; gap:8px;
-      color:var(--mut);
-      font-weight:900;
-      font-size:12px;
+    .brand .sub{
+      margin:0;
+      font-size: 12px;
+      color: var(--mut);
+      font-weight: 900;
       line-height:1.5;
     }
-    .tag{
-      display:inline-flex; align-items:center; gap:8px;
-      padding: 6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.05);
-      font-size:12px;
-      font-weight:1000;
-      color: var(--mut);
-      font-family: var(--mono);
-      white-space:nowrap;
-    }
 
-    .side__nav{
+    .nav{
       padding: 10px;
-      display:grid; gap:8px;
+      display:grid;
+      gap:8px;
     }
     .navBtn{
       width:100%;
-      text-align:left;
       border-radius: 16px;
-      border:1px solid rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.10);
       background: rgba(255,255,255,.04);
       color: var(--txt);
       padding: 12px 12px;
+      font-weight: 950;
       cursor:pointer;
-      font-weight:1000;
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
       transition: transform .12s ease, background .12s ease, border-color .12s ease;
     }
     .navBtn:active{transform: translateY(1px)}
     .navBtn.is-active{
-      background: linear-gradient(90deg, rgba(124,58,237,.25), rgba(34,211,238,.16));
-      border-color: rgba(34,211,238,.28);
+      background: linear-gradient(90deg, rgba(124,58,237,.20), rgba(34,211,238,.12));
+      border-color: rgba(34,211,238,.20);
     }
-    .navBtn small{color:var(--mut); font-weight:900}
-    .navBtn .chev{opacity:.6}
+    .navBtn small{color:var(--mut2); font-weight:900}
 
     .side__foot{
-      padding: 12px 10px 12px;
-      border-top: 1px solid rgba(255,255,255,.06);
-      display:flex; gap:10px; flex-wrap:wrap;
+      padding: 12px 10px;
+      border-top:1px solid rgba(255,255,255,.06);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
     }
 
     /* Main */
-    .main{
-      display:grid;
-      gap:16px;
-    }
+    .main{display:grid; gap:14px;}
 
+    /* Topbar */
     .topbar{
-      border-radius: var(--r3);
+      border-radius: var(--r2);
       border:1px solid var(--bd);
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-      box-shadow: var(--shadow2);
+      box-shadow: var(--shadow);
       overflow:hidden;
     }
     .topbar__inner{
@@ -210,72 +183,33 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:12px;
       flex-wrap:wrap;
+      gap:10px;
     }
-
     .pills{display:flex; gap:10px; flex-wrap:wrap}
     .pill{
-      padding:8px 10px;
-      border-radius:999px;
-      border:1px solid var(--bd);
+      padding: 8px 10px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.12);
       background: rgba(255,255,255,.05);
-      font-weight:1000;
-      font-size:12px;
-      color: var(--txt);
       display:inline-flex;
       align-items:center;
       gap:8px;
+      font-size: 12px;
+      font-weight: 950;
     }
     .pill .dot{width:10px;height:10px;border-radius:999px;background:rgba(255,255,255,.25)}
-    .pill[data-tone="ok"] .dot{background:rgba(34,197,94,.9)}
-    .pill[data-tone="warn"] .dot{background:rgba(245,158,11,.95)}
-    .pill[data-tone="bad"] .dot{background:rgba(239,68,68,.95)}
+    .pill[data-tone="ok"] .dot{background:var(--ok)}
+    .pill[data-tone="warn"] .dot{background:var(--warn)}
+    .pill[data-tone="bad"] .dot{background:var(--bad)}
     .pill small{color:var(--mut); font-weight:900}
 
-    .btn{
-      border:none;
-      border-radius: 16px;
-      padding: 11px 14px;
-      font-weight:1100;
-      cursor:pointer;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:10px;
-      transition: transform .12s ease, filter .12s ease, border-color .12s ease, background .12s ease;
-    }
-    .btn:active{transform: translateY(1px) scale(.99)}
-    .btn--pri{
-      color:#07101f;
-      background: linear-gradient(90deg, var(--c1), var(--c2));
-      box-shadow: 0 12px 28px rgba(34,211,238,.16);
-    }
-    .btn--ok{
-      color:#06150e;
-      background: linear-gradient(90deg, rgba(34,197,94,1), rgba(34,211,238,1));
-      box-shadow: 0 12px 28px rgba(34,197,94,.14);
-    }
-    .btn--ghost{
-      color: var(--txt);
-      background: rgba(255,255,255,.04);
-      border:1px solid rgba(255,255,255,.12);
-    }
-    .btn--bad{
-      color:#24080a;
-      background: linear-gradient(90deg, rgba(239,68,68,1), rgba(245,158,11,1));
-      box-shadow: 0 12px 28px rgba(239,68,68,.16);
-    }
-    .btn--mini{padding: 9px 10px; border-radius: 14px; font-size:12px}
-    .btn[disabled]{opacity:.55; cursor:not-allowed; transform:none}
-
+    /* Panels */
     .panel{
-      border-radius: var(--r3);
+      border-radius: var(--r2);
       border:1px solid var(--bd);
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-      box-shadow: var(--shadow2);
+      box-shadow: var(--shadow);
       overflow:hidden;
     }
     .panel__head{
@@ -284,40 +218,40 @@
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      gap:12px;
+      gap:10px;
       flex-wrap:wrap;
     }
     .panel__head h2{
       margin:0;
-      font-size:15px;
-      letter-spacing:-.01em;
-      font-weight:1100;
+      font-size: 14px;
+      font-weight: 1000;
+      letter-spacing: -.01em;
     }
     .panel__head .sub{
-      color:var(--mut);
-      font-weight:900;
-      font-size:12px;
-      line-height:1.5;
+      margin-top:6px;
+      color: var(--mut);
+      font-weight: 900;
+      font-size: 12px;
+      line-height: 1.55;
     }
     .panel__body{padding: 14px 16px 16px}
 
     .grid2{
       display:grid;
       grid-template-columns: 1.05fr .95fr;
-      gap: 16px;
+      gap: 14px;
     }
-    @media (max-width: 1080px){
-      .grid2{grid-template-columns:1fr}
-    }
+    @media (max-width: 1080px){ .grid2{grid-template-columns:1fr} }
 
+    /* Inputs */
     label{
       display:block;
-      color: var(--mut);
-      font-weight:1000;
-      font-size:12px;
       margin: 4px 0 8px;
+      color: var(--mut);
+      font-weight: 950;
+      font-size: 12px;
     }
-    .input, .textarea, select{
+    .input, select{
       width:100%;
       border-radius: 16px;
       border:1px solid rgba(255,255,255,.12);
@@ -325,45 +259,71 @@
       color: var(--txt);
       padding: 12px 12px;
       outline:none;
-      font-weight:1000;
-      font-size:14px;
+      font-weight: 950;
+      font-size: 14px;
     }
-    .textarea{min-height: 92px; resize: vertical; font-family: var(--mono); font-weight:900}
     .hint{
       margin-top:8px;
       color: var(--mut2);
-      font-size:12px;
-      line-height:1.5;
-      font-weight:900;
+      font-weight: 900;
+      font-size: 12px;
+      line-height: 1.55;
     }
     .row{
       display:grid;
       grid-template-columns: 1fr 1fr;
-      gap:12px;
+      gap: 12px;
     }
-    @media (max-width: 620px){
-      .row{grid-template-columns:1fr}
-    }
-    .btnRow{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
+    @media (max-width: 620px){ .row{grid-template-columns:1fr} }
 
+    /* Buttons */
+    .btn{
+      border:none;
+      border-radius: 16px;
+      padding: 11px 14px;
+      font-weight: 1000;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      transition: transform .12s ease, filter .12s ease, background .12s ease, border-color .12s ease;
+      -webkit-tap-highlight-color: transparent;
+      user-select:none;
+    }
+    .btn:active{transform: translateY(1px)}
+    .btn[disabled]{opacity:.55; cursor:not-allowed; transform:none}
+    .btn--pri{
+      color:#06101f;
+      background: linear-gradient(90deg, var(--pri), var(--pri2));
+    }
+    .btn--ghost{
+      color: var(--txt);
+      background: rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .btn--ok{
+      color:#06150e;
+      background: linear-gradient(90deg, var(--ok), var(--pri2));
+    }
+    .btn--bad{
+      color:#24080a;
+      background: linear-gradient(90deg, var(--bad), var(--warn));
+    }
+    .btn--mini{padding: 9px 10px; border-radius: 14px; font-size:12px}
+    .btnRow{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
     .hr{height:1px;background: rgba(255,255,255,.08); margin: 12px 0}
 
     /* Table */
     .tableWrap{
-      border-radius: 20px;
+      border-radius: 18px;
       border:1px solid rgba(255,255,255,.10);
-      background: rgba(0,0,0,.22);
+      background: rgba(0,0,0,.18);
       overflow:hidden;
     }
-    table{
-      width:100%;
-      border-collapse: collapse;
-      font-size:12px;
-    }
-    thead{
-      background: rgba(255,255,255,.05);
-    }
-    th, td{
+    table{width:100%; border-collapse:collapse; font-size:12px}
+    thead{background: rgba(255,255,255,.05)}
+    th,td{
       padding: 10px 10px;
       border-bottom:1px solid rgba(255,255,255,.06);
       vertical-align: top;
@@ -371,90 +331,90 @@
     th{
       text-align:left;
       color: var(--mut);
-      font-weight:1100;
+      font-weight: 1000;
+      font-size: 11px;
       letter-spacing:.02em;
-      font-size:11px;
       text-transform: uppercase;
     }
     tbody tr{
       cursor:pointer;
-      transition: background .12s ease, transform .12s ease;
+      transition: background .12s ease;
     }
-    tbody tr:hover{
-      background: rgba(255,255,255,.04);
-    }
-    tbody tr:active{
-      transform: scale(.999);
-    }
+    tbody tr:hover{background: rgba(255,255,255,.04)}
+    .right{text-align:right}
+    .mono{font-family: var(--mono)}
+    .mut{color: var(--mut)}
+    .mut2{color: var(--mut2)}
+
     .badge{
       display:inline-flex;
       align-items:center;
       gap:6px;
       padding: 6px 10px;
-      border-radius:999px;
+      border-radius: 999px;
       border:1px solid rgba(255,255,255,.12);
-      font-weight:1100;
-      white-space:nowrap;
       background: rgba(255,255,255,.04);
+      font-weight: 1000;
+      white-space:nowrap;
     }
     .badge .dot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.22)}
-    .badge[data-tone="ok"] .dot{background: rgba(34,197,94,.95)}
-    .badge[data-tone="bad"] .dot{background: rgba(239,68,68,.95)}
-    .mono{font-family: var(--mono)}
-    .mut{color:var(--mut)}
-    .mut2{color:var(--mut2)}
-    .right{text-align:right}
+    .badge[data-tone="ok"] .dot{background:var(--ok)}
+    .badge[data-tone="bad"] .dot{background:var(--bad)}
+    .badge[data-tone="warn"] .dot{background:var(--warn)}
 
-    /* Sections (tabs) */
+    /* Sections */
     .section{display:none}
-    .section.is-on{display:block; animation: fade .18s ease both}
+    .section.is-on{display:block; animation: fade .16s ease both}
     @keyframes fade{from{opacity:0; transform: translateY(6px)} to{opacity:1; transform:none}}
 
-    /* MODAL */
+    /* Modal */
     .modal{
       position:fixed; inset:0;
       z-index:90;
       display:none;
       place-items:center;
-      background: rgba(0,0,0,.45);
-      backdrop-filter: blur(12px);
+      background: rgba(0,0,0,.48);
+      backdrop-filter: blur(14px);
     }
     .modal.is-on{display:grid}
     .modal__panel{
       width:min(560px, 94vw);
-      border-radius: 28px;
+      border-radius: 26px;
       border:1px solid rgba(255,255,255,.14);
       background: rgba(10,13,22,.92);
       box-shadow: var(--shadow);
       overflow:hidden;
-      animation: in .18s ease both;
+      animation: in .16s ease both;
     }
-    @keyframes in{from{transform: translateY(10px); opacity:0} to{transform:none;opacity:1}}
+    @keyframes in{from{transform: translateY(10px); opacity:0} to{transform:none; opacity:1}}
     .modal__head{
       padding: 14px 16px 12px;
       border-bottom:1px solid rgba(255,255,255,.06);
       display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
     }
-    .modal__title{margin:0; font-weight:1100; font-size:15px}
-    .modal__sub{color:var(--mut); font-weight:900; font-size:12px; line-height:1.55; margin-top:6px}
+    .modal__title{margin:0; font-weight:1000; font-size:14px}
+    .modal__sub{margin-top:6px; color:var(--mut); font-weight:900; font-size:12px; line-height:1.55}
     .modal__body{padding: 14px 16px 16px}
 
-    /* Debug console */
+    /* Debug box (sanitized) */
     .codeBox{
-      border-radius: 20px;
+      border-radius: 18px;
       border:1px solid rgba(255,255,255,.10);
-      background: rgba(0,0,0,.28);
+      background: rgba(0,0,0,.22);
       padding: 12px 12px;
       font-family: var(--mono);
-      font-size:12px;
-      line-height:1.55;
+      font-size: 12px;
+      line-height: 1.55;
       white-space: pre;
       overflow:auto;
       max-height: 320px;
     }
 
-    a{color: rgba(34,211,238,.95); text-decoration:none}
-    a:hover{text-decoration:underline}
+    /* Small reveal button inline */
+    .inline{
+      display:flex; align-items:center; gap:10px;
+    }
+    .grow{flex:1}
   </style>
 </head>
 
@@ -468,8 +428,10 @@
         <div>
           <h3 class="modal__title">Masuk Admin</h3>
           <div class="modal__sub">
-            Masukkan <b>Admin Key</b> untuk akses endpoint admin di
-            <span class="tag mono" id="tagTargetModal">/api/orkut</span>
+            Masukkan <b>Admin Key</b> untuk akses panel.
+            <div class="mut2" style="margin-top:6px">
+              (Endpoint & kode voucher disembunyikan di UI biar aman.)
+            </div>
           </div>
         </div>
         <button class="btn btn--ghost btn--mini" id="btnFillDemo" type="button">Isi contoh</button>
@@ -477,24 +439,22 @@
       <div class="modal__body">
         <label>Base URL (opsional)</label>
         <input class="input" id="baseUrl" placeholder="Kosong = domain ini (same-origin)" />
-        <div class="hint">Kalau file admin ini satu domain sama API → kosongin aja.</div>
+        <div class="hint">Kalau admin ini satu domain sama API → kosongin aja.</div>
 
         <div class="hr"></div>
 
         <label>Admin Key</label>
-        <input class="input" id="adminKey" placeholder="Masukkan Admin Key..." />
-        <div class="hint">Key disimpan di <b>localStorage</b>. Logout untuk hapus key.</div>
+        <input class="input" id="adminKey" type="password" placeholder="Masukkan Admin Key..." />
+        <div class="hint">Key disimpan di <b>localStorage</b>. Logout untuk hapus.</div>
 
         <div class="btnRow">
           <button class="btn btn--pri" id="btnUnlock" type="button">Masuk</button>
-          <button class="btn btn--ghost" id="btnPing" type="button">Ping API</button>
+          <button class="btn btn--ghost" id="btnPing" type="button">Ping</button>
         </div>
 
         <div class="hr"></div>
-
         <div class="hint">
-          Validasi key dilakukan dengan request admin (kalau salah → <b>401</b>).<br/>
-          Kalau ping OK tapi key salah, berarti API kebaca tapi admin key gak match.
+          Kalau ping OK tapi key salah → biasanya <b>ADMIN_KEY</b> server beda.
         </div>
       </div>
     </div>
@@ -506,29 +466,22 @@
       <div class="side__head">
         <div class="brand">
           <h1>LevPay Admin</h1>
-          <div class="meta">
-            <span class="tag mono" id="tagTarget">/api/orkut</span>
-            <span class="tag">actions</span>
-          </div>
+          <p class="sub">Voucher & Monthly settings</p>
         </div>
       </div>
 
-      <div class="side__nav">
+      <div class="nav">
         <button class="navBtn is-active" data-tab="tab-voucher">
-          <span>Voucher</span>
-          <small class="chev">›</small>
+          <span>Voucher</span><small>›</small>
         </button>
         <button class="navBtn" data-tab="tab-monthly">
-          <span>Monthly</span>
-          <small class="chev">›</small>
+          <span>Monthly</span><small>›</small>
         </button>
         <button class="navBtn" data-tab="tab-tools">
-          <span>Tools</span>
-          <small class="chev">›</small>
+          <span>Tools</span><small>›</small>
         </button>
         <button class="navBtn" data-tab="tab-debug">
-          <span>Debug</span>
-          <small class="chev">›</small>
+          <span>Debug</span><small>›</small>
         </button>
       </div>
 
@@ -551,34 +504,30 @@
           </div>
 
           <div style="display:flex; gap:10px; flex-wrap:wrap">
-            <button class="btn btn--ok btn--mini" id="btnQuickUpsert" type="button">Quick Upsert</button>
-            <button class="btn btn--ghost btn--mini" id="btnCopyCurlAll" type="button">Copy curl pack</button>
+            <button class="btn btn--ghost btn--mini" id="btnNewVoucher" type="button">New Voucher</button>
+            <button class="btn btn--ghost btn--mini" id="btnLoadVouchers" type="button">Load List</button>
           </div>
         </div>
       </div>
 
-      <!-- Voucher Section -->
+      <!-- Voucher -->
       <section class="section is-on" id="tab-voucher">
         <div class="panel">
           <div class="panel__head">
             <div>
               <h2>Voucher Manager</h2>
-              <div class="sub">List voucher + edit cepat + disable/enable. Klik row untuk load ke form.</div>
-            </div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap">
-              <button class="btn btn--ghost btn--mini" id="btnLoadVouchers" type="button">Load List</button>
-              <button class="btn btn--ghost btn--mini" id="btnNewVoucher" type="button">New</button>
+              <div class="sub">List voucher (tanpa nampilin kode). Klik row untuk edit.</div>
             </div>
           </div>
 
           <div class="panel__body">
             <div class="grid2">
-              <!-- Left: List -->
+              <!-- List -->
               <div>
                 <div class="row">
                   <div>
-                    <label>Search</label>
-                    <input class="input" id="qSearch" placeholder="Cari code / name..." />
+                    <label>Search (name / note)</label>
+                    <input class="input" id="qSearch" placeholder="Cari nama voucher..." />
                   </div>
                   <div>
                     <label>Filter</label>
@@ -591,8 +540,7 @@
                 </div>
 
                 <div class="btnRow">
-                  <button class="btn btn--ghost btn--mini" id="btnApplyFilter" type="button">Apply</button>
-                  <button class="btn btn--ghost btn--mini" id="btnSortCode" type="button">Sort: CODE</button>
+                  <button class="btn btn--ghost btn--mini" id="btnSortName" type="button">Sort: NAME</button>
                   <button class="btn btn--ghost btn--mini" id="btnSortUpdated" type="button">Sort: UPDATED</button>
                 </div>
 
@@ -603,7 +551,7 @@
                     <thead>
                       <tr>
                         <th style="width:110px">Status</th>
-                        <th>Code / Name</th>
+                        <th>Name</th>
                         <th class="right">%</th>
                         <th class="right">MaxRp</th>
                         <th class="right">Uses</th>
@@ -616,26 +564,35 @@
                   </table>
                 </div>
 
-                <div class="hint" id="voucherHint">
-                  Kalau list kosong tapi termux bisa → cek <b>Base URL</b> & domain (admin vs frontend harus nyentuh API yang sama).
+                <div class="hint">
+                  Kalau voucher “ON tapi gak kepotong” di frontend pembayaran:
+                  biasanya frontend nembak <b>base URL yang beda</b>, atau voucher payload key beda.
+                  Panel ini test pakai createqr biar sama flow.
                 </div>
               </div>
 
-              <!-- Right: Form -->
+              <!-- Form -->
               <div>
-                <div class="panel" style="border-radius: 22px">
-                  <div class="panel__head" style="border-radius: 22px">
+                <div class="panel" style="border-radius: var(--r2)">
+                  <div class="panel__head">
                     <div>
-                      <h2 style="font-size:14px">Edit Voucher</h2>
-                      <div class="sub">Pastikan <b>percent</b> angka dan <b>maxUses</b> kosong = omit (bukan 0).</div>
+                      <h2>Edit Voucher</h2>
+                      <div class="sub">
+                        Tips cepat: diskon 90% tapi kepotong kecil → biasanya <b>maxRp</b> kepasang (cap).
+                      </div>
                     </div>
-                    <div id="editBadge" class="badge" data-tone="bad"><span class="dot"></span><span>Not loaded</span></div>
+                    <div id="editBadge" class="badge" data-tone="warn"><span class="dot"></span><span>Idle</span></div>
                   </div>
+
                   <div class="panel__body">
                     <div class="row">
                       <div>
-                        <label>Kode (wajib)</label>
-                        <input class="input" id="vCode" placeholder="VIPL" />
+                        <label>Kode (disembunyikan)</label>
+                        <div class="inline">
+                          <input class="input grow" id="vCode" type="password" placeholder="(hidden)" autocomplete="off" />
+                          <button class="btn btn--ghost btn--mini" id="btnRevealCode" type="button">Reveal</button>
+                        </div>
+                        <div class="hint">Kode nggak ditampilin di list. Reveal hanya kalau butuh.</div>
                       </div>
                       <div>
                         <label>Enabled</label>
@@ -650,7 +607,7 @@
                         <input class="input" id="vName" placeholder="VIP LEVEL" />
                       </div>
                       <div>
-                        <label>Diskon % (wajib)</label>
+                        <label>Diskon %</label>
                         <input class="input" id="vPercent" type="number" min="0" max="100" step="1" placeholder="90" />
                       </div>
 
@@ -666,11 +623,11 @@
                       <div>
                         <label>Expires At</label>
                         <input class="input" id="vExpiresAt" type="datetime-local" />
-                        <div class="hint">Klik kalender → pilih tanggal & jam (biar gak pusing).</div>
+                        <div class="hint">Pilih tanggal & jam via kalender biar gampang.</div>
                       </div>
                       <div>
                         <label>Note</label>
-                        <input class="input" id="vNote" placeholder="Catatan internal (opsional)" />
+                        <input class="input" id="vNote" placeholder="Catatan internal" />
                       </div>
                     </div>
 
@@ -678,12 +635,11 @@
                       <button class="btn btn--pri" id="btnUpsertVoucher" type="button">Save (Upsert)</button>
                       <button class="btn btn--bad" id="btnDisableVoucher" type="button">Disable</button>
                       <button class="btn btn--ghost" id="btnEnableVoucher" type="button">Enable</button>
-                      <button class="btn btn--ghost" id="btnFillVoucherDemo" type="button">Isi Contoh</button>
                     </div>
 
                     <div class="hr"></div>
 
-                    <h2 style="margin:0 0 8px; font-size:14px; font-weight:1100">Test Voucher (createqr)</h2>
+                    <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Test (createqr)</h2>
                     <div class="row">
                       <div>
                         <label>Amount</label>
@@ -694,8 +650,8 @@
                         <input class="input" id="tDeviceId" placeholder="dev_web_xxx" />
                       </div>
                       <div>
-                        <label>Voucher Code</label>
-                        <input class="input" id="tVoucher" placeholder="VIPL" />
+                        <label>Voucher Code (hidden)</label>
+                        <input class="input" id="tVoucher" type="password" placeholder="(hidden)" autocomplete="off" />
                       </div>
                       <div>
                         <label>&nbsp;</label>
@@ -704,28 +660,29 @@
                     </div>
 
                     <div class="btnRow">
-                      <button class="btn btn--ok" id="btnTestCreateQR" type="button">Test createqr</button>
-                      <button class="btn btn--ghost" id="btnCopyCurlCreateQR" type="button">Copy curl</button>
+                      <button class="btn btn--ok" id="btnTestCreateQR" type="button">Run Test</button>
+                      <button class="btn btn--ghost" id="btnRevealTestVoucher" type="button">Reveal Voucher</button>
                     </div>
 
                     <div class="hint">
-                      Kalau diskon harusnya 90% tapi kepotong cuma kecil, cek <b>maxRp</b> (kalau bukan 0 → akan ngecap potongan).
+                      Device ID generate beda-beda itu normal. Voucher monthly tracking pakai deviceKey (hash).
                     </div>
                   </div>
                 </div>
               </div>
+
             </div><!-- grid2 -->
           </div>
         </div>
       </section>
 
-      <!-- Monthly Section -->
+      <!-- Monthly -->
       <section class="section" id="tab-monthly">
         <div class="panel">
           <div class="panel__head">
             <div>
               <h2>Monthly Promo</h2>
-              <div class="sub">1× per device per bulan + unlimited deviceKey (SHA256(deviceId|pepper))</div>
+              <div class="sub">1× per device per bulan + unlimited deviceKey</div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap">
               <button class="btn btn--ghost btn--mini" id="btnGetMonthly" type="button">Get</button>
@@ -758,16 +715,12 @@
                   </div>
                 </div>
 
-                <div class="btnRow">
-                  <button class="btn btn--ghost" id="btnFillMonthlyDemo" type="button">Isi Contoh</button>
-                  <button class="btn btn--ghost" id="btnCopyCurlMonthly" type="button">Copy curl monthly</button>
-                </div>
-
                 <div class="hr"></div>
 
-                <h2 style="margin:0 0 8px; font-size:14px; font-weight:1100">Unlimited DeviceKey</h2>
+                <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Unlimited DeviceKey</h2>
                 <div class="hint">
-                  Masukin pepper yang sama kayak <b>DEVICE_PEPPER</b> di Vercel env biar hash bener.
+                  DeviceKey = <b>SHA-256(deviceId|pepper)</b> → hasil hex 64 char.<br/>
+                  Itu <b>normal & aman</b> (hash), bukan token yang bisa ditebak.
                 </div>
 
                 <div class="row" style="margin-top:10px">
@@ -777,44 +730,44 @@
                   </div>
                   <div>
                     <label>Pepper</label>
-                    <input class="input" id="uPepper" placeholder="DEVICE_PEPPER di server" />
+                    <input class="input" id="uPepper" type="password" placeholder="(hidden)" autocomplete="off" />
                   </div>
                   <div>
-                    <label>deviceKey (SHA256)</label>
-                    <input class="input mono" id="uDeviceKey" placeholder="klik Generate" readonly />
+                    <label>DeviceKey (hidden)</label>
+                    <div class="inline">
+                      <input class="input grow mono" id="uDeviceKey" type="password" placeholder="(hidden)" readonly />
+                      <button class="btn btn--ghost btn--mini" id="btnRevealDeviceKey" type="button">Reveal</button>
+                    </div>
                   </div>
                   <div>
                     <label>&nbsp;</label>
-                    <button class="btn btn--ghost" id="btnGenDeviceKey" type="button" style="width:100%">Generate deviceKey</button>
+                    <button class="btn btn--ghost" id="btnGenDeviceKey" type="button" style="width:100%">Generate DeviceKey</button>
                   </div>
                 </div>
 
                 <div class="btnRow">
                   <button class="btn btn--ok" id="btnAddUnlimited" type="button">Add Unlimited</button>
                   <button class="btn btn--bad" id="btnRemoveUnlimited" type="button">Remove Unlimited</button>
-                  <button class="btn btn--ghost" id="btnCopyCurlUnlimited" type="button">Copy curl unlimited</button>
                 </div>
               </div>
 
               <div>
-                <h2 style="margin:0 0 8px; font-size:14px; font-weight:1100">Info</h2>
+                <h2 style="margin:0 0 8px; font-size:14px; font-weight:1000">Monthly Snapshot (sanitized)</h2>
                 <div class="codeBox" id="monthlyBox">{}</div>
-                <div class="hint">
-                  Monthly dipakai <b>sekali per bulan per deviceKey</b>. Unlimited deviceKey bypass limit.
-                </div>
+                <div class="hint">Data di bawah sudah dimasking supaya gak bocor deviceKey.</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Tools Section -->
+      <!-- Tools -->
       <section class="section" id="tab-tools">
         <div class="panel">
           <div class="panel__head">
             <div>
               <h2>Tools</h2>
-              <div class="sub">Generator Device ID + shortcut cek voucher kepake</div>
+              <div class="sub">Generate Device ID + catatan keamanan</div>
             </div>
           </div>
           <div class="panel__body">
@@ -826,37 +779,33 @@
                   <button class="btn btn--pri" id="btnToolGenDeviceId" type="button">Generate</button>
                   <button class="btn btn--ghost" id="btnToolCopyDeviceId" type="button">Copy</button>
                 </div>
-              </div>
-              <div>
-                <label>Curl Pack (template)</label>
-                <div class="codeBox" id="curlBox"></div>
-                <div class="btnRow">
-                  <button class="btn btn--ghost" id="btnCopyCurlBox" type="button">Copy pack</button>
+                <div class="hint">
+                  Generate beda-beda itu <b>normal</b> karena random. Device ID dipakai buat tracking promo bulanan.
                 </div>
               </div>
-            </div>
-
-            <div class="hr"></div>
-
-            <div class="hint">
-              Kalau “voucher aktif tapi gak kepotong” di frontend pembayaran:
-              biasanya frontend itu nembak <b>API domain yang beda</b> (misal admin ke prod, payment ke staging) atau payload voucher beda key (<b>voucher</b> vs <b>code</b> vs <b>voucherCode</b>).  
-              Di panel ini test pakai <span class="tag mono">createqr</span> supaya sama kayak flow pembayaran.
+              <div>
+                <label>Catatan keamanan</label>
+                <div class="codeBox">
+- Kode voucher disembunyikan di UI.
+- DeviceKey 64 char = SHA-256 hex (hash) → aman & standar.
+- Admin Key cuma disimpan lokal (localStorage). Logout untuk hapus.
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Debug Section -->
+      <!-- Debug (SANITIZED) -->
       <section class="section" id="tab-debug">
         <div class="panel">
           <div class="panel__head">
             <div>
-              <h2>Debug Console</h2>
-              <div class="sub">Response JSON terakhir + copy log</div>
+              <h2>Debug (Sanitized)</h2>
+              <div class="sub">Response terakhir sudah dimasking (kode voucher, url, deviceKey).</div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap">
-              <button class="btn btn--ghost btn--mini" id="btnCopyLog" type="button">Copy Log</button>
+              <button class="btn btn--ghost btn--mini" id="btnCopyLog" type="button">Copy</button>
               <button class="btn btn--ghost btn--mini" id="btnClearLog" type="button">Clear</button>
             </div>
           </div>
@@ -865,6 +814,7 @@
           </div>
         </div>
       </section>
+
     </main>
   </div>
 
@@ -872,27 +822,18 @@
     (function(){
       const $ = (id)=>document.getElementById(id);
 
-      // Storage keys
-      const LS_KEY = "levpay_admin_key";
+      const LS_KEY  = "levpay_admin_key";
       const LS_BASE = "levpay_admin_base";
       const LS_TAB  = "levpay_admin_tab";
 
-      // State
       let ADMIN_KEY = "";
       let BASE = "";
       let voucherCache = [];
-      let sortMode = "updated"; // "updated" | "code"
+      let sortMode = "updated"; // updated | name
 
-      // Elements
       const keyModal = $("keyModal");
       const baseUrlEl = $("baseUrl");
       const adminKeyEl = $("adminKey");
-      const btnUnlock = $("btnUnlock");
-      const btnPing = $("btnPing");
-      const btnFillDemo = $("btnFillDemo");
-
-      const tagTarget = $("tagTarget");
-      const tagTargetModal = $("tagTargetModal");
 
       const pillApi = $("pillApi");
       const pillKey = $("pillKey");
@@ -903,27 +844,24 @@
       const pillVText = $("pillVText");
       const pillMText = $("pillMText");
 
-      const btnPingTop = $("btnPingTop");
-      const btnRefreshAll = $("btnRefreshAll");
-      const btnLogout = $("btnLogout");
-      const btnCopyCurlAll = $("btnCopyCurlAll");
-
-      // Tabs
       const navBtns = Array.from(document.querySelectorAll(".navBtn"));
       const sections = Array.from(document.querySelectorAll(".section"));
 
-      // Voucher list UI
+      const btnUnlock = $("btnUnlock");
+      const btnPing = $("btnPing");
+      const btnFillDemo = $("btnFillDemo");
+      const btnPingTop = $("btnPingTop");
+      const btnRefreshAll = $("btnRefreshAll");
+      const btnLogout = $("btnLogout");
+
       const btnLoadVouchers = $("btnLoadVouchers");
       const btnNewVoucher = $("btnNewVoucher");
-      const btnApplyFilter = $("btnApplyFilter");
-      const btnSortCode = $("btnSortCode");
-      const btnSortUpdated = $("btnSortUpdated");
       const qSearch = $("qSearch");
       const qFilter = $("qFilter");
+      const btnSortName = $("btnSortName");
+      const btnSortUpdated = $("btnSortUpdated");
       const voucherTbody = $("voucherTbody");
-      const voucherHint = $("voucherHint");
 
-      // Voucher form
       const editBadge = $("editBadge");
       const vCode = $("vCode");
       const vEnabled = $("vEnabled");
@@ -933,70 +871,55 @@
       const vMaxUses = $("vMaxUses");
       const vExpiresAt = $("vExpiresAt");
       const vNote = $("vNote");
+      const btnRevealCode = $("btnRevealCode");
 
       const btnUpsertVoucher = $("btnUpsertVoucher");
       const btnDisableVoucher = $("btnDisableVoucher");
       const btnEnableVoucher = $("btnEnableVoucher");
-      const btnFillVoucherDemo = $("btnFillVoucherDemo");
-      const btnQuickUpsert = $("btnQuickUpsert");
 
-      // Test createqr
       const tAmount = $("tAmount");
       const tDeviceId = $("tDeviceId");
       const tVoucher = $("tVoucher");
       const btnGenDeviceId = $("btnGenDeviceId");
       const btnTestCreateQR = $("btnTestCreateQR");
-      const btnCopyCurlCreateQR = $("btnCopyCurlCreateQR");
+      const btnRevealTestVoucher = $("btnRevealTestVoucher");
 
-      // Monthly
       const btnGetMonthly = $("btnGetMonthly");
       const btnSetMonthly = $("btnSetMonthly");
-      const btnFillMonthlyDemo = $("btnFillMonthlyDemo");
-      const btnCopyCurlMonthly = $("btnCopyCurlMonthly");
-
       const mEnabled = $("mEnabled");
       const mName = $("mName");
       const mPercent = $("mPercent");
       const mMaxRp = $("mMaxRp");
       const monthlyBox = $("monthlyBox");
 
-      // Unlimited
       const uDeviceId = $("uDeviceId");
       const uPepper = $("uPepper");
       const uDeviceKey = $("uDeviceKey");
       const btnGenDeviceKey = $("btnGenDeviceKey");
       const btnAddUnlimited = $("btnAddUnlimited");
       const btnRemoveUnlimited = $("btnRemoveUnlimited");
-      const btnCopyCurlUnlimited = $("btnCopyCurlUnlimited");
+      const btnRevealDeviceKey = $("btnRevealDeviceKey");
 
-      // Tools
       const toolDeviceId = $("toolDeviceId");
       const btnToolGenDeviceId = $("btnToolGenDeviceId");
       const btnToolCopyDeviceId = $("btnToolCopyDeviceId");
 
-      // Debug
       const logBox = $("logBox");
       const btnCopyLog = $("btnCopyLog");
       const btnClearLog = $("btnClearLog");
 
-      // Curl
-      const curlBox = $("curlBox");
-      const btnCopyCurlBox = $("btnCopyCurlBox");
-
-      // ===== Helpers =====
+      // ===== UI helpers =====
       function toast(msg){
         const el = $("toast");
         el.textContent = msg;
         el.classList.add("is-on");
         clearTimeout(el._t);
-        el._t = setTimeout(()=>el.classList.remove("is-on"), 1800);
+        el._t = setTimeout(()=>el.classList.remove("is-on"), 1600);
       }
-
       function setPill(el, tone, text){
         el.dataset.tone = tone;
         el.querySelector("span:last-child").textContent = text;
       }
-
       function lockUI(locked){
         document.body.classList.toggle("is-locked", !!locked);
         keyModal.classList.toggle("is-on", !!locked);
@@ -1004,18 +927,11 @@
       }
 
       function apiBase(){
-        const b = String(BASE || "").trim().replace(/\/+$/,"");
-        return b;
+        return String(BASE||"").trim().replace(/\/+$/,"");
       }
       function endpoint(action){
+        // endpoint tidak ditampilkan di UI, cuma dipakai internal
         return apiBase() + "/api/orkut?action=" + encodeURIComponent(action);
-      }
-
-      function jsonPretty(x){
-        try { return JSON.stringify(x, null, 2); } catch { return String(x); }
-      }
-      function log(obj){
-        logBox.textContent = jsonPretty(obj);
       }
 
       async function jfetch(url, opts){
@@ -1037,19 +953,70 @@
           headers,
           body: body ? JSON.stringify(body) : undefined
         });
-        return { action, url, ...res };
+        return { action, ok: res.ok, status: res.status, json: res.json };
       }
 
       async function callAny(actions, cfg){
-        let last = null;
+        let last=null;
         for (const a of actions){
           const r = await callAction(a, cfg);
-          last = r;
+          last=r;
           if (r.ok) return r;
-          // unauthorized should stop quickly if admin action
           if (r.status === 401) return r;
         }
         return last;
+      }
+
+      // ===== Sanitizer (hide codes, urls, deviceKeys) =====
+      function maskMid(s){
+        const str = String(s||"");
+        if (str.length <= 6) return "••••••";
+        return "••••" + str.slice(-2);
+      }
+      function deepSanitize(obj){
+        // clone + sanitize strings/keys
+        const seen = new WeakSet();
+        const walk = (x, k)=>{
+          if (x == null) return x;
+          if (typeof x === "string"){
+            const s = x;
+            // hide urls / endpoints
+            if (s.includes("/api/")) return "••••(hidden-url)••••";
+            // hide deviceKey length 64 hex-ish
+            if (/^[a-f0-9]{64}$/i.test(s)) return "••••(hidden-deviceKey)••••";
+            // hide voucher codes commonly short uppercase
+            if (k && String(k).toLowerCase().includes("code")) return "••••(hidden-code)••••";
+            if (k && String(k).toLowerCase().includes("voucher")) return "••••(hidden-voucher)••••";
+            return s;
+          }
+          if (typeof x !== "object") return x;
+          if (seen.has(x)) return "[circular]";
+          seen.add(x);
+
+          if (Array.isArray(x)){
+            return x.map(v=>walk(v, k));
+          }
+
+          const out = {};
+          for (const [kk,vv] of Object.entries(x)){
+            const low = String(kk).toLowerCase();
+            if (low.includes("devicekey")) out[kk] = "••••(hidden-deviceKey)••••";
+            else if (low === "code") out[kk] = "••••(hidden-code)••••";
+            else if (low.includes("voucher")) out[kk] = "••••(hidden-voucher)••••";
+            else if (low.includes("url") || low.includes("path")) out[kk] = "••••(hidden-url)••••";
+            else out[kk] = walk(vv, kk);
+          }
+          return out;
+        };
+        return walk(obj, "");
+      }
+
+      function log(obj){
+        try{
+          logBox.textContent = JSON.stringify(deepSanitize(obj), null, 2);
+        }catch{
+          logBox.textContent = "{ }";
+        }
       }
 
       function sanitizeCode(s){
@@ -1063,66 +1030,32 @@
         if (!Number.isFinite(d.getTime())) return null;
         return d.toISOString();
       }
-
       function fromIsoToDatetimeLocal(iso){
         if (!iso) return "";
         const d = new Date(iso);
         if (!Number.isFinite(d.getTime())) return "";
-        // datetime-local expects "YYYY-MM-DDTHH:MM"
         const pad = (n)=>String(n).padStart(2,"0");
-        const y = d.getFullYear();
-        const m = pad(d.getMonth()+1);
-        const da = pad(d.getDate());
-        const hh = pad(d.getHours());
-        const mm = pad(d.getMinutes());
-        return `${y}-${m}-${da}T${hh}:${mm}`;
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       }
-
       function maybeNumber(v){
         const s = String(v ?? "").trim();
-        if (s === "") return undefined; // OMIT if empty
+        if (s === "") return undefined;
         const n = Number(s);
         return Number.isFinite(n) ? n : undefined;
       }
 
-      function buildVoucherPayload(forceEnabledValue /* true|false|undefined */){
-        const code = sanitizeCode(vCode.value);
-        const percent = maybeNumber(vPercent.value);
-        if (!code) throw new Error("code wajib");
-        if (percent == null) throw new Error("percent wajib (angka)");
-
-        const payload = { code, percent };
-
-        const enabledSel = (forceEnabledValue != null)
-          ? !!forceEnabledValue
-          : (String(vEnabled.value) === "true");
-        payload.enabled = enabledSel;
-
-        const name = String(vName.value||"").trim();
-        const note = String(vNote.value||"").trim();
-        const maxRp = maybeNumber(vMaxRp.value);
-        const maxUses = maybeNumber(vMaxUses.value);
-        const expiresAtIso = toIsoFromDatetimeLocal(vExpiresAt.value);
-
-        if (name) payload.name = name;
-        if (note) payload.note = note;
-
-        // IMPORTANT: empty should be omitted (avoid maxUses=0)
-        if (maxRp != null) payload.maxRp = maxRp;
-        if (maxUses != null) payload.maxUses = maxUses;
-        if (expiresAtIso) payload.expiresAt = expiresAtIso;
-
-        return payload;
-      }
-
-      function setEditBadge(loaded, enabled){
-        if (!loaded){
+      function setEditBadge(mode){
+        // mode: "idle"|"on"|"off"
+        if (mode === "on"){
+          editBadge.dataset.tone = "ok";
+          editBadge.innerHTML = '<span class="dot"></span><span>Loaded (ON)</span>';
+        } else if (mode === "off"){
           editBadge.dataset.tone = "bad";
-          editBadge.innerHTML = '<span class="dot"></span><span>Not loaded</span>';
-          return;
+          editBadge.innerHTML = '<span class="dot"></span><span>Loaded (OFF)</span>';
+        } else {
+          editBadge.dataset.tone = "warn";
+          editBadge.innerHTML = '<span class="dot"></span><span>Idle</span>';
         }
-        editBadge.dataset.tone = enabled ? "ok" : "bad";
-        editBadge.innerHTML = `<span class="dot"></span><span>${enabled ? "Loaded (ON)" : "Loaded (OFF)"}</span>`;
       }
 
       function genDeviceId(){
@@ -1144,7 +1077,7 @@
           .catch(()=>toast("Copy gagal"));
       }
 
-      // ===== Actions =====
+      // ===== API ops =====
       async function ping(){
         const res = await callAction("ping", { method:"GET", admin:false });
         log({ type:"ping", ...res });
@@ -1153,13 +1086,13 @@
           toast("Ping OK");
         } else {
           setPill(pillApi, "bad", "API: ERROR");
-          toast("Ping ERROR (" + res.status + ")");
+          toast("Ping ERROR ("+res.status+")");
         }
         return res;
       }
 
       async function adminValidateKey(){
-        // Fast validate: try an admin endpoint with dummy payload.
+        // validate with admin endpoint (try disable voucher with dummy code)
         const candidates = ["admin_disable_voucher","voucher.disable","admin_voucher_disable"];
         const res = await callAny(candidates, {
           method:"POST",
@@ -1167,15 +1100,14 @@
           body:{ code:"__VALIDATE__" }
         });
 
-        // If 401 => wrong key.
-        if (res.status === 401){
-          setPill(pillKey, "bad", "Key: salah");
-          return { ok:false, res };
-        }
+        log({ type:"validate", status: res?.status, ok: res?.ok });
 
-        // 200 or 400/404/500 but not 401 => key is accepted.
+        if (res?.status === 401){
+          setPill(pillKey, "bad", "Key: salah");
+          return false;
+        }
         setPill(pillKey, "ok", "Key: OK");
-        return { ok:true, res };
+        return true;
       }
 
       async function loadVouchers(){
@@ -1183,26 +1115,25 @@
         const candidates = ["admin_list_voucher","voucher.list","admin_voucher_list"];
         const res = await callAny(candidates, { method:"GET", admin:true });
 
-        log({ type:"voucher.list", ...res });
+        log({ type:"voucher.list", status: res?.status, ok: res?.ok, json: res?.json });
 
         if (res.status === 401){
-          toast("Unauthorized (key salah)");
           setPill(pillV, "bad", "Voucher: unauthorized");
+          toast("Unauthorized (key salah)");
           return;
         }
         if (!res.ok){
-          toast("Gagal load voucher (" + res.status + ")");
           setPill(pillV, "bad", "Voucher: error");
+          toast("Gagal load voucher ("+res.status+")");
           return;
         }
 
-        // Normalize data shape
         const data = res.json?.data ?? res.json ?? [];
         const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
 
         voucherCache = items.map(v=>({
           code: sanitizeCode(v.code || v.kode || ""),
-          name: v.name ?? v.nama ?? "",
+          name: String(v.name ?? v.nama ?? "").trim(),
           enabled: v.enabled !== false,
           percent: Number(v.percent ?? 0),
           maxRp: Number(v.maxRp ?? 0),
@@ -1221,8 +1152,8 @@
 
       function sortVouchers(arr){
         const a = [...arr];
-        if (sortMode === "code"){
-          a.sort((x,y)=>String(x.code).localeCompare(String(y.code)));
+        if (sortMode === "name"){
+          a.sort((x,y)=>String(x.name||"").localeCompare(String(y.name||"")));
         } else {
           a.sort((x,y)=>String(y.updatedAt||"").localeCompare(String(x.updatedAt||"")));
         }
@@ -1236,11 +1167,20 @@
           if (f === "on" && !v.enabled) return false;
           if (f === "off" && v.enabled) return false;
           if (s){
-            const hay = (v.code + " " + (v.name||"") + " " + (v.note||"")).toLowerCase();
+            const hay = ((v.name||"") + " " + (v.note||"")).toLowerCase();
             if (!hay.includes(s)) return false;
           }
           return true;
         });
+      }
+
+      function escapeHtml(s){
+        return String(s ?? "")
+          .replaceAll("&","&amp;")
+          .replaceAll("<","&lt;")
+          .replaceAll(">","&gt;")
+          .replaceAll('"',"&quot;")
+          .replaceAll("'","&#039;");
       }
 
       function renderVouchers(){
@@ -1253,13 +1193,13 @@
         voucherTbody.innerHTML = filtered.map(v=>{
           const tone = v.enabled ? "ok" : "bad";
           const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
-          const name = v.name ? `<div class="mut2" style="margin-top:2px">${escapeHtml(v.name)}</div>` : "";
-          const maxRp = (Number.isFinite(v.maxRp) ? v.maxRp : 0);
-          const uses = (Number.isFinite(v.uses) ? v.uses : 0);
+          const displayName = v.name ? escapeHtml(v.name) : '<span class="mut2">(no name)</span>';
+          const cap = v.maxRp ? v.maxRp.toLocaleString("id-ID") : "∞";
+          const uses = Number.isFinite(v.uses) ? v.uses : 0;
           const maxUses = (v.maxUses != null ? v.maxUses : "∞");
-          const cap = maxRp ? maxRp.toLocaleString("id-ID") : "∞";
+
           return `
-            <tr data-code="${escapeAttr(v.code)}">
+            <tr data-code="${escapeHtml(v.code)}">
               <td>
                 <span class="badge" data-tone="${tone}">
                   <span class="dot"></span>
@@ -1267,8 +1207,8 @@
                 </span>
               </td>
               <td>
-                <div class="mono" style="font-weight:1100">${escapeHtml(v.code)}</div>
-                ${name}
+                <div style="font-weight:1000">${displayName}</div>
+                <div class="mut2" style="margin-top:2px">ID: ${escapeHtml(maskMid(v.code))}</div>
               </td>
               <td class="right mono">${escapeHtml(String(v.percent||0))}</td>
               <td class="right mono">${escapeHtml(String(cap))}</td>
@@ -1284,7 +1224,7 @@
             const v = voucherCache.find(x=>x.code === code);
             if (!v) return;
             loadVoucherToForm(v);
-            toast("Loaded: " + code);
+            toast("Voucher loaded");
           });
         });
       }
@@ -1300,7 +1240,8 @@
         vNote.value = v.note || "";
 
         tVoucher.value = v.code || "";
-        setEditBadge(true, !!v.enabled);
+
+        setEditBadge(v.enabled ? "on" : "off");
       }
 
       function clearVoucherForm(){
@@ -1312,52 +1253,69 @@
         vMaxUses.value = "";
         vExpiresAt.value = "";
         vNote.value = "";
-        setEditBadge(false, false);
+        tVoucher.value = "";
+        setEditBadge("idle");
       }
 
-      async function upsertVoucher(forceEnabledValue){
-        const payload = buildVoucherPayload(forceEnabledValue);
+      function buildVoucherPayload(forceEnabled /* true|false|undefined */){
+        const code = sanitizeCode(vCode.value);
+        const percent = maybeNumber(vPercent.value);
+        if (!code) throw new Error("code wajib");
+        if (percent == null) throw new Error("percent wajib");
+
+        const payload = { code, percent };
+        payload.enabled = (forceEnabled != null) ? !!forceEnabled : (String(vEnabled.value) === "true");
+
+        const name = String(vName.value||"").trim();
+        const note = String(vNote.value||"").trim();
+        const maxRp = maybeNumber(vMaxRp.value);
+        const maxUses = maybeNumber(vMaxUses.value);
+        const expiresAt = toIsoFromDatetimeLocal(vExpiresAt.value);
+
+        if (name) payload.name = name;
+        if (note) payload.note = note;
+        if (maxRp != null) payload.maxRp = maxRp;
+        if (maxUses != null) payload.maxUses = maxUses; // empty = omit (unlimited)
+        if (expiresAt) payload.expiresAt = expiresAt;
+
+        return payload;
+      }
+
+      async function upsertVoucher(forceEnabled){
+        const payload = buildVoucherPayload(forceEnabled);
         const candidates = ["admin_upsert_voucher","voucher.upsert","admin_voucher_upsert"];
         const res = await callAny(candidates, { method:"POST", admin:true, body: payload });
 
-        log({ type:"voucher.upsert", payload, ...res });
+        log({ type:"voucher.upsert", status: res?.status, ok: res?.ok, payload, json: res?.json });
 
-        if (res.status === 401){
-          toast("Unauthorized (key salah)");
-          return;
-        }
-        if (!res.ok){
-          toast("Upsert gagal (" + res.status + ")");
-          return;
-        }
-        toast("Upsert ✅");
+        if (res.status === 401){ toast("Unauthorized"); return; }
+        if (!res.ok){ toast("Upsert gagal ("+res.status+")"); return; }
+
+        toast("Saved ✅");
         await loadVouchers();
-        // ensure badge updates
-        setEditBadge(true, payload.enabled);
+        setEditBadge(payload.enabled ? "on" : "off");
       }
 
       async function disableVoucher(){
         const code = sanitizeCode(vCode.value);
-        if (!code){ toast("Isi code dulu"); return; }
-        if (!confirm("Disable voucher: " + code + " ?")) return;
+        if (!code){ toast("Kode kosong"); return; }
+        if (!confirm("Disable voucher ini?")) return;
 
         const candidates = ["admin_disable_voucher","voucher.disable","admin_voucher_disable"];
         const res = await callAny(candidates, { method:"POST", admin:true, body:{ code } });
 
-        log({ type:"voucher.disable", code, ...res });
+        log({ type:"voucher.disable", status: res?.status, ok: res?.ok, json: res?.json });
 
         if (res.status === 401){ toast("Unauthorized"); return; }
-        if (!res.ok){ toast("Disable gagal (" + res.status + ")"); return; }
+        if (!res.ok){ toast("Disable gagal ("+res.status+")"); return; }
+
         toast("Disabled ✅");
-        await loadVouchers();
-        setEditBadge(true, false);
         vEnabled.value = "false";
+        setEditBadge("off");
+        await loadVouchers();
       }
 
       async function enableVoucher(){
-        // enable = upsert with enabled true (same code)
-        const code = sanitizeCode(vCode.value);
-        if (!code){ toast("Isi code dulu"); return; }
         await upsertVoucher(true);
       }
 
@@ -1366,29 +1324,27 @@
         const candidates = ["monthly.get","admin_get_monthly_promo","monthly_get"];
         const res = await callAny(candidates, { method:"GET", admin:true });
 
-        log({ type:"monthly.get", ...res });
+        log({ type:"monthly.get", status: res?.status, ok: res?.ok, json: res?.json });
 
         if (res.status === 401){
-          toast("Unauthorized (key salah)");
           setPill(pillM, "bad", "Monthly: unauthorized");
+          toast("Unauthorized");
           return;
         }
         if (!res.ok){
-          toast("Gagal get monthly (" + res.status + ")");
           setPill(pillM, "bad", "Monthly: error");
+          toast("Get monthly gagal ("+res.status+")");
           return;
         }
 
         const data = res.json?.data ?? res.json ?? {};
-        monthlyBox.textContent = jsonPretty(data);
+        // fill inputs
+        if (data.enabled != null) mEnabled.value = String(!!data.enabled);
+        if (data.name != null) mName.value = String(data.name);
+        if (data.percent != null) mPercent.value = String(data.percent);
+        if (data.maxRp != null) mMaxRp.value = String(data.maxRp);
 
-        if (data && typeof data === "object"){
-          if (data.enabled != null) mEnabled.value = String(!!data.enabled);
-          if (data.name != null) mName.value = String(data.name);
-          if (data.percent != null) mPercent.value = String(data.percent);
-          if (data.maxRp != null) mMaxRp.value = String(data.maxRp);
-        }
-
+        monthlyBox.textContent = JSON.stringify(deepSanitize(data), null, 2);
         setPill(pillM, "ok", "Monthly: OK");
         toast("Monthly loaded ✅");
       }
@@ -1396,7 +1352,6 @@
       function buildMonthlyPayload(extra){
         const payload = {};
         payload.enabled = (String(mEnabled.value) === "true");
-
         const name = String(mName.value||"").trim();
         const percent = maybeNumber(mPercent.value);
         const maxRp = maybeNumber(mMaxRp.value);
@@ -1413,10 +1368,11 @@
         const candidates = ["admin_set_monthly_promo","monthly.set","monthly_set"];
         const res = await callAny(candidates, { method:"POST", admin:true, body: payload });
 
-        log({ type:"monthly.set", payload, ...res });
+        log({ type:"monthly.set", status: res?.status, ok: res?.ok, json: res?.json });
 
         if (res.status === 401){ toast("Unauthorized"); return; }
-        if (!res.ok){ toast("Set monthly gagal (" + res.status + ")"); return; }
+        if (!res.ok){ toast("Save monthly gagal ("+res.status+")"); return; }
+
         toast("Monthly saved ✅");
         await getMonthly();
       }
@@ -1424,10 +1380,10 @@
       async function genDeviceKey(){
         const did = String(uDeviceId.value||"").trim();
         const pep = String(uPepper.value||"").trim();
-        if (!did || !pep){ toast("Isi deviceId & pepper dulu"); return; }
+        if (!did || !pep){ toast("Isi deviceId & pepper"); return; }
         const key = await sha256Hex(did + "|" + pep);
-        uDeviceKey.value = key;
-        toast("deviceKey dibuat");
+        uDeviceKey.value = key; // disembunyikan (password)
+        toast("DeviceKey generated");
       }
 
       async function addUnlimited(){
@@ -1435,7 +1391,6 @@
         if (!dk){ toast("Generate deviceKey dulu"); return; }
         await setMonthly({ addUnlimitedDeviceKey: dk });
       }
-
       async function removeUnlimited(){
         const dk = String(uDeviceKey.value||"").trim();
         if (!dk){ toast("Generate deviceKey dulu"); return; }
@@ -1451,79 +1406,14 @@
         if (!deviceId){ toast("Device ID wajib"); return; }
 
         const res = await callAction("createqr", { method:"POST", admin:false, body:{ amount, deviceId, voucher } });
-        log({ type:"createqr", payload:{ amount, deviceId, voucher }, ...res });
+        log({ type:"createqr", status: res?.status, ok: res?.ok, json: res?.json });
 
-        if (!res.ok){
-          toast("Test gagal (" + res.status + ")");
-          return;
-        }
+        if (!res.ok){ toast("Test gagal ("+res.status+")"); return; }
 
-        // highlight pricing if exists
         const d = res.json?.data ?? res.json ?? {};
-        const pricing = d?.pricing ?? d?.data?.pricing ?? d?.pricing ?? null;
-
-        if (pricing){
-          const disc = pricing.discountRp ?? 0;
-          const applied = Array.isArray(pricing.applied) ? pricing.applied : [];
-          const appliedTxt = applied.length ? applied.map(x=>x.code||x.name||x.type).join(",") : "-";
-          toast("OK • discountRp: " + disc + " • applied: " + appliedTxt);
-        } else {
-          toast("OK (lihat log)");
-        }
-      }
-
-      // ===== Curl pack =====
-      function currentCurlPack(){
-        const host = apiBase() || "$HOST";
-        return `# HOST
-HOST="${host || "https://levpay-api.vercel.app"}"
-ADMIN_KEY="$ADMIN_KEY"
-
-# PING
-curl -sS "$HOST/api/orkut?action=ping" | jq
-
-# LIST VOUCHER (ADMIN) [action name may differ]
-curl -sS "$HOST/api/orkut?action=admin_list_voucher" -H "X-Admin-Key: $ADMIN_KEY" | jq
-
-# UPSERT VOUCHER (ADMIN)
-curl -sS -X POST "$HOST/api/orkut?action=admin_upsert_voucher" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '{"code":"VIPL","name":"VIP LEVEL","enabled":true,"percent":90,"maxRp":0,"note":"contoh"}' | jq
-
-# DISABLE VOUCHER (ADMIN)
-curl -sS -X POST "$HOST/api/orkut?action=admin_disable_voucher" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '{"code":"VIPL"}' | jq
-
-# MONTHLY GET (ADMIN)
-curl -sS "$HOST/api/orkut?action=monthly.get" -H "X-Admin-Key: $ADMIN_KEY" | jq
-
-# MONTHLY SET (ADMIN)
-curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '{"enabled":true,"name":"PROMO BULANAN","percent":5,"maxRp":2000}' | jq
-
-# ADD UNLIMITED DEVICEKEY (ADMIN)
-curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '{"addUnlimitedDeviceKey":"<SHA256(deviceId|pepper)>"}' | jq
-
-# TEST CREATEQR (NO ADMIN)
-curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
-  -H "Content-Type: application/json" \\
-  -d '{"amount":10000,"deviceId":"dev_web_1","voucher":"VIPL"}' | jq
-`;
-      }
-
-      function refreshTargets(){
-        const target = (apiBase() ? apiBase() : "") + "/api/orkut";
-        tagTarget.textContent = target;
-        tagTargetModal.textContent = target;
-        curlBox.textContent = currentCurlPack();
+        const pricing = d?.pricing || null;
+        const disc = pricing?.discountRp ?? 0;
+        toast("OK • discountRp: " + disc);
       }
 
       // ===== Tabs =====
@@ -1532,10 +1422,7 @@ curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
         sections.forEach(s=>s.classList.toggle("is-on", s.id === id));
         localStorage.setItem(LS_TAB, id);
       }
-
-      navBtns.forEach(btn=>{
-        btn.addEventListener("click", ()=>setTab(btn.getAttribute("data-tab")));
-      });
+      navBtns.forEach(btn=>btn.addEventListener("click", ()=>setTab(btn.getAttribute("data-tab"))));
 
       // ===== Unlock / Logout =====
       async function doUnlock(){
@@ -1544,28 +1431,17 @@ curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
 
         const rawKey = String(adminKeyEl.value||"").trim();
         if (rawKey && rawKey !== "••••••••••") ADMIN_KEY = rawKey;
+        if (!ADMIN_KEY){ toast("Admin key wajib"); return; }
 
-        if (!ADMIN_KEY){
-          toast("Admin key wajib");
-          return;
-        }
         localStorage.setItem(LS_KEY, ADMIN_KEY);
 
-        refreshTargets();
-
         await ping();
-        const v = await adminValidateKey();
-        log({ type:"validate", ...v });
-
-        if (!v.ok){
-          toast("Admin key salah (401).");
-          return;
-        }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Admin key salah (401)"); return; }
 
         lockUI(false);
         toast("Masuk ✅");
 
-        // auto refresh important data
         await loadVouchers();
         await getMonthly();
       }
@@ -1594,88 +1470,55 @@ curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
 
       btnRefreshAll.addEventListener("click", async ()=>{
         await ping();
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await loadVouchers();
         await getMonthly();
       });
-
-      btnCopyCurlAll.addEventListener("click", ()=>copy(currentCurlPack()));
-      btnCopyCurlBox.addEventListener("click", ()=>copy(curlBox.textContent));
-
-      // Voucher list buttons
-      btnLoadVouchers.addEventListener("click", loadVouchers);
-      btnApplyFilter.addEventListener("click", renderVouchers);
-      qSearch.addEventListener("input", ()=>renderVouchers());
-      qFilter.addEventListener("change", ()=>renderVouchers());
-
-      btnSortCode.addEventListener("click", ()=>{ sortMode="code"; toast("Sort CODE"); renderVouchers(); });
-      btnSortUpdated.addEventListener("click", ()=>{ sortMode="updated"; toast("Sort UPDATED"); renderVouchers(); });
 
       btnNewVoucher.addEventListener("click", ()=>{
         clearVoucherForm();
         toast("New voucher");
       });
 
-      btnFillVoucherDemo.addEventListener("click", ()=>{
-        vCode.value = "VIPL";
-        vEnabled.value = "true";
-        vName.value = "VIP LEVEL";
-        vPercent.value = "90";
-        vMaxRp.value = "0";
-        vMaxUses.value = ""; // IMPORTANT
-        vExpiresAt.value = ""; // optional
-        vNote.value = "Diskon VIP (contoh)";
-        tVoucher.value = "VIPL";
-        setEditBadge(true, true);
-        toast("Contoh terisi");
+      btnLoadVouchers.addEventListener("click", async ()=>{
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
+        await loadVouchers();
       });
 
-      btnQuickUpsert.addEventListener("click", async ()=>{
-        // Quick: if code exists, save; else fill demo then save
-        if (!sanitizeCode(vCode.value)){
-          vCode.value = "VIPL";
-          vPercent.value = "60";
-          vEnabled.value = "true";
-          vMaxRp.value = "0";
-          tVoucher.value = "VIPL";
-        }
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
-        try{
-          await upsertVoucher();
-        }catch(e){
-          toast(e?.message || "error");
-        }
+      qSearch.addEventListener("input", renderVouchers);
+      qFilter.addEventListener("change", renderVouchers);
+
+      btnSortName.addEventListener("click", ()=>{
+        sortMode = "name";
+        toast("Sort: NAME");
+        renderVouchers();
+      });
+      btnSortUpdated.addEventListener("click", ()=>{
+        sortMode = "updated";
+        toast("Sort: UPDATED");
+        renderVouchers();
       });
 
       btnUpsertVoucher.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
-        try{
-          await upsertVoucher();
-        }catch(e){
-          toast(e?.message || "error");
-        }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
+        try{ await upsertVoucher(); } catch(e){ toast(e?.message || "error"); }
       });
 
       btnDisableVoucher.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await disableVoucher();
       });
 
       btnEnableVoucher.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
-        try{
-          await enableVoucher();
-        }catch(e){
-          toast(e?.message || "error");
-        }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
+        try{ await enableVoucher(); } catch(e){ toast(e?.message || "error"); }
       });
 
-      // createqr test
       btnGenDeviceId.addEventListener("click", ()=>{
         const id = genDeviceId();
         tDeviceId.value = id;
@@ -1683,104 +1526,59 @@ curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
         toolDeviceId.value = id;
         toast("Device ID dibuat");
       });
+
       btnTestCreateQR.addEventListener("click", testCreateQR);
-      btnCopyCurlCreateQR.addEventListener("click", ()=>{
-        const host = apiBase() || "$HOST";
-        const amount = Number(String(tAmount.value||"10000").trim()) || 10000;
-        const deviceId = String(tDeviceId.value||"dev_web_1").trim() || "dev_web_1";
-        const voucher = String(tVoucher.value||sanitizeCode(vCode.value)||"VIPL").trim();
-        const payload = { amount, deviceId, voucher };
-        const out =
-`HOST="${host || "https://levpay-api.vercel.app"}"
-curl -sS -X POST "$HOST/api/orkut?action=createqr" \\
-  -H "Content-Type: application/json" \\
-  -d '${JSON.stringify(payload)}' | jq
-`;
-        copy(out);
+
+      btnRevealCode.addEventListener("click", ()=>{
+        const isPwd = vCode.type === "password";
+        vCode.type = isPwd ? "text" : "password";
+        btnRevealCode.textContent = isPwd ? "Hide" : "Reveal";
       });
 
-      // Monthly
+      btnRevealTestVoucher.addEventListener("click", ()=>{
+        const isPwd = tVoucher.type === "password";
+        tVoucher.type = isPwd ? "text" : "password";
+        btnRevealTestVoucher.textContent = isPwd ? "Hide Voucher" : "Reveal Voucher";
+      });
+
       btnGetMonthly.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await getMonthly();
       });
 
       btnSetMonthly.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await setMonthly();
       });
 
-      btnFillMonthlyDemo.addEventListener("click", ()=>{
-        mEnabled.value = "true";
-        mName.value = "PROMO BULANAN";
-        mPercent.value = "5";
-        mMaxRp.value = "2000";
-        toast("Monthly contoh terisi");
-      });
-
-      btnCopyCurlMonthly.addEventListener("click", ()=>{
-        const host = apiBase() || "$HOST";
-        const payload = buildMonthlyPayload();
-        const out =
-`HOST="${host || "https://levpay-api.vercel.app"}"
-curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '${JSON.stringify(payload)}' | jq
-`;
-        copy(out);
-      });
-
-      // Unlimited
       btnGenDeviceKey.addEventListener("click", genDeviceKey);
       btnAddUnlimited.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await addUnlimited();
       });
       btnRemoveUnlimited.addEventListener("click", async ()=>{
-        const v = await adminValidateKey();
-        if (!v.ok){ toast("Key salah / belum"); return; }
+        const ok = await adminValidateKey();
+        if (!ok){ toast("Key salah / belum"); return; }
         await removeUnlimited();
       });
-      btnCopyCurlUnlimited.addEventListener("click", ()=>{
-        const host = apiBase() || "$HOST";
-        const dk = String(uDeviceKey.value||"<SHA256(deviceId|pepper)>").trim() || "<SHA256(deviceId|pepper)>";
-        const out =
-`HOST="${host || "https://levpay-api.vercel.app"}"
-curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Admin-Key: $ADMIN_KEY" \\
-  -d '${JSON.stringify({ addUnlimitedDeviceKey: dk })}' | jq
-`;
-        copy(out);
+
+      btnRevealDeviceKey.addEventListener("click", ()=>{
+        const isPwd = uDeviceKey.type === "password";
+        uDeviceKey.type = isPwd ? "text" : "password";
+        btnRevealDeviceKey.textContent = isPwd ? "Hide" : "Reveal";
       });
 
-      // Tools
       btnToolGenDeviceId.addEventListener("click", ()=>{
         toolDeviceId.value = genDeviceId();
         toast("Generated");
       });
       btnToolCopyDeviceId.addEventListener("click", ()=>copy(toolDeviceId.value));
 
-      // Debug
       btnCopyLog.addEventListener("click", ()=>copy(logBox.textContent));
       btnClearLog.addEventListener("click", ()=>{ logBox.textContent="{}"; toast("Cleared"); });
-
-      // ===== Escape helpers for table rendering =====
-      function escapeHtml(s){
-        return String(s ?? "")
-          .replaceAll("&","&amp;")
-          .replaceAll("<","&lt;")
-          .replaceAll(">","&gt;")
-          .replaceAll('"',"&quot;")
-          .replaceAll("'","&#039;");
-      }
-      function escapeAttr(s){
-        return escapeHtml(s).replaceAll("`","&#096;");
-      }
 
       // ===== Init =====
       function loadSaved(){
@@ -1790,25 +1588,24 @@ curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
         baseUrlEl.value = BASE;
         adminKeyEl.value = ADMIN_KEY ? "••••••••••" : "";
 
-        refreshTargets();
-
         const savedTab = localStorage.getItem(LS_TAB) || "tab-voucher";
         setTab(savedTab);
 
-        // Default IDs
         const did = genDeviceId();
         tDeviceId.value = did;
         uDeviceId.value = did;
         toolDeviceId.value = did;
 
-        // If key exists, try auto unlock
+        setPill(pillV, "warn", "Voucher: —");
+        setPill(pillM, "warn", "Monthly: —");
+
         if (ADMIN_KEY){
           lockUI(false);
           setPill(pillKey, "warn", "Key: tersimpan");
           setTimeout(async ()=>{
             await ping();
-            const v = await adminValidateKey();
-            if (!v.ok){
+            const ok = await adminValidateKey();
+            if (!ok){
               toast("Admin key salah. Login ulang.");
               doLogout();
               return;
@@ -1821,19 +1618,7 @@ curl -sS -X POST "$HOST/api/orkut?action=admin_set_monthly_promo" \\
           lockUI(true);
           setPill(pillKey, "warn", "Key: belum");
         }
-
-        // Pills defaults
-        setPill(pillV, "warn", "Voucher: —");
-        setPill(pillM, "warn", "Monthly: —");
-        curlBox.textContent = currentCurlPack();
       }
-
-      // live update target if user changes base URL
-      baseUrlEl.addEventListener("input", ()=>{
-        BASE = String(baseUrlEl.value||"").trim();
-        refreshTargets();
-        curlBox.textContent = currentCurlPack();
-      });
 
       loadSaved();
     })();
