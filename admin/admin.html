@@ -5,38 +5,40 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LevPay Admin</title>
 
-  <!-- Bootstrap Icons -->
+  <!-- Icons -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-  <!-- Flatpickr -->
+  <!-- Flatpickr (datetime picker) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
 
   <style>
-    /* =========================
-       LevPay Admin - FULL CSS
-       (Single-file, production-ish)
-       ========================= */
+    /* ==========================================================
+      LevPay Admin (single-file)
+      - Responsive, production-ish UI (dashboard/admin vibes)
+      - Sections: Vouchers (custom), Monthly, Active list, Tester
+      - Shows cURL + JSON body + response JSON for each action
+    ========================================================== */
 
     :root{
-      --bg0:#070A12;
-      --bg1:#0B1220;
-      --card: rgba(255,255,255,.06);
-      --card2: rgba(255,255,255,.08);
+      --bg:#0b1020;
+      --bg2:#0a0f1c;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.08);
       --stroke: rgba(255,255,255,.10);
       --stroke2: rgba(255,255,255,.14);
-      --text:#EAF0FF;
+      --text:#eaf0ff;
       --muted: rgba(234,240,255,.72);
       --muted2: rgba(234,240,255,.52);
 
       --primary:#6C7CFF;
-      --primary2:#4CE0FF;
-      --success:#26E7A6;
+      --cyan:#4CE0FF;
+      --success:#25E7A6;
       --warning:#FFB020;
       --danger:#FF4D6D;
 
-      --shadow: 0 22px 55px rgba(0,0,0,.55);
-      --shadow2: 0 10px 30px rgba(0,0,0,.45);
+      --shadow: 0 18px 50px rgba(0,0,0,.55);
+      --shadow2: 0 10px 28px rgba(0,0,0,.40);
 
       --r12: 12px;
       --r16: 16px;
@@ -53,74 +55,74 @@
       font-family: var(--sans);
       color: var(--text);
       background:
-        radial-gradient(900px 600px at 15% 10%, rgba(108,124,255,.20), transparent 55%),
-        radial-gradient(900px 600px at 85% 20%, rgba(76,224,255,.16), transparent 60%),
-        radial-gradient(700px 500px at 40% 95%, rgba(38,231,166,.14), transparent 60%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
+        radial-gradient(900px 600px at 10% 5%, rgba(108,124,255,.20), transparent 55%),
+        radial-gradient(900px 600px at 90% 15%, rgba(76,224,255,.16), transparent 60%),
+        radial-gradient(700px 500px at 45% 100%, rgba(37,231,166,.14), transparent 60%),
+        linear-gradient(180deg, var(--bg2), var(--bg));
       overflow-x:hidden;
     }
-
     a{ color:inherit; text-decoration:none; }
     .mono{ font-family: var(--mono); }
     .muted{ color: var(--muted); }
     .muted2{ color: var(--muted2); }
-    .small{ font-size:12px; }
-    .row{ display:flex; gap:16px; flex-wrap:wrap; }
-    .col{ flex:1; min-width: 280px; }
+    .small{ font-size: 12px; }
+    .hstack{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .vstack{ display:flex; flex-direction:column; gap:12px; }
+    .spacer{ flex:1; }
     .container{
-      width:min(1180px, calc(100% - 28px));
-      margin: 18px auto 48px;
+      width:min(1240px, calc(100% - 26px));
+      margin: 16px auto 44px;
     }
 
-    /* ---- Topbar ---- */
+    /* ---------- App Shell ---------- */
+    .shell{
+      display:grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
+      margin-top: 14px;
+    }
+    @media (max-width: 980px){
+      .shell{ grid-template-columns: 1fr; }
+    }
+
+    /* ---------- Topbar ---------- */
     .topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding: 14px 16px;
-      border: 1px solid var(--stroke);
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
-      border-radius: var(--r20);
-      box-shadow: var(--shadow2);
       position: sticky;
       top: 10px;
-      z-index: 20;
+      z-index: 50;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding: 14px 16px;
+      border-radius: var(--r20);
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.045));
+      box-shadow: var(--shadow2);
       backdrop-filter: blur(12px);
     }
     .brand{
       display:flex; align-items:center; gap:12px;
+      min-width: 260px;
     }
     .logo{
       width:40px; height:40px; border-radius: 12px;
       background:
         radial-gradient(12px 12px at 25% 30%, rgba(255,255,255,.65), transparent 55%),
-        linear-gradient(135deg, rgba(108,124,255,.9), rgba(76,224,255,.85));
-      box-shadow: 0 10px 24px rgba(108,124,255,.25);
+        linear-gradient(135deg, rgba(108,124,255,.95), rgba(76,224,255,.90));
+      box-shadow: 0 10px 26px rgba(108,124,255,.25);
     }
-    .brand h1{
-      margin:0;
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: .2px;
-      line-height: 1.15;
-    }
-    .brand .sub{
-      margin-top:2px;
-      font-size:12px;
-      color: var(--muted);
-    }
-    .top-actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+    .brand .t1{ margin:0; font-size: 15px; font-weight: 950; letter-spacing:.2px; line-height:1.15; }
+    .brand .t2{ margin: 3px 0 0; font-size: 12px; color: var(--muted); }
 
-    /* ---- Buttons ---- */
+    /* ---------- Buttons ---------- */
     .btn{
       appearance:none;
-      border:1px solid var(--stroke);
+      border: 1px solid var(--stroke);
       background: rgba(255,255,255,.06);
       color: var(--text);
       padding: 10px 12px;
       border-radius: 14px;
-      font-weight: 800;
+      font-weight: 900;
       font-size: 13px;
       cursor:pointer;
       transition: transform .12s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
@@ -133,68 +135,49 @@
       background: rgba(255,255,255,.10);
       border-color: var(--stroke2);
       transform: translateY(-1px);
-      box-shadow: 0 10px 25px rgba(0,0,0,.30);
+      box-shadow: 0 10px 24px rgba(0,0,0,.26);
     }
-    .btn:active{ transform: translateY(0px) scale(.99); box-shadow:none; }
+    .btn:active{ transform: translateY(0) scale(.99); box-shadow:none; }
     .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none; box-shadow:none; }
 
     .btn-primary{
-      border: 1px solid rgba(108,124,255,.55);
-      background: linear-gradient(135deg, rgba(108,124,255,.95), rgba(76,224,255,.90));
-      box-shadow: 0 14px 30px rgba(108,124,255,.22);
+      border: 1px solid rgba(108,124,255,.60);
+      background: linear-gradient(135deg, rgba(108,124,255,.98), rgba(76,224,255,.92));
+      box-shadow: 0 14px 34px rgba(108,124,255,.22);
     }
-    .btn-primary:hover{
-      border-color: rgba(108,124,255,.85);
-      box-shadow: 0 16px 36px rgba(108,124,255,.28);
-      background: linear-gradient(135deg, rgba(108,124,255,1), rgba(76,224,255,.95));
-    }
-
     .btn-success{
-      border: 1px solid rgba(38,231,166,.55);
-      background: linear-gradient(135deg, rgba(38,231,166,.92), rgba(76,224,255,.55));
-      box-shadow: 0 14px 30px rgba(38,231,166,.16);
+      border: 1px solid rgba(37,231,166,.55);
+      background: linear-gradient(135deg, rgba(37,231,166,.92), rgba(76,224,255,.55));
+      box-shadow: 0 14px 30px rgba(37,231,166,.14);
     }
     .btn-danger{
       border: 1px solid rgba(255,77,109,.55);
-      background: linear-gradient(135deg, rgba(255,77,109,.92), rgba(255,176,32,.42));
-      box-shadow: 0 14px 30px rgba(255,77,109,.14);
+      background: linear-gradient(135deg, rgba(255,77,109,.92), rgba(255,176,32,.40));
+      box-shadow: 0 14px 30px rgba(255,77,109,.12);
     }
-    .btn-ghost{
-      background: rgba(255,255,255,.04);
-    }
+    .btn-ghost{ background: rgba(255,255,255,.04); }
+    .iconbtn{ padding: 10px 11px; border-radius: 14px; }
 
-    /* ---- Pills ---- */
+    /* ---------- Pills / status ---------- */
     .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
+      display:inline-flex; align-items:center; gap:8px;
       padding: 7px 10px;
       border-radius: 999px;
       border: 1px solid var(--stroke);
       background: rgba(255,255,255,.06);
-      font-weight: 900;
+      font-weight: 950;
       font-size: 12px;
     }
-    .dot{ width:10px; height:10px; border-radius:99px; background: #94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,.14); }
-    .pill.ok .dot{ background: var(--success); box-shadow: 0 0 0 3px rgba(38,231,166,.18); }
+    .dot{ width:10px; height:10px; border-radius:999px; background:#94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,.14); }
+    .pill.ok .dot{ background: var(--success); box-shadow: 0 0 0 3px rgba(37,231,166,.18); }
     .pill.warn .dot{ background: var(--warning); box-shadow: 0 0 0 3px rgba(255,176,32,.18); }
     .pill.bad .dot{ background: var(--danger); box-shadow: 0 0 0 3px rgba(255,77,109,.18); }
 
-    /* ---- Layout cards ---- */
-    .grid{
-      display:grid;
-      grid-template-columns: 320px 1fr;
-      gap: 16px;
-      margin-top: 16px;
-    }
-    @media (max-width: 980px){
-      .grid{ grid-template-columns: 1fr; }
-    }
-
+    /* ---------- Cards ---------- */
     .card{
       border: 1px solid var(--stroke);
       border-radius: var(--r20);
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+      background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.04));
       box-shadow: var(--shadow2);
       overflow:hidden;
       backdrop-filter: blur(10px);
@@ -205,24 +188,24 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap: 12px;
+      gap: 10px;
       flex-wrap:wrap;
     }
     .card-title{
-      font-weight: 950;
+      display:flex; align-items:center; gap:10px;
       margin:0;
       font-size: 14px;
+      font-weight: 950;
       letter-spacing: .2px;
-      display:flex; align-items:center; gap:10px;
     }
-    .card-title i{ opacity:.9; }
     .card-body{ padding: 14px; }
 
-    /* ---- Sidebar ---- */
-    .menu{
+    /* ---------- Sidebar ---------- */
+    .sidebar .card-body{ padding: 12px; }
+    .nav{
       display:flex; flex-direction:column; gap:8px;
     }
-    .menu-btn{
+    .navbtn{
       width:100%;
       text-align:left;
       padding: 12px 12px;
@@ -230,30 +213,29 @@
       border: 1px solid var(--stroke);
       background: rgba(255,255,255,.05);
       color: var(--text);
-      font-weight: 900;
+      font-weight: 950;
       cursor:pointer;
       transition: background .18s ease, transform .12s ease, border-color .18s ease;
       display:flex; align-items:center; justify-content:space-between;
     }
-    .menu-btn:hover{ background: rgba(255,255,255,.09); border-color: var(--stroke2); transform: translateY(-1px); }
-    .menu-btn.active{
-      background: linear-gradient(135deg, rgba(108,124,255,.45), rgba(76,224,255,.16));
-      border-color: rgba(108,124,255,.45);
+    .navbtn:hover{ background: rgba(255,255,255,.09); border-color: var(--stroke2); transform: translateY(-1px); }
+    .navbtn.active{
+      background: linear-gradient(135deg, rgba(108,124,255,.46), rgba(76,224,255,.16));
+      border-color: rgba(108,124,255,.46);
       box-shadow: 0 16px 35px rgba(108,124,255,.12);
     }
-    .menu-btn .left{ display:flex; align-items:center; gap:10px; }
-    .menu-btn .chev{ opacity:.75; }
-    .stack{ display:flex; gap:8px; flex-wrap:wrap; }
+    .navbtn .left{ display:flex; align-items:center; gap:10px; }
+    .navbtn .chev{ opacity:.8; }
 
-    /* ---- Inputs ---- */
+    /* ---------- Inputs ---------- */
     label{
       font-size: 12px;
-      font-weight: 900;
+      font-weight: 950;
       color: var(--muted);
       display:block;
       margin-bottom: 6px;
     }
-    .input, .select{
+    .input, .select, .textarea{
       width:100%;
       padding: 11px 12px;
       border-radius: 14px;
@@ -263,42 +245,38 @@
       outline:none;
       transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
     }
-    .input::placeholder{ color: rgba(234,240,255,.35); }
-    .input:focus, .select:focus{
+    .textarea{ min-height: 90px; resize: vertical; }
+    .input::placeholder, .textarea::placeholder{ color: rgba(234,240,255,.35); }
+    .input:focus, .select:focus, .textarea:focus{
       border-color: rgba(108,124,255,.55);
       box-shadow: 0 0 0 4px rgba(108,124,255,.16);
       background: rgba(0,0,0,.18);
     }
-    .help{
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--muted2);
-      line-height: 1.4;
-    }
-    .group{
+    .grid2{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
-    @media (max-width: 640px){
-      .group{ grid-template-columns: 1fr; }
+    .grid3{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
     }
+    @media (max-width: 720px){
+      .grid2, .grid3{ grid-template-columns: 1fr; }
+      .brand{ min-width: 0; }
+    }
+    .help{ margin-top: 6px; font-size: 12px; color: var(--muted2); line-height: 1.4; }
 
-    /* ---- Table ---- */
+    /* ---------- Table ---------- */
     .table-wrap{
       border: 1px solid rgba(255,255,255,.08);
       border-radius: var(--r16);
       overflow:hidden;
       background: rgba(0,0,0,.18);
     }
-    table{
-      width:100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    thead{
-      background: rgba(255,255,255,.05);
-    }
+    table{ width:100%; border-collapse: collapse; font-size: 13px; }
+    thead{ background: rgba(255,255,255,.05); }
     th, td{
       padding: 10px 10px;
       border-bottom: 1px solid rgba(255,255,255,.06);
@@ -316,7 +294,8 @@
       cursor:pointer;
     }
     tbody tr:hover{ background: rgba(255,255,255,.04); }
-    td .subline{ margin-top: 3px; font-size: 12px; color: var(--muted2); }
+    .right{ text-align:right; }
+    .nowrap{ white-space:nowrap; }
     .badge{
       display:inline-flex; align-items:center; justify-content:center;
       padding: 4px 10px;
@@ -326,15 +305,11 @@
       border: 1px solid rgba(255,255,255,.10);
       background: rgba(255,255,255,.06);
     }
-    .badge.on{ border-color: rgba(38,231,166,.35); background: rgba(38,231,166,.14); color: rgba(38,231,166,.95); }
-    .badge.off{ border-color: rgba(255,77,109,.35); background: rgba(255,77,109,.14); color: rgba(255,77,109,.95); }
+    .b-on{ border-color: rgba(37,231,166,.35); background: rgba(37,231,166,.14); color: rgba(37,231,166,.95); }
+    .b-off{ border-color: rgba(255,77,109,.35); background: rgba(255,77,109,.14); color: rgba(255,77,109,.95); }
+    .b-month{ border-color: rgba(108,124,255,.45); background: rgba(108,124,255,.14); color: rgba(170,188,255,.95); }
 
-    .right{ text-align:right; }
-    .nowrap{ white-space:nowrap; }
-    .mask{ opacity:.75; }
-    .mask strong{ opacity:.9; }
-
-    /* ---- Code Boxes ---- */
+    /* ---------- Code boxes ---------- */
     .codebox{
       border-radius: var(--r16);
       border: 1px solid rgba(255,255,255,.10);
@@ -347,25 +322,20 @@
       max-height: 280px;
       font-family: var(--mono);
     }
-    .codebox .k{ color: rgba(76,224,255,.9); }
-    .codebox .v{ color: rgba(38,231,166,.9); }
 
-    .section{
-      display:flex;
-      flex-direction:column;
-      gap: 12px;
-    }
-
-    /* ---- Tabs ---- */
+    /* ---------- Tabs ---------- */
     .tab{ display:none; animation: fadeUp .18s ease both; }
     .tab.active{ display:block; }
     @keyframes fadeUp{
-      from{ opacity: 0; transform: translateY(8px); }
+      from{ opacity:0; transform: translateY(8px); }
       to{ opacity:1; transform: translateY(0); }
     }
 
-    /* ---- Lock overlay ---- */
-    body.is-locked .app{
+    /* ---------- Divider ---------- */
+    .hr{ height:1px; background: rgba(255,255,255,.08); margin: 12px 0; border:0; }
+
+    /* ---------- Login lock overlay ---------- */
+    body.locked .app{
       filter: blur(12px);
       opacity: .62;
       pointer-events: none;
@@ -382,10 +352,9 @@
       background: rgba(0,0,0,.55);
       backdrop-filter: blur(10px);
     }
-    body.is-locked .overlay{ display:flex; }
-
+    body.locked .overlay{ display:flex; }
     .modal{
-      width:min(560px, 96vw);
+      width:min(640px, 96vw);
       border-radius: 18px;
       border: 1px solid rgba(255,255,255,.14);
       background: rgba(15, 18, 28, .92);
@@ -408,9 +377,8 @@
     }
     .modal-head p{ margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
     .modal-body{ padding: 14px 16px 16px; }
-    .modal-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
 
-    /* ---- Flatpickr theme touch-up ---- */
+    /* Flatpickr look */
     .flatpickr-calendar{
       border-radius: 14px !important;
       border: 1px solid rgba(255,255,255,.14) !important;
@@ -419,7 +387,6 @@
       color: var(--text) !important;
       overflow:hidden;
     }
-    .flatpickr-months .flatpickr-month{ color: var(--text) !important; }
     .flatpickr-day{ color: var(--text) !important; }
     .flatpickr-day.today{ border-color: rgba(108,124,255,.7) !important; }
     .flatpickr-day.selected,
@@ -428,54 +395,44 @@
       border-color: rgba(108,124,255,.85) !important;
     }
     .flatpickr-time input{ color: var(--text) !important; }
-
-    /* ---- Footer spacing ---- */
-    .mt8{ margin-top:8px; }
-    .mt12{ margin-top:12px; }
-    .mt16{ margin-top:16px; }
-    .mt20{ margin-top:20px; }
-    .hr{
-      height:1px;
-      background: rgba(255,255,255,.08);
-      margin: 12px 0;
-      border:0;
-    }
   </style>
 </head>
 
-<body class="is-locked">
-  <!-- LOCK OVERLAY -->
+<body class="locked">
+  <!-- LOGIN OVERLAY -->
   <div class="overlay">
     <div class="modal">
       <div class="modal-head">
         <div>
-          <h3>LevPay Admin</h3>
-          <p>Masukin <b>Admin Key</b>. Kalau valid, blur langsung ilang.</p>
+          <h3>Masuk Admin</h3>
+          <p>Masukin <b>Admin Key</b> untuk akses voucher & monthly. Kalau valid, blur langsung hilang.</p>
         </div>
-        <button class="btn btn-ghost" id="btnDemo"><i class="bi bi-magic"></i>Contoh</button>
+        <button class="btn btn-ghost" id="btnReset"><i class="bi bi-arrow-counterclockwise"></i>Reset</button>
       </div>
-      <div class="modal-body">
-        <div class="group">
+      <div class="modal-body vstack">
+        <div class="grid2">
           <div>
-            <label>API Base URL</label>
-            <input class="input" id="inBase" placeholder="Kosong = domain ini (recommended)" />
-            <div class="help">Contoh: https://levpay-api.vercel.app</div>
+            <label>API Host</label>
+            <input class="input" id="inHost" placeholder="kosong = domain ini" />
+            <div class="help">Contoh: <span class="mono">https://levpay-api.vercel.app</span></div>
           </div>
           <div>
             <label>Admin Key</label>
-            <input class="input" id="inKey" type="password" placeholder="Masukkan admin key..." />
-            <div class="help">Disimpan lokal (localStorage). Logout buat hapus.</div>
+            <input class="input" id="inAdmin" type="password" placeholder="masukkan admin key..." />
+            <div class="help">Disimpan lokal (localStorage). Logout = hapus.</div>
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn btn-primary" id="btnLogin"><i class="bi bi-shield-lock"></i>Masuk</button>
+        <div class="hstack">
           <button class="btn" id="btnPingLock"><i class="bi bi-wifi"></i>Ping</button>
-        </div>
-
-        <div class="stack mt12">
+          <button class="btn btn-primary" id="btnLogin"><i class="bi bi-shield-lock"></i>Masuk</button>
+          <div class="spacer"></div>
           <span class="pill warn" id="pillApi"><span class="dot"></span><span id="pillApiText">API: belum dicek</span></span>
           <span class="pill warn" id="pillKey"><span class="dot"></span><span id="pillKeyText">Key: belum</span></span>
+        </div>
+
+        <div class="help">
+          Endpoint yang dipakai admin page ini: <span class="mono">/api/orkut?action=...</span>
         </div>
       </div>
     </div>
@@ -484,147 +441,146 @@
   <!-- APP -->
   <div class="app">
     <div class="container">
+      <!-- TOPBAR -->
       <div class="topbar">
         <div class="brand">
           <div class="logo"></div>
           <div>
-            <h1>LevPay Admin</h1>
-            <div class="sub">Voucher • Monthly • Tools • Debug</div>
+            <h1 class="t1">LevPay Admin</h1>
+            <div class="t2">Custom Voucher • Monthly Promo • Active Discounts • Tester</div>
           </div>
         </div>
 
-        <div class="top-actions">
-          <span class="pill warn" id="pillVoucher"><span class="dot"></span><span id="pillVoucherText">Voucher: —</span></span>
-          <span class="pill warn" id="pillMonthly"><span class="dot"></span><span id="pillMonthlyText">Monthly: —</span></span>
+        <div class="spacer"></div>
 
+        <div class="hstack">
+          <span class="pill warn" id="pillActive"><span class="dot"></span><span id="pillActiveText">Active: —</span></span>
           <button class="btn" id="btnRefresh"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
           <button class="btn btn-danger" id="btnLogout"><i class="bi bi-box-arrow-right"></i>Logout</button>
         </div>
       </div>
 
-      <div class="grid">
-        <!-- Sidebar -->
-        <div class="card">
+      <div class="shell">
+        <!-- SIDEBAR -->
+        <div class="card sidebar">
           <div class="card-head">
             <div class="card-title"><i class="bi bi-grid-1x2"></i>Menu</div>
-            <span class="muted small mono">/api/orkut?action=...</span>
+            <span class="muted small mono" id="hostMini">—</span>
           </div>
-          <div class="card-body">
-            <div class="menu">
-              <button class="menu-btn active" data-tab="voucher">
-                <span class="left"><i class="bi bi-ticket-perforated"></i> Voucher</span>
+          <div class="card-body vstack">
+            <div class="nav">
+              <button class="navbtn active" data-tab="active">
+                <span class="left"><i class="bi bi-lightning-charge"></i> Active Discounts</span>
                 <span class="chev"><i class="bi bi-chevron-right"></i></span>
               </button>
-              <button class="menu-btn" data-tab="monthly">
-                <span class="left"><i class="bi bi-calendar2-week"></i> Monthly</span>
+              <button class="navbtn" data-tab="voucher">
+                <span class="left"><i class="bi bi-ticket-perforated"></i> Custom Voucher</span>
                 <span class="chev"><i class="bi bi-chevron-right"></i></span>
               </button>
-              <button class="menu-btn" data-tab="tools">
-                <span class="left"><i class="bi bi-wrench-adjustable"></i> Tools</span>
+              <button class="navbtn" data-tab="monthly">
+                <span class="left"><i class="bi bi-calendar2-week"></i> Monthly Promo</span>
                 <span class="chev"><i class="bi bi-chevron-right"></i></span>
               </button>
-              <button class="menu-btn" data-tab="debug">
-                <span class="left"><i class="bi bi-bug"></i> Debug</span>
+              <button class="navbtn" data-tab="tester">
+                <span class="left"><i class="bi bi-play-circle"></i> Tester</span>
+                <span class="chev"><i class="bi bi-chevron-right"></i></span>
+              </button>
+              <button class="navbtn" data-tab="curl">
+                <span class="left"><i class="bi bi-terminal"></i> cURL + JSON</span>
                 <span class="chev"><i class="bi bi-chevron-right"></i></span>
               </button>
             </div>
 
             <div class="hr"></div>
-            <div class="small muted">
-              • cURL + JSON selalu otomatis.<br>
-              • Kode voucher disembunyiin di tabel (mask).<br>
-              • Untuk edit: klik row voucher ON.
+
+            <div class="hstack">
+              <button class="btn btn-ghost" id="btnCopyCurl"><i class="bi bi-clipboard"></i>Copy cURL</button>
+              <button class="btn btn-ghost" id="btnCopyJson"><i class="bi bi-clipboard"></i>Copy JSON</button>
+            </div>
+
+            <div class="help">
+              cURL otomatis pakai placeholder:
+              <span class="mono">$HOST</span> & <span class="mono">$ADMIN</span>.
             </div>
           </div>
         </div>
 
-        <!-- Main -->
-        <div class="section">
-          <!-- TAB: VOUCHER -->
-          <div class="tab active" id="tabVoucher">
+        <!-- MAIN -->
+        <div class="vstack">
+          <!-- TAB: ACTIVE -->
+          <div class="tab active" id="tab-active">
             <div class="card">
               <div class="card-head">
-                <div class="card-title"><i class="bi bi-terminal"></i>cURL + JSON (otomatis)</div>
-                <div class="stack">
-                  <button class="btn" id="btnCopyCurl"><i class="bi bi-clipboard"></i>Copy cURL</button>
-                  <button class="btn" id="btnCopyJson"><i class="bi bi-clipboard"></i>Copy JSON</button>
-                </div>
-              </div>
-              <div class="card-body">
-                <div class="group">
-                  <div>
-                    <label>cURL Preview</label>
-                    <div class="codebox" id="curlBox">—</div>
-                    <div class="help">Admin key dimasking jadi <span class="mono">$ADMIN</span>.</div>
-                  </div>
-                  <div>
-                    <label>Response JSON</label>
-                    <div class="codebox" id="jsonBox">{}</div>
-                    <div class="help">Response terakhir disanitasi (kode & deviceKey disembunyiin).</div>
+                <div class="card-title"><i class="bi bi-lightning-charge"></i>Active Discounts (Voucher ON + Monthly)</div>
+                <div class="hstack">
+                  <div class="hstack">
+                    <span class="pill warn" id="pillVoucher"><span class="dot"></span><span id="pillVoucherText">Voucher: —</span></span>
+                    <span class="pill warn" id="pillMonthly"><span class="dot"></span><span id="pillMonthlyText">Monthly: —</span></span>
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div class="card mt16">
-              <div class="card-head">
-                <div class="card-title"><i class="bi bi-list-check"></i>Voucher ON</div>
-                <div class="stack">
-                  <button class="btn" id="btnLoadVouchers"><i class="bi bi-download"></i>Load</button>
-                  <button class="btn btn-primary" id="btnNewVoucher"><i class="bi bi-plus-lg"></i>New</button>
-                  <button class="btn" id="btnPing"><i class="bi bi-wifi"></i>Ping</button>
-                </div>
-              </div>
-              <div class="card-body">
-                <div class="group">
+              <div class="card-body vstack">
+                <div class="grid2">
                   <div>
-                    <label>Search (name/note)</label>
-                    <input class="input" id="qVoucher" placeholder="Ketik buat filter..." />
+                    <label>Search (nama / note)</label>
+                    <input class="input" id="activeSearch" placeholder="Cari diskon..." />
                   </div>
                   <div>
-                    <label>Sort</label>
-                    <select class="select" id="sortVoucher">
-                      <option value="updated">Updated</option>
-                      <option value="name">Name</option>
+                    <label>Show code (masked default)</label>
+                    <select class="select" id="showCode">
+                      <option value="masked" selected>Masked</option>
+                      <option value="show">Show</option>
                     </select>
+                    <div class="help">Biar aman di production, default disembunyiin.</div>
                   </div>
                 </div>
 
-                <div class="mt12 table-wrap">
+                <div class="table-wrap">
                   <table>
                     <thead>
                       <tr>
+                        <th>Jenis</th>
                         <th>Status</th>
                         <th>Nama</th>
                         <th class="right">Diskon %</th>
-                        <th class="right">Limit Nominal</th>
-                        <th class="right">Limit Pemakaian</th>
+                        <th class="right">Max Rp</th>
+                        <th class="right">Max Uses</th>
                         <th class="nowrap">Expired</th>
                       </tr>
                     </thead>
-                    <tbody id="voucherTbody">
-                      <tr><td colspan="6" class="muted">Belum ada data. Klik Load.</td></tr>
+                    <tbody id="activeTbody">
+                      <tr><td colspan="7" class="muted">Loading…</td></tr>
                     </tbody>
                   </table>
                 </div>
 
-                <div class="help mt8">
-                  Kalau diskon “cuma 500 perak”, biasanya <b>maxRp</b> nya kekunci. Set <b>0</b> buat unlimited.
+                <div class="help">
+                  Klik baris untuk auto-isi form (voucher atau monthly) + auto-generate cURL.
                 </div>
               </div>
             </div>
+          </div>
 
-            <div class="card mt16">
+          <!-- TAB: VOUCHER -->
+          <div class="tab" id="tab-voucher">
+            <div class="card">
               <div class="card-head">
-                <div class="card-title"><i class="bi bi-pencil-square"></i>Edit Voucher</div>
-                <div class="stack">
+                <div class="card-title"><i class="bi bi-ticket-perforated"></i>Custom Voucher</div>
+                <div class="hstack">
+                  <button class="btn" id="btnNewVoucher"><i class="bi bi-plus-lg"></i>New</button>
+                  <button class="btn" id="btnLoadVouchers"><i class="bi bi-download"></i>Load</button>
                   <button class="btn btn-primary" id="btnUpsert"><i class="bi bi-save2"></i>Save (Upsert)</button>
-                  <button class="btn btn-success" id="btnEnable"><i class="bi bi-toggle-on"></i>Enable</button>
                   <button class="btn btn-danger" id="btnDisable"><i class="bi bi-toggle-off"></i>Disable</button>
                 </div>
               </div>
-              <div class="card-body">
-                <div class="group">
+
+              <div class="card-body vstack">
+                <div class="grid2">
+                  <div>
+                    <label>Voucher Code</label>
+                    <input class="input mono" id="vCode" placeholder="contoh: VIPL" autocomplete="off" />
+                    <div class="help">Disarankan uppercase, tanpa spasi.</div>
+                  </div>
                   <div>
                     <label>Enabled</label>
                     <select class="select" id="vEnabled">
@@ -632,99 +588,58 @@
                       <option value="false">false</option>
                     </select>
                   </div>
+                </div>
+
+                <div class="grid2">
                   <div>
                     <label>Nama</label>
                     <input class="input" id="vName" placeholder="VIP LEVEL" />
                   </div>
-                </div>
-
-                <div class="group mt12">
                   <div>
-                    <label>Diskon %</label>
+                    <label>Diskon (%)</label>
                     <input class="input" id="vPercent" type="number" min="0" max="100" step="1" placeholder="10" />
                   </div>
-                  <div>
-                    <label>Limit Nominal (maxRp) — 0=unlimited</label>
-                    <input class="input" id="vMaxRp" type="number" min="0" step="1" placeholder="0" />
-                  </div>
                 </div>
 
-                <div class="group mt12">
+                <div class="grid3">
                   <div>
-                    <label>Limit Pemakaian (maxUses) — kosong=unlimited</label>
+                    <label>Max Rp (0 = unlimited)</label>
+                    <input class="input" id="vMaxRp" type="number" min="0" step="1" value="0" />
+                  </div>
+                  <div>
+                    <label>Max Uses (kosong = unlimited)</label>
                     <input class="input" id="vMaxUses" type="number" min="1" step="1" placeholder="" />
                   </div>
                   <div>
-                    <label>Expired</label>
-                    <input class="input" id="vExpiresAt" placeholder="Pilih tanggal & jam..." />
-                    <div class="help">Kalender otomatis (flatpickr).</div>
+                    <label>Expired (optional)</label>
+                    <input class="input" id="vExpiresAt" placeholder="Pilih tanggal & jam…" />
                   </div>
                 </div>
 
-                <div class="group mt12">
-                  <div>
-                    <label>Note</label>
-                    <input class="input" id="vNote" placeholder="Catatan internal" />
-                  </div>
-                  <div>
-                    <label>Voucher Code (hidden)</label>
-                    <div class="group" style="grid-template-columns:1fr auto; gap:10px;">
-                      <input class="input mono" id="vCode" type="password" placeholder="(hidden)" autocomplete="off" />
-                      <button class="btn" id="btnRevealCode"><i class="bi bi-eye"></i>Reveal</button>
-                    </div>
-                    <div class="help">Kode tidak ditampilkan di tabel. Reveal hanya kalau perlu.</div>
-                  </div>
+                <div>
+                  <label>Note</label>
+                  <textarea class="textarea" id="vNote" placeholder="Catatan internal…"></textarea>
                 </div>
 
-                <div class="hr"></div>
-
-                <div class="card" style="background: rgba(0,0,0,.14); border-color: rgba(255,255,255,.08); box-shadow:none;">
-                  <div class="card-head" style="border-bottom-color: rgba(255,255,255,.06);">
-                    <div class="card-title"><i class="bi bi-play-circle"></i>Test (createqr)</div>
-                    <div class="stack">
-                      <button class="btn" id="btnGenDevice"><i class="bi bi-shuffle"></i>Generate Device ID</button>
-                      <button class="btn btn-success" id="btnRunTest"><i class="bi bi-play-fill"></i>Run Test</button>
-                    </div>
-                  </div>
-                  <div class="card-body">
-                    <div class="group">
-                      <div>
-                        <label>Amount</label>
-                        <input class="input" id="tAmount" type="number" min="1" step="1" value="10000">
-                      </div>
-                      <div>
-                        <label>Device ID</label>
-                        <input class="input mono" id="tDeviceId" placeholder="dev_web_xxx">
-                      </div>
-                    </div>
-
-                    <div class="mt12">
-                      <label>Voucher (hidden)</label>
-                      <div class="group" style="grid-template-columns:1fr auto; gap:10px;">
-                        <input class="input mono" id="tVoucher" type="password" placeholder="(hidden)" autocomplete="off" />
-                        <button class="btn" id="btnRevealTest"><i class="bi bi-eye"></i>Reveal</button>
-                      </div>
-                      <div class="help">Test pakai action <span class="mono">createqr</span> (kalau backend lu support).</div>
-                    </div>
-                  </div>
+                <div class="help">
+                  Kalau “diskon cuma kepotong kecil”, cek <b>maxRp</b>. Set <b>0</b> biar gak ketahan.
                 </div>
-
               </div>
             </div>
           </div>
 
           <!-- TAB: MONTHLY -->
-          <div class="tab" id="tabMonthly">
+          <div class="tab" id="tab-monthly">
             <div class="card">
               <div class="card-head">
                 <div class="card-title"><i class="bi bi-calendar2-week"></i>Monthly Promo</div>
-                <div class="stack">
+                <div class="hstack">
                   <button class="btn" id="btnGetMonthly"><i class="bi bi-download"></i>Get</button>
                   <button class="btn btn-primary" id="btnSetMonthly"><i class="bi bi-save2"></i>Save</button>
                 </div>
               </div>
-              <div class="card-body">
-                <div class="group">
+              <div class="card-body vstack">
+                <div class="grid2">
                   <div>
                     <label>Enabled</label>
                     <select class="select" id="mEnabled">
@@ -734,173 +649,167 @@
                   </div>
                   <div>
                     <label>Nama Promo</label>
-                    <input class="input" id="mName" placeholder="PROMO BULANAN">
+                    <input class="input" id="mName" placeholder="PROMO BULANAN" />
                   </div>
                 </div>
 
-                <div class="group mt12">
+                <div class="grid2">
                   <div>
-                    <label>Diskon %</label>
-                    <input class="input" id="mPercent" type="number" min="0" max="100" step="1">
+                    <label>Diskon (%)</label>
+                    <input class="input" id="mPercent" type="number" min="0" max="100" step="1" />
                   </div>
                   <div>
                     <label>Max Rp</label>
-                    <input class="input" id="mMaxRp" type="number" min="0" step="1">
+                    <input class="input" id="mMaxRp" type="number" min="0" step="1" />
                   </div>
                 </div>
-
-                <div class="hr"></div>
-
-                <div class="small muted">
-                  <b>Bedanya SHA256 vs Pepper:</b><br>
-                  • <span class="mono">SHA256</span> = algoritma hash (ngubah text jadi 64 hex).<br>
-                  • <span class="mono">Pepper</span> = secret tambahan di server. Jadi deviceKey = SHA256(deviceId + "|" + pepper).<br>
-                  Tanpa pepper, orang bisa nebak / bikin hash sendiri. Dengan pepper, harus tau pepper dulu.
-                </div>
-
-                <div class="hr"></div>
 
                 <div class="card" style="background: rgba(0,0,0,.14); border-color: rgba(255,255,255,.08); box-shadow:none;">
-                  <div class="card-head" style="border-bottom-color: rgba(255,255,255,.06);">
-                    <div class="card-title"><i class="bi bi-cpu"></i>Unlimited DeviceKey</div>
-                    <div class="stack">
-                      <button class="btn" id="btnGenDK"><i class="bi bi-cpu"></i>Gen</button>
-                      <button class="btn btn-success" id="btnAddUnlimited"><i class="bi bi-plus-circle"></i>Add</button>
-                      <button class="btn btn-danger" id="btnRemoveUnlimited"><i class="bi bi-dash-circle"></i>Remove</button>
-                    </div>
+                  <div class="card-head">
+                    <div class="card-title"><i class="bi bi-info-circle"></i>Catatan Monthly (anti-abuse)</div>
                   </div>
-                  <div class="card-body">
-                    <div class="group">
-                      <div>
-                        <label>Device ID</label>
-                        <input class="input mono" id="uDeviceId" placeholder="dev_web_xxx">
-                      </div>
-                      <div>
-                        <label>Pepper</label>
-                        <input class="input mono" id="uPepper" type="password" placeholder="(hidden)">
-                      </div>
-                    </div>
-
-                    <div class="mt12">
-                      <label>DeviceKey (hidden)</label>
-                      <div class="group" style="grid-template-columns:1fr auto; gap:10px;">
-                        <input class="input mono" id="uDeviceKey" type="password" readonly placeholder="(hidden)">
-                        <button class="btn" id="btnRevealDK"><i class="bi bi-eye"></i>Reveal</button>
-                      </div>
-                      <div class="help">DeviceKey disembunyiin by default biar aman.</div>
-                    </div>
+                  <div class="card-body small muted">
+                    Monthly itu 1× per device per bulan (tracking pakai <span class="mono">deviceKey</span> di backend).<br>
+                    <b>SHA256</b> = algoritma hash. <b>Pepper</b> = secret di server yang dicampur ke deviceId sebelum di-hash, biar orang gak bisa nebak deviceKey.
                   </div>
                 </div>
-
-                <div class="mt16">
-                  <label>Monthly Snapshot (sanitized)</label>
-                  <div class="codebox" id="monthlyBox">{}</div>
-                </div>
               </div>
             </div>
           </div>
 
-          <!-- TAB: TOOLS -->
-          <div class="tab" id="tabTools">
+          <!-- TAB: TESTER -->
+          <div class="tab" id="tab-tester">
             <div class="card">
               <div class="card-head">
-                <div class="card-title"><i class="bi bi-wrench-adjustable"></i>Tools</div>
-                <div class="stack">
-                  <button class="btn btn-primary" id="btnToolGen"><i class="bi bi-shuffle"></i>Generate</button>
-                  <button class="btn" id="btnToolCopy"><i class="bi bi-clipboard"></i>Copy</button>
+                <div class="card-title"><i class="bi bi-play-circle"></i>Tester</div>
+                <div class="hstack">
+                  <button class="btn" id="btnGenDevice"><i class="bi bi-shuffle"></i>Generate Device ID</button>
+                  <button class="btn btn-success" id="btnApply"><i class="bi bi-percent"></i>discount.apply</button>
+                  <button class="btn btn-primary" id="btnCreateQR"><i class="bi bi-qr-code"></i>createqr</button>
                 </div>
               </div>
-              <div class="card-body">
-                <label>Generate Device ID</label>
-                <input class="input mono" id="toolDeviceId" readonly>
-                <div class="help mt8">
-                  Device ID random beda-beda itu normal & aman. Monthly anti-abuse pakai deviceKey (hash + pepper).
+              <div class="card-body vstack">
+                <div class="grid3">
+                  <div>
+                    <label>Amount</label>
+                    <input class="input" id="tAmount" type="number" min="1" step="1" value="10000" />
+                  </div>
+                  <div>
+                    <label>Device ID</label>
+                    <input class="input mono" id="tDeviceId" placeholder="dev_web_xxx" />
+                  </div>
+                  <div>
+                    <label>Voucher Code</label>
+                    <input class="input mono" id="tVoucher" placeholder="contoh: VIPL" />
+                  </div>
+                </div>
+
+                <div class="help">
+                  <b>discount.apply</b> = test engine diskon. <b>createqr</b> = kalau backend lu support bikin QR dengan voucher.
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- TAB: DEBUG -->
-          <div class="tab" id="tabDebug">
+          <!-- TAB: CURL -->
+          <div class="tab" id="tab-curl">
             <div class="card">
               <div class="card-head">
-                <div class="card-title"><i class="bi bi-bug"></i>Debug (Sanitized)</div>
-                <div class="stack">
-                  <button class="btn" id="btnCopyLog"><i class="bi bi-clipboard"></i>Copy</button>
-                  <button class="btn btn-danger" id="btnClearLog"><i class="bi bi-trash"></i>Clear</button>
+                <div class="card-title"><i class="bi bi-terminal"></i>cURL + JSON</div>
+                <div class="hstack">
+                  <button class="btn btn-ghost" id="btnCopyResp"><i class="bi bi-clipboard"></i>Copy Response</button>
+                  <button class="btn" id="btnPing"><i class="bi bi-wifi"></i>Ping</button>
                 </div>
               </div>
-              <div class="card-body">
-                <div class="codebox" id="logBox">{}</div>
+              <div class="card-body vstack">
+                <div class="grid2">
+                  <div>
+                    <label>cURL (auto)</label>
+                    <div class="codebox" id="curlBox">—</div>
+                    <div class="help">Admin header otomatis kalau action admin (voucher/monthly/tx).</div>
+                  </div>
+                  <div>
+                    <label>JSON Body (auto)</label>
+                    <div class="codebox" id="bodyBox">{}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Response JSON</label>
+                  <div class="codebox" id="respBox">{}</div>
+                  <div class="help">Klik action apa pun di halaman → cURL + JSON + response ke-update.</div>
+                </div>
               </div>
             </div>
           </div>
 
-        </div><!-- /section -->
-      </div><!-- /grid -->
+        </div><!-- /main -->
+      </div><!-- /shell -->
     </div><!-- /container -->
   </div><!-- /app -->
 
-  <!-- Flatpickr -->
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
-
   <script>
     (() => {
       const $ = (id) => document.getElementById(id);
 
-      const LS_BASE = "levpay_base";
-      const LS_KEY  = "levpay_admin_key";
-      const LS_TAB  = "levpay_tab";
+      // Storage keys
+      const LS_HOST  = "levpay_admin_host";
+      const LS_ADMIN = "levpay_admin_key";
+      const LS_TAB   = "levpay_admin_tab";
 
-      let BASE = "";
+      // State
+      let HOST = "";
       let ADMIN = "";
-      let voucherCache = [];
-      let lastCurl = "—";
-      let lastJson = {};
+      let vouchers = []; // from voucher.list
+      let monthly = null; // from monthly.get
+      let last = { action:"", method:"GET", admin:false, body:null, response:{} };
 
-      // Lock
-      const inBase = $("inBase");
-      const inKey = $("inKey");
-      const btnLogin = $("btnLogin");
-      const btnDemo = $("btnDemo");
+      // Elements
+      const hostMini = $("hostMini");
+
+      const inHost = $("inHost");
+      const inAdmin = $("inAdmin");
+      const btnReset = $("btnReset");
       const btnPingLock = $("btnPingLock");
-      const pillApi = $("pillApi"), pillApiText = $("pillApiText");
-      const pillKey = $("pillKey"), pillKeyText = $("pillKeyText");
+      const btnLogin = $("btnLogin");
 
-      // Top
+      const pillApiText = $("pillApiText");
+      const pillKeyText = $("pillKeyText");
+      const pillApi = $("pillApi");
+      const pillKey = $("pillKey");
+
+      const pillActive = $("pillActive");
+      const pillActiveText = $("pillActiveText");
+      const pillVoucher = $("pillVoucher");
+      const pillVoucherText = $("pillVoucherText");
+      const pillMonthly = $("pillMonthly");
+      const pillMonthlyText = $("pillMonthlyText");
+
       const btnRefresh = $("btnRefresh");
       const btnLogout = $("btnLogout");
-      const btnPing = $("btnPing");
 
-      // Pills
-      const pillVoucher = $("pillVoucher"), pillVoucherText = $("pillVoucherText");
-      const pillMonthly = $("pillMonthly"), pillMonthlyText = $("pillMonthlyText");
-
-      // Tabs
-      const tabButtons = Array.from(document.querySelectorAll(".menu-btn"));
+      const navBtns = Array.from(document.querySelectorAll(".navbtn"));
       const tabs = {
-        voucher: $("tabVoucher"),
-        monthly: $("tabMonthly"),
-        tools: $("tabTools"),
-        debug: $("tabDebug"),
+        active: $("tab-active"),
+        voucher: $("tab-voucher"),
+        monthly: $("tab-monthly"),
+        tester: $("tab-tester"),
+        curl: $("tab-curl"),
       };
 
-      // Boxes
-      const curlBox = $("curlBox");
-      const jsonBox = $("jsonBox");
-      const logBox  = $("logBox");
-      const btnCopyCurl = $("btnCopyCurl");
-      const btnCopyJson = $("btnCopyJson");
-      const btnCopyLog  = $("btnCopyLog");
-      const btnClearLog = $("btnClearLog");
+      // Active list
+      const activeSearch = $("activeSearch");
+      const showCode = $("showCode");
+      const activeTbody = $("activeTbody");
 
-      // Voucher list/form
-      const btnLoadVouchers = $("btnLoadVouchers");
+      // Voucher form
       const btnNewVoucher = $("btnNewVoucher");
-      const qVoucher = $("qVoucher");
-      const sortVoucher = $("sortVoucher");
-      const voucherTbody = $("voucherTbody");
+      const btnLoadVouchers = $("btnLoadVouchers");
+      const btnUpsert = $("btnUpsert");
+      const btnDisable = $("btnDisable");
 
+      const vCode = $("vCode");
       const vEnabled = $("vEnabled");
       const vName = $("vName");
       const vPercent = $("vPercent");
@@ -908,54 +817,97 @@
       const vMaxUses = $("vMaxUses");
       const vExpiresAt = $("vExpiresAt");
       const vNote = $("vNote");
-      const vCode = $("vCode");
-      const btnRevealCode = $("btnRevealCode");
-      const btnUpsert = $("btnUpsert");
-      const btnEnable = $("btnEnable");
-      const btnDisable = $("btnDisable");
 
-      // Test
-      const tAmount = $("tAmount");
-      const tDeviceId = $("tDeviceId");
-      const tVoucher = $("tVoucher");
-      const btnRevealTest = $("btnRevealTest");
-      const btnGenDevice = $("btnGenDevice");
-      const btnRunTest = $("btnRunTest");
-
-      // Monthly
+      // Monthly form
       const btnGetMonthly = $("btnGetMonthly");
       const btnSetMonthly = $("btnSetMonthly");
       const mEnabled = $("mEnabled");
       const mName = $("mName");
       const mPercent = $("mPercent");
       const mMaxRp = $("mMaxRp");
-      const monthlyBox = $("monthlyBox");
 
-      const uDeviceId = $("uDeviceId");
-      const uPepper = $("uPepper");
-      const uDeviceKey = $("uDeviceKey");
-      const btnRevealDK = $("btnRevealDK");
-      const btnGenDK = $("btnGenDK");
-      const btnAddUnlimited = $("btnAddUnlimited");
-      const btnRemoveUnlimited = $("btnRemoveUnlimited");
+      // Tester
+      const btnGenDevice = $("btnGenDevice");
+      const btnApply = $("btnApply");
+      const btnCreateQR = $("btnCreateQR");
+      const tAmount = $("tAmount");
+      const tDeviceId = $("tDeviceId");
+      const tVoucher = $("tVoucher");
 
-      // Tools
-      const toolDeviceId = $("toolDeviceId");
-      const btnToolGen = $("btnToolGen");
-      const btnToolCopy = $("btnToolCopy");
+      // Curl boxes
+      const btnCopyCurl = $("btnCopyCurl");
+      const btnCopyJson = $("btnCopyJson");
+      const btnCopyResp = $("btnCopyResp");
+      const btnPing = $("btnPing");
+      const curlBox = $("curlBox");
+      const bodyBox = $("bodyBox");
+      const respBox = $("respBox");
 
-      let fp = null;
-
-      function lock(on){ document.body.classList.toggle("is-locked", !!on); }
-
+      // Helpers
+      function lock(on){ document.body.classList.toggle("locked", !!on); }
       function setPill(el, tone, text){
         el.classList.remove("ok","warn","bad");
         el.classList.add(tone);
         el.querySelector("span:last-child").textContent = text;
       }
-
-      function baseUrl(){ return String(BASE||"").trim().replace(/\/+$/,""); }
-      function endpoint(action){ return baseUrl() + "/api/orkut?action=" + encodeURIComponent(action); }
+      function normHost(h){
+        const x = String(h||"").trim().replace(/\/+$/,"");
+        return x || location.origin;
+      }
+      function endpoint(action){
+        return normHost(HOST) + "/api/orkut?action=" + encodeURIComponent(action);
+      }
+      function isAdminAction(action){
+        return /^(voucher\.|monthly\.|tx\.)/.test(action);
+      }
+      function maskCode(code){
+        const s = String(code||"");
+        if (s.length <= 4) return "••••";
+        return "••••" + s.slice(-2);
+      }
+      function fmtRp(n){
+        const x = Number(n||0);
+        if (!x) return "∞";
+        return x.toLocaleString("id-ID");
+      }
+      function fmtUses(v){
+        if (v == null) return "∞";
+        const n = Number(v);
+        return Number.isFinite(n) ? String(n) : "∞";
+      }
+      function fmtDate(iso){
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (!Number.isFinite(d.getTime())) return "—";
+        return d.toLocaleString("id-ID");
+      }
+      function sanitizeCode(s){
+        return String(s||"").trim().toUpperCase().replace(/\s+/g,"");
+      }
+      async function copy(text){
+        try { await navigator.clipboard.writeText(String(text||"")); } catch {}
+      }
+      function curlFor(action, method, body){
+        const HOSTVAR = "$HOST";
+        const ADMINVAR = "$ADMIN";
+        const heads = [];
+        const admin = isAdminAction(action);
+        if (admin) heads.push(`-H "X-Admin-Key: ${ADMINVAR}"`);
+        if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
+        const h = heads.length ? (" \\\n  " + heads.join(" \\\n  ")) : "";
+        const data = (method === "GET" || body == null) ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
+        return `curl -sS -X ${method} "${HOSTVAR}/api/orkut?action=${action}"${h}${data} | jq`;
+      }
+      function setLast({action, method, body, response}){
+        last.action = action;
+        last.method = method;
+        last.admin = isAdminAction(action);
+        last.body = body ?? null;
+        last.response = response ?? {};
+        curlBox.textContent = curlFor(action, method, last.body);
+        bodyBox.textContent = JSON.stringify(last.body ?? {}, null, 2);
+        respBox.textContent = JSON.stringify(last.response ?? {}, null, 2);
+      }
 
       async function jfetch(url, opts){
         const r = await fetch(url, opts);
@@ -965,94 +917,22 @@
         return { ok: r.ok, status: r.status, json };
       }
 
-      function maskKey(){ return "$ADMIN"; }
-
-      function curlFor(action, method, body, isAdmin){
-        const HOST = "$HOST";
-        const head = [];
-        if (isAdmin) head.push(`-H "X-Admin-Key: ${maskKey()}"`);
-        if (method !== "GET") head.push(`-H "Content-Type: application/json"`);
-        const h = head.length ? (" \\\n  " + head.join(" \\\n  ")) : "";
-        const data = (method === "GET" || !body) ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
-        return `curl -sS -X ${method} "${HOST}/api/orkut?action=${action}"${h}${data} | jq`;
-      }
-
-      function deepSanitize(obj){
-        const seen = new WeakSet();
-        const walk = (x, k) => {
-          if (x == null) return x;
-          if (typeof x === "string"){
-            if (k && (k.toLowerCase()==="code" || k.toLowerCase().includes("voucher"))) return "••••(hidden)••••";
-            if (/^[a-f0-9]{64}$/i.test(x)) return "••••(hidden)••••";
-            return x;
-          }
-          if (typeof x !== "object") return x;
-          if (seen.has(x)) return "[circular]";
-          seen.add(x);
-          if (Array.isArray(x)) return x.map(v => walk(v, k));
-          const out = {};
-          for (const [kk,vv] of Object.entries(x)){
-            const low = kk.toLowerCase();
-            if (low === "code" || low.includes("voucher") || low.includes("devicekey")) out[kk] = "••••(hidden)••••";
-            else out[kk] = walk(vv, kk);
-          }
-          return out;
-        };
-        return walk(obj, "");
-      }
-
-      function setBoxes(curlText, json){
-        lastCurl = curlText || "—";
-        lastJson = json || {};
-        curlBox.textContent = lastCurl;
-        const pretty = JSON.stringify(deepSanitize(lastJson), null, 2);
-        jsonBox.textContent = pretty;
-        logBox.textContent = pretty;
-      }
-
-      function copy(text){ return navigator.clipboard.writeText(String(text||"")).catch(()=>{}); }
-
-      function sanitizeCode(s){ return String(s||"").trim().toUpperCase().replace(/\s+/g,""); }
-      function maskCode(code){
-        const s = String(code||"");
-        if (s.length <= 4) return "••••";
-        return "••••" + s.slice(-2);
-      }
-
-      function genDeviceId(){
-        const a = Math.random().toString(36).slice(2,8);
-        const b = Math.random().toString(36).slice(2,8);
-        return "dev_web_" + a + "_" + b;
-      }
-
-      async function sha256Hex(str){
-        const enc = new TextEncoder().encode(str);
-        const buf = await crypto.subtle.digest("SHA-256", enc);
-        return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-      }
-
-      function toIsoFromFp(){
-        const v = String(vExpiresAt.value||"").trim();
-        if (!v) return null;
-        const d = new Date(v);
-        if (!Number.isFinite(d.getTime())) return null;
-        return d.toISOString();
-      }
-
-      async function callAction(action, {method="GET", admin=false, body=null} = {}){
+      async function callAction(action, {method="GET", body=null} = {}){
         const headers = {};
         if (method !== "GET") headers["Content-Type"] = "application/json";
-        if (admin) headers["X-Admin-Key"] = ADMIN;
+        if (isAdminAction(action)) headers["X-Admin-Key"] = ADMIN;
 
-        const r = await jfetch(endpoint(action), { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const r = await jfetch(endpoint(action), {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined
+        });
 
-        setBoxes(
-          curlFor(action, method, body, admin),
-          { action, status: r.status, ok: r.ok, response: r.json }
-        );
+        setLast({ action, method, body, response: { ok:r.ok, status:r.status, data:r.json }});
         return r;
       }
 
+      // API ops
       async function ping(){
         const r = await callAction("ping", { method:"GET" });
         setPill(pillApi, r.ok ? "ok" : "bad", r.ok ? "API: OK" : "API: ERROR");
@@ -1060,76 +940,173 @@
       }
 
       async function validateKey(){
-        const r = await callAction("voucher.list", { method:"GET", admin:true });
+        const r = await callAction("voucher.list", { method:"GET" });
         if (r.status === 401){
           setPill(pillKey, "bad", "Key: salah (401)");
           return false;
         }
-        setPill(pillKey, "ok", "Key: OK");
-        return true;
+        setPill(pillKey, r.ok ? "ok" : "warn", r.ok ? "Key: OK" : "Key: cek lagi");
+        return !!r.ok;
       }
 
-      function setTab(name){
-        tabButtons.forEach(b=>{
-          const on = b.getAttribute("data-tab") === name;
-          b.classList.toggle("active", on);
+      async function loadVouchers(){
+        setPill(pillVoucher, "warn", "Voucher: loading…");
+        const r = await callAction("voucher.list", { method:"GET" });
+        if (!r.ok){
+          setPill(pillVoucher, r.status===401 ? "bad":"bad", "Voucher: error");
+          return;
+        }
+        const raw = r.json?.data ?? r.json ?? [];
+        const list = Array.isArray(raw) ? raw : [];
+        vouchers = list.map(v => ({
+          code: sanitizeCode(v.code||""),
+          name: String(v.name||""),
+          enabled: v.enabled !== false,
+          percent: Number(v.percent||0),
+          maxRp: Number(v.maxRp||0),
+          maxUses: (v.maxUses == null ? null : Number(v.maxUses)),
+          expiresAt: v.expiresAt || null,
+          note: v.note || null,
+          updatedAt: v.updatedAt || null
+        })).filter(v => v.code);
+
+        const on = vouchers.filter(v => v.enabled).length;
+        setPill(pillVoucher, "ok", `Voucher: ${on} ON`);
+      }
+
+      async function loadMonthly(){
+        setPill(pillMonthly, "warn", "Monthly: loading…");
+        const r = await callAction("monthly.get", { method:"GET" });
+        if (!r.ok){
+          setPill(pillMonthly, r.status===401 ? "bad":"bad", "Monthly: error");
+          return;
+        }
+        monthly = r.json?.data ?? r.json ?? null;
+        if (monthly && typeof monthly === "object"){
+          setPill(pillMonthly, "ok", `Monthly: ${monthly.enabled ? "ON":"OFF"}`);
+          // fill form
+          mEnabled.value = String(!!monthly.enabled);
+          mName.value = String(monthly.name ?? "");
+          mPercent.value = String(Number(monthly.percent ?? 0));
+          mMaxRp.value = String(Number(monthly.maxRp ?? 0));
+        } else {
+          setPill(pillMonthly, "bad", "Monthly: invalid");
+        }
+      }
+
+      function buildActiveList(){
+        const list = [];
+
+        // Monthly pseudo-row
+        if (monthly && typeof monthly === "object"){
+          list.push({
+            kind: "monthly",
+            enabled: !!monthly.enabled,
+            code: "(monthly)",
+            name: String(monthly.name || "PROMO BULANAN"),
+            percent: Number(monthly.percent||0),
+            maxRp: Number(monthly.maxRp||0),
+            maxUses: "1x/device/bulan",
+            expiresAt: "—"
+          });
+        }
+
+        // Voucher enabled
+        for (const v of vouchers){
+          if (!v.enabled) continue;
+          list.push({
+            kind: "voucher",
+            enabled: true,
+            code: v.code,
+            name: v.name || v.code,
+            percent: Number(v.percent||0),
+            maxRp: Number(v.maxRp||0),
+            maxUses: (v.maxUses == null ? null : v.maxUses),
+            expiresAt: v.expiresAt || null
+          });
+        }
+
+        return list;
+      }
+
+      function renderActive(){
+        const q = String(activeSearch.value||"").trim().toLowerCase();
+        const sc = showCode.value; // masked | show
+        const list = buildActiveList().filter(x=>{
+          if (!q) return true;
+          const hay = (x.name + " " + (x.kind==="voucher" ? x.code : "")).toLowerCase();
+          return hay.includes(q);
         });
-        Object.entries(tabs).forEach(([k, el])=>{
-          el.classList.toggle("active", k === name);
-        });
-        localStorage.setItem(LS_TAB, name);
-      }
 
-      function sortVouchers(list){
-        const mode = String(sortVoucher.value||"updated");
-        const arr = [...list];
-        if (mode === "name") arr.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
-        else arr.sort((a,b)=>String(b.updatedAt||"").localeCompare(String(a.updatedAt||"")));
-        return arr;
-      }
+        const voucherOn = vouchers.filter(v=>v.enabled).length;
+        const monthlyOn = !!(monthly && monthly.enabled);
+        setPill(pillActive, "ok", `Active: ${voucherOn} voucher + monthly ${monthlyOn ? "ON":"OFF"}`);
 
-      function renderVouchers(){
-        const q = String(qVoucher.value||"").trim().toLowerCase();
-        const items = sortVouchers(
-          voucherCache.filter(v=>{
-            if (!v.enabled) return false; // ON only
-            if (!q) return true;
-            const hay = ((v.name||"") + " " + (v.note||"")).toLowerCase();
-            return hay.includes(q);
-          })
-        );
-
-        if (!items.length){
-          voucherTbody.innerHTML = `<tr><td colspan="6" class="muted">Tidak ada voucher ON.</td></tr>`;
+        if (!list.length){
+          activeTbody.innerHTML = `<tr><td colspan="7" class="muted">Tidak ada active discount.</td></tr>`;
           return;
         }
 
-        voucherTbody.innerHTML = items.map(v=>{
-          const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
-          const maxRp = Number(v.maxRp||0);
-          const maxUses = (v.maxUses == null ? "∞" : String(v.maxUses));
-          const statusBadge = `<span class="badge on">ON</span>`;
+        activeTbody.innerHTML = list.map(x=>{
+          const jenis = x.kind === "monthly"
+            ? `<span class="badge b-month">monthly</span>`
+            : `<span class="badge">voucher</span>`;
+          const status = x.enabled
+            ? `<span class="badge b-on">ON</span>`
+            : `<span class="badge b-off">OFF</span>`;
+
+          const codeShown = x.kind==="voucher"
+            ? (sc==="show" ? x.code : maskCode(x.code))
+            : "—";
+
+          const maxUsesText = (x.kind==="monthly")
+            ? String(x.maxUses)
+            : fmtUses(x.maxUses);
+
           return `
-            <tr data-code="${v.code}">
-              <td>${statusBadge}</td>
+            <tr data-kind="${x.kind}" data-code="${x.code}">
+              <td>${jenis}</td>
+              <td>${status}</td>
               <td>
-                <div><strong>${escapeHtml(v.name || "(no name)")}</strong></div>
-                <div class="subline mask">ID: <strong>${escapeHtml(maskCode(v.code))}</strong></div>
+                <div><strong>${escapeHtml(x.name)}</strong></div>
+                <div class="small muted mono">${x.kind==="voucher" ? "CODE: "+escapeHtml(codeShown) : "1× / device / bulan"}</div>
               </td>
-              <td class="right mono">${escapeHtml(String(v.percent||0))}</td>
-              <td class="right mono">${escapeHtml(maxRp ? maxRp.toLocaleString("id-ID") : "∞")}</td>
-              <td class="right mono">${escapeHtml(maxUses)}</td>
-              <td class="mono nowrap">${escapeHtml(exp)}</td>
+              <td class="right mono">${escapeHtml(String(x.percent))}</td>
+              <td class="right mono">${escapeHtml(fmtRp(x.maxRp))}</td>
+              <td class="right mono">${escapeHtml(maxUsesText)}</td>
+              <td class="mono nowrap">${escapeHtml(x.kind==="voucher" ? fmtDate(x.expiresAt) : "—")}</td>
             </tr>
           `;
         }).join("");
 
-        Array.from(voucherTbody.querySelectorAll("tr[data-code]")).forEach(tr=>{
+        Array.from(activeTbody.querySelectorAll("tr")).forEach(tr=>{
           tr.addEventListener("click", ()=>{
+            const kind = tr.getAttribute("data-kind");
             const code = tr.getAttribute("data-code");
-            const v = voucherCache.find(x=>x.code===code);
+
+            if (kind === "monthly"){
+              setTab("monthly");
+              // generate curl preview for monthly.get
+              setLast({ action:"monthly.get", method:"GET", body:null, response:last.response });
+              return;
+            }
+
+            const v = vouchers.find(v=>v.code===code);
             if (!v) return;
-            loadVoucher(v);
+
+            setTab("voucher");
+            vCode.value = v.code;
+            vEnabled.value = String(!!v.enabled);
+            vName.value = v.name || v.code;
+            vPercent.value = String(Number(v.percent||0));
+            vMaxRp.value = String(Number(v.maxRp||0));
+            vMaxUses.value = (v.maxUses == null ? "" : String(v.maxUses));
+            vNote.value = v.note || "";
+            // expiresAt picker uses local string; we accept ISO too
+            vExpiresAt.value = v.expiresAt ? new Date(v.expiresAt).toISOString() : "";
+
+            // update curl preview for voucher.upsert
+            setLast({ action:"voucher.upsert", method:"POST", body: buildVoucherPayload(), response:last.response });
           });
         });
       }
@@ -1143,40 +1120,28 @@
           .replaceAll("'","&#039;");
       }
 
-      function clearVoucher(){
-        vEnabled.value = "true";
-        vName.value = "";
-        vPercent.value = "";
-        vMaxRp.value = "0";
-        vMaxUses.value = "";
-        vExpiresAt.value = "";
-        vNote.value = "";
-        vCode.value = "";
-        tVoucher.value = "";
+      function setTab(name){
+        navBtns.forEach(b=>{
+          b.classList.toggle("active", b.getAttribute("data-tab")===name);
+        });
+        Object.entries(tabs).forEach(([k, el])=>{
+          el.classList.toggle("active", k===name);
+        });
+        localStorage.setItem(LS_TAB, name);
       }
 
-      function loadVoucher(v){
-        vEnabled.value = String(!!v.enabled);
-        vName.value = v.name || "";
-        vPercent.value = String(Number(v.percent||0));
-        vMaxRp.value = String(Number(v.maxRp||0));
-        vMaxUses.value = (v.maxUses == null ? "" : String(v.maxUses));
-        vExpiresAt.value = v.expiresAt ? new Date(v.expiresAt).toISOString() : "";
-        vNote.value = v.note || "";
-        vCode.value = v.code || "";
-        tVoucher.value = v.code || "";
-
-        // preview upsert curl
-        try{
-          const payload = buildVoucherPayload();
-          setBoxes(curlFor("voucher.upsert","POST", payload, true), lastJson);
-        } catch {}
+      function toIsoFromPicker(){
+        const raw = String(vExpiresAt.value||"").trim();
+        if (!raw) return null;
+        const d = new Date(raw);
+        if (!Number.isFinite(d.getTime())) return null;
+        return d.toISOString();
       }
 
       function buildVoucherPayload(forceEnabled){
         const code = sanitizeCode(vCode.value);
-        const percent = Number(String(vPercent.value||"").trim());
         if (!code) throw new Error("Voucher code wajib");
+        const percent = Number(String(vPercent.value||"").trim());
         if (!Number.isFinite(percent)) throw new Error("Diskon % wajib");
 
         const payload = {
@@ -1194,149 +1159,82 @@
           if (Number.isFinite(n) && n > 0) payload.maxUses = n;
         }
 
-        const exp = toIsoFromFp();
+        const exp = toIsoFromPicker();
         if (exp) payload.expiresAt = exp;
 
         return payload;
       }
 
-      async function loadVouchers(){
-        setPill(pillVoucher, "warn", "Voucher: loading...");
-        const r = await callAction("voucher.list", { method:"GET", admin:true });
-        if (r.status === 401){
-          setPill(pillVoucher, "bad", "Voucher: 401");
-          return;
-        }
-        if (!r.ok){
-          setPill(pillVoucher, "bad", "Voucher: error");
-          return;
-        }
-
-        const raw = r.json?.data ?? r.json ?? [];
-        const list = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
-        voucherCache = list.map(v=>({
-          code: sanitizeCode(v.code||""),
-          name: String(v.name||""),
-          enabled: v.enabled !== false,
-          percent: Number(v.percent||0),
-          maxRp: Number(v.maxRp||0),
-          maxUses: (v.maxUses == null ? null : Number(v.maxUses)),
-          expiresAt: v.expiresAt || null,
-          note: v.note || null,
-          updatedAt: v.updatedAt || null
-        })).filter(v=>v.code);
-
-        const on = voucherCache.filter(v=>v.enabled).length;
-        setPill(pillVoucher, "ok", `Voucher: ${on} ON`);
-        renderVouchers();
+      function clearVoucherForm(){
+        vCode.value = "";
+        vEnabled.value = "true";
+        vName.value = "";
+        vPercent.value = "";
+        vMaxRp.value = "0";
+        vMaxUses.value = "";
+        vExpiresAt.value = "";
+        vNote.value = "";
+        // set curl preview
+        setLast({ action:"voucher.upsert", method:"POST", body:{ code:"VIPL", enabled:true, name:"VIP LEVEL", percent:10, maxRp:0, maxUses:100, expiresAt:"2026-12-31T23:59:59.000Z", note:"..." }, response:last.response });
       }
 
-      async function upsertVoucher(forceEnabled){
-        const payload = buildVoucherPayload(forceEnabled);
-        const r = await callAction("voucher.upsert", { method:"POST", admin:true, body: payload });
-        if (r.status === 401) return;
-        if (r.ok) await loadVouchers();
+      function genDeviceId(){
+        const a = Math.random().toString(36).slice(2,8);
+        const b = Math.random().toString(36).slice(2,8);
+        return "dev_web_" + a + "_" + b;
       }
 
-      async function disableVoucher(){
-        const code = sanitizeCode(vCode.value);
-        if (!code) throw new Error("Voucher code kosong");
-        const r = await callAction("voucher.disable", { method:"POST", admin:true, body:{ code } });
-        if (r.status === 401) return;
-        if (r.ok) await loadVouchers();
-      }
-
-      async function testCreateQR(){
-        const amount = Number(String(tAmount.value||"").trim());
-        const deviceId = String(tDeviceId.value||"").trim();
-        const voucher = String(tVoucher.value||"").trim();
-
-        if (!Number.isFinite(amount) || amount < 1) throw new Error("Amount invalid");
-        if (!deviceId) throw new Error("Device ID wajib");
-
-        await callAction("createqr", { method:"POST", admin:false, body:{ amount, deviceId, voucher } });
-      }
-
-      async function getMonthly(){
-        setPill(pillMonthly, "warn", "Monthly: loading...");
-        const r = await callAction("monthly.get", { method:"GET", admin:true });
-        if (r.status === 401){
-          setPill(pillMonthly, "bad", "Monthly: 401");
-          return;
-        }
-        if (!r.ok){
-          setPill(pillMonthly, "bad", "Monthly: error");
-          return;
-        }
-        const d = r.json?.data ?? r.json ?? {};
-        if (d.enabled != null) mEnabled.value = String(!!d.enabled);
-        if (d.name != null) mName.value = String(d.name);
-        if (d.percent != null) mPercent.value = String(d.percent);
-        if (d.maxRp != null) mMaxRp.value = String(d.maxRp);
-
-        monthlyBox.textContent = JSON.stringify(deepSanitize(d), null, 2);
-        setPill(pillMonthly, "ok", "Monthly: OK");
-      }
-
-      async function setMonthly(extra){
-        const payload = {
-          enabled: (mEnabled.value === "true"),
-          name: String(mName.value||"").trim(),
-          percent: Number(String(mPercent.value||"0").trim()),
-          maxRp: Number(String(mMaxRp.value||"0").trim()),
-          ...(extra||{})
-        };
-        const r = await callAction("monthly.set", { method:"POST", admin:true, body: payload });
-        if (r.status === 401) return;
-        if (r.ok) await getMonthly();
-      }
-
-      async function genDeviceKey(){
-        const did = String(uDeviceId.value||"").trim();
-        const pep = String(uPepper.value||"").trim();
-        if (!did || !pep) throw new Error("Isi deviceId & pepper");
-        const key = await sha256Hex(did + "|" + pep);
-        uDeviceKey.value = key;
-      }
-
-      // --- Events ---
-      tabButtons.forEach(b=>{
-        b.addEventListener("click", ()=>{
-          const name = b.getAttribute("data-tab");
-          tabButtons.forEach(x=>x.classList.remove("active"));
-          b.classList.add("active");
-          setTab(name);
-        });
+      // ---------- Events ----------
+      navBtns.forEach(b=>{
+        b.addEventListener("click", ()=> setTab(b.getAttribute("data-tab")));
       });
 
-      function setTab(name){
-        Object.entries(tabs).forEach(([k, el])=>{
-          el.classList.toggle("active", k === name);
-        });
-        localStorage.setItem(LS_TAB, name);
-      }
+      btnCopyCurl.addEventListener("click", ()=> copy(curlBox.textContent));
+      btnCopyJson.addEventListener("click", ()=> copy(bodyBox.textContent));
+      btnCopyResp.addEventListener("click", ()=> copy(respBox.textContent));
 
-      btnDemo.addEventListener("click", () => {
-        inBase.value = "";
-        inKey.value = "";
+      btnPing.addEventListener("click", ping);
+
+      btnRefresh.addEventListener("click", async ()=>{
+        await ping();
+        const ok = await validateKey();
+        if (!ok) return;
+        await loadVouchers();
+        await loadMonthly();
+        renderActive();
+      });
+
+      btnLogout.addEventListener("click", ()=>{
+        if (!confirm("Logout?")) return;
+        localStorage.removeItem(LS_ADMIN);
+        ADMIN = "";
+        lock(true);
+        setPill(pillKey, "warn", "Key: belum");
+      });
+
+      btnReset.addEventListener("click", ()=>{
+        localStorage.removeItem(LS_HOST);
+        localStorage.removeItem(LS_ADMIN);
+        inHost.value = "";
+        inAdmin.value = "";
+        HOST = location.origin;
+        ADMIN = "";
         setPill(pillApi, "warn", "API: belum dicek");
         setPill(pillKey, "warn", "Key: belum");
       });
 
-      btnPingLock.addEventListener("click", async () => {
-        BASE = String(inBase.value||"").trim();
-        if (!BASE) BASE = location.origin;
+      btnPingLock.addEventListener("click", async ()=>{
+        HOST = normHost(inHost.value);
         await ping();
       });
 
-      btnLogin.addEventListener("click", async () => {
-        BASE = String(inBase.value||"").trim();
-        ADMIN = String(inKey.value||"").trim();
-        if (!BASE) BASE = location.origin;
-        if (!ADMIN) { setPill(pillKey, "bad", "Key: kosong"); return; }
+      btnLogin.addEventListener("click", async ()=>{
+        HOST = normHost(inHost.value);
+        ADMIN = String(inAdmin.value||"").trim();
+        if (!ADMIN){ setPill(pillKey, "bad", "Key: kosong"); return; }
 
-        localStorage.setItem(LS_BASE, BASE);
-        localStorage.setItem(LS_KEY, ADMIN);
+        localStorage.setItem(LS_HOST, HOST);
+        localStorage.setItem(LS_ADMIN, ADMIN);
 
         await ping();
         const ok = await validateKey();
@@ -1344,123 +1242,120 @@
 
         lock(false);
         await loadVouchers();
-        await getMonthly();
+        await loadMonthly();
+        renderActive();
       });
 
-      btnLogout.addEventListener("click", () => {
-        if (!confirm("Logout?")) return;
-        localStorage.removeItem(LS_KEY);
-        ADMIN = "";
-        lock(true);
-      });
+      btnNewVoucher.addEventListener("click", clearVoucherForm);
 
-      btnRefresh.addEventListener("click", async () => {
-        await ping();
-        const ok = await validateKey();
-        if (!ok) return;
+      btnLoadVouchers.addEventListener("click", async ()=>{
         await loadVouchers();
-        await getMonthly();
+        renderActive();
       });
 
-      btnPing.addEventListener("click", ping);
-
-      btnLoadVouchers.addEventListener("click", loadVouchers);
-      btnNewVoucher.addEventListener("click", () => clearVoucher());
-
-      qVoucher.addEventListener("input", renderVouchers);
-      sortVoucher.addEventListener("change", renderVouchers);
-
-      btnRevealCode.addEventListener("click", () => { vCode.type = (vCode.type==="password")?"text":"password"; });
-      btnRevealTest.addEventListener("click", () => { tVoucher.type = (tVoucher.type==="password")?"text":"password"; });
-
-      btnUpsert.addEventListener("click", async () => {
-        try { await upsertVoucher(null); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
-      });
-      btnEnable.addEventListener("click", async () => {
-        try { await upsertVoucher(true); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
-      });
-      btnDisable.addEventListener("click", async () => {
-        try {
-          if (!confirm("Disable voucher ini?")) return;
-          await disableVoucher();
-        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      btnUpsert.addEventListener("click", async ()=>{
+        try{
+          const body = buildVoucherPayload();
+          await callAction("voucher.upsert", { method:"POST", body });
+          await loadVouchers();
+          renderActive();
+          setTab("curl");
+        } catch(e){
+          setLast({ action:"voucher.upsert", method:"POST", body:null, response:{ ok:false, error: e.message } });
+          setTab("curl");
+        }
       });
 
-      btnGenDevice.addEventListener("click", () => {
+      btnDisable.addEventListener("click", async ()=>{
+        const code = sanitizeCode(vCode.value);
+        if (!code){ alert("Voucher code kosong"); return; }
+        if (!confirm("Disable voucher ini?")) return;
+        await callAction("voucher.disable", { method:"POST", body:{ code } });
+        await loadVouchers();
+        renderActive();
+        setTab("curl");
+      });
+
+      btnGetMonthly.addEventListener("click", async ()=>{
+        await loadMonthly();
+        renderActive();
+        setTab("curl");
+      });
+
+      btnSetMonthly.addEventListener("click", async ()=>{
+        const body = {
+          enabled: (mEnabled.value === "true"),
+          name: String(mName.value||"").trim(),
+          percent: Number(String(mPercent.value||"0").trim()),
+          maxRp: Number(String(mMaxRp.value||"0").trim())
+        };
+        await callAction("monthly.set", { method:"POST", body });
+        await loadMonthly();
+        renderActive();
+        setTab("curl");
+      });
+
+      btnGenDevice.addEventListener("click", ()=>{
         const id = genDeviceId();
         tDeviceId.value = id;
-        uDeviceId.value = id;
-        toolDeviceId.value = id;
       });
 
-      btnRunTest.addEventListener("click", async () => {
-        try { await testCreateQR(); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      btnApply.addEventListener("click", async ()=>{
+        const body = {
+          amount: Number(String(tAmount.value||"0").trim()),
+          deviceId: String(tDeviceId.value||"").trim(),
+          voucher: String(tVoucher.value||"").trim()
+        };
+        await callAction("discount.apply", { method:"POST", body });
+        setTab("curl");
       });
 
-      btnGetMonthly.addEventListener("click", getMonthly);
-      btnSetMonthly.addEventListener("click", async () => { await setMonthly(); });
-
-      btnRevealDK.addEventListener("click", () => { uDeviceKey.type = (uDeviceKey.type==="password")?"text":"password"; });
-      btnGenDK.addEventListener("click", async () => {
-        try { await genDeviceKey(); } catch(e){ setBoxes(lastCurl, { error: e.message }); }
-      });
-      btnAddUnlimited.addEventListener("click", async () => {
-        try {
-          const dk = String(uDeviceKey.value||"").trim();
-          if (!dk) throw new Error("Generate deviceKey dulu");
-          await setMonthly({ addUnlimitedDeviceKey: dk });
-        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
-      });
-      btnRemoveUnlimited.addEventListener("click", async () => {
-        try {
-          const dk = String(uDeviceKey.value||"").trim();
-          if (!dk) throw new Error("Generate deviceKey dulu");
-          await setMonthly({ removeUnlimitedDeviceKey: dk });
-        } catch(e){ setBoxes(lastCurl, { error: e.message }); }
+      btnCreateQR.addEventListener("click", async ()=>{
+        const body = {
+          amount: Number(String(tAmount.value||"0").trim()),
+          deviceId: String(tDeviceId.value||"").trim(),
+          voucher: String(tVoucher.value||"").trim()
+        };
+        await callAction("createqr", { method:"POST", body });
+        setTab("curl");
       });
 
-      btnToolGen.addEventListener("click", () => { toolDeviceId.value = genDeviceId(); });
-      btnToolCopy.addEventListener("click", () => copy(toolDeviceId.value));
+      activeSearch.addEventListener("input", renderActive);
+      showCode.addEventListener("change", renderActive);
 
-      btnCopyCurl.addEventListener("click", () => copy(curlBox.textContent));
-      btnCopyJson.addEventListener("click", () => copy(jsonBox.textContent));
-      btnCopyLog.addEventListener("click", () => copy(logBox.textContent));
-      btnClearLog.addEventListener("click", () => { logBox.textContent = "{}"; });
+      // Flatpickr for expiresAt
+      flatpickr(vExpiresAt, { enableTime:true, time_24hr:true, dateFormat:"Y-m-d H:i", allowInput:true });
 
-      // Init flatpickr
-      fp = flatpickr(vExpiresAt, {
-        enableTime: true,
-        time_24hr: true,
-        dateFormat: "Y-m-d H:i",
-        allowInput: true
-      });
-
-      // Init
+      // ---------- Init ----------
       function init(){
-        BASE = localStorage.getItem(LS_BASE) || location.origin;
-        ADMIN = localStorage.getItem(LS_KEY) || "";
+        HOST = normHost(localStorage.getItem(LS_HOST) || location.origin);
+        ADMIN = String(localStorage.getItem(LS_ADMIN) || "").trim();
 
-        inBase.value = (BASE === location.origin) ? "" : BASE;
-        inKey.value = ADMIN ? "••••••••••" : "";
+        inHost.value = (HOST === location.origin) ? "" : HOST;
+        inAdmin.value = ADMIN ? "••••••••" : "";
+
+        hostMini.textContent = HOST.replace(/^https?:\/\//,"");
 
         setPill(pillApi, "warn", "API: belum dicek");
         setPill(pillKey, "warn", "Key: belum");
         setPill(pillVoucher, "warn", "Voucher: —");
         setPill(pillMonthly, "warn", "Monthly: —");
+        setPill(pillActive, "warn", "Active: —");
 
-        const did = genDeviceId();
-        tDeviceId.value = did;
-        uDeviceId.value = did;
-        toolDeviceId.value = did;
+        // Default tester deviceId
+        tDeviceId.value = genDeviceId();
 
-        const t = localStorage.getItem(LS_TAB) || "voucher";
+        // Restore tab
+        const t = localStorage.getItem(LS_TAB) || "active";
         setTab(t);
 
-        // initial preview
-        setBoxes(
-          curlFor("voucher.upsert","POST",{ code:"VIPL", name:"VIP LEVEL", enabled:true, percent:10, maxRp:0, maxUses:100, expiresAt:"2026-12-31T23:59:59.000Z", note:"..." }, true),
-          {}
-        );
+        // Default curl preview
+        setLast({
+          action:"voucher.upsert",
+          method:"POST",
+          body:{ code:"VIPL", name:"VIP LEVEL", enabled:true, percent:10, maxRp:0, maxUses:100, expiresAt:"2026-12-31T23:59:59.000Z", note:"..." },
+          response:{}
+        });
 
         if (ADMIN){
           lock(false);
@@ -1469,11 +1364,11 @@
             const ok = await validateKey();
             if (!ok){
               lock(true);
-              inKey.value = "";
-            } else {
-              await loadVouchers();
-              await getMonthly();
+              return;
             }
+            await loadVouchers();
+            await loadMonthly();
+            renderActive();
           })();
         } else {
           lock(true);
