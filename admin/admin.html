@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LevPay Admin</title>
-  <link rel="stylesheet" href="./assets/admin.css" />
+  <link rel="stylesheet" href="./admin.css" />
 </head>
 
 <body>
@@ -22,7 +22,7 @@
 
       <div class="gate__form">
         <label class="label">Admin Key</label>
-        <input id="adminKeyInput" class="input mono" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
+        <input id="adminKeyInput" class="input" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
 
         <div class="row row--gap">
           <button id="btnLogin" class="btn btn--primary">Masuk</button>
@@ -30,7 +30,7 @@
         </div>
 
         <div class="hint">
-          Endpoint router: <code class="mono">/api/levpay?action=...</code>
+          Default API: <code class="mono">/api/levpay</code>
         </div>
 
         <div id="loginMsg" class="msg" style="display:none;"></div>
@@ -47,9 +47,7 @@
           <div>
             <div class="brandMini__title">LevPay Admin</div>
             <div class="brandMini__sub">
-              API: <span class="mono" id="apiBaseText">/api/levpay</span>
-              <span class="sep">•</span>
-              <span class="pill pill--muted" id="pillUser">akun: admin</span>
+              API: <span class="mono" id="apiBaseText">—</span>
             </div>
           </div>
         </div>
@@ -84,10 +82,6 @@
             <div class="kv__k">Last Sync</div>
             <div class="kv__v mono" id="lastSync">—</div>
           </div>
-          <div class="kv">
-            <div class="kv__k">Host</div>
-            <div class="kv__v mono" id="hostInfo">—</div>
-          </div>
         </div>
       </aside>
 
@@ -99,7 +93,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Voucher Manager</div>
-                  <div class="card__sub">Buat / update voucher, toggle ON/OFF, dan disable.</div>
+                  <div class="card__sub">Buat / update voucher, lalu disable voucher.</div>
                 </div>
                 <div class="row row--gap">
                   <label class="check">
@@ -131,9 +125,6 @@
                   </table>
                 </div>
               </div>
-              <div class="card__foot">
-                Klik <b>Edit</b> untuk isi form. Toggle aktif langsung update via <span class="mono">voucher.upsert</span>.
-              </div>
             </div>
 
             <div class="card">
@@ -157,21 +148,21 @@
 
                   <div class="field">
                     <label class="label">Percent (0-100)</label>
-                    <input id="v_percent" class="input mono" inputmode="numeric" placeholder="contoh: 60" />
+                    <input id="v_percent" class="input" inputmode="numeric" placeholder="contoh: 60" />
                   </div>
                   <div class="field">
                     <label class="label">Max Rp (0 = unlimited)</label>
-                    <input id="v_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 5000" value="0" />
+                    <input id="v_maxRp" class="input" inputmode="numeric" placeholder="contoh: 5000" value="0" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Uses (kosong = unlimited)</label>
-                    <input id="v_maxUses" class="input mono" inputmode="numeric" placeholder="contoh: 100" />
+                    <input id="v_maxUses" class="input" inputmode="numeric" placeholder="contoh: 100" />
                   </div>
 
                   <div class="field">
                     <label class="label">Expires At</label>
-                    <input id="v_expiresAt" class="input mono" type="datetime-local" />
+                    <input id="v_expiresAt" class="input" type="datetime-local" />
                     <div class="hint">Kosongkan kalau tidak ada expire.</div>
                   </div>
 
@@ -183,7 +174,7 @@
                   </div>
                 </div>
 
-                <div class="btnRow" style="margin-top:10px;">
+                <div class="row row--gap">
                   <button id="btnUpsertVoucher" class="btn btn--primary">Simpan Voucher</button>
                   <button id="btnDisableVoucher" class="btn btn--danger">Disable Voucher</button>
                 </div>
@@ -212,10 +203,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Promo Bulanan</div>
-                  <div class="card__sub">
-                    Limit per device tetap <b>1×/bulan</b>. Di sini lo juga bisa set
-                    <b>limit total pemakaian global per bulan</b> (maxUses/bulan).
-                  </div>
+                  <div class="card__sub">1× per device per bulan (kecuali unlimited deviceKey).</div>
                 </div>
                 <div class="row row--gap">
                   <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
@@ -239,31 +227,22 @@
 
                   <div class="field">
                     <label class="label">Percent (0-100)</label>
-                    <input id="m_percent" class="input mono" inputmode="numeric" placeholder="contoh: 5" />
+                    <input id="m_percent" class="input" inputmode="numeric" placeholder="contoh: 5" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Rp</label>
-                    <input id="m_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 2000" />
+                    <input id="m_maxRp" class="input" inputmode="numeric" placeholder="contoh: 2000" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Uses / bulan (kosong = unlimited)</label>
-                    <input id="m_maxUses" class="input mono" inputmode="numeric" placeholder="contoh: 500" />
+                    <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 10" />
                     <div class="hint">Ini limit total pemakaian promo per bulan (global). Device tetap 1×/bulan.</div>
-                  </div>
-
-                  <div class="field field--full">
-                    <div class="note">
-                      <div class="note__title">Info pemakaian (readonly)</div>
-                      <div class="kv"><div class="kv__k">Used count bulan ini</div><div class="kv__v mono" id="m_usedCount">—</div></div>
-                      <div class="kv"><div class="kv__k">Reserved count</div><div class="kv__v mono" id="m_reservedCount">—</div></div>
-                    </div>
                   </div>
                 </div>
 
-                <!-- curl + json DI ATAS setting (sesuai request lo) -->
-                <div class="split split--top" style="margin-top:12px;">
+                <div class="split">
                   <div>
                     <div class="miniTitle">curl (auto)</div>
                     <pre class="codebox" id="curlMonthly">—</pre>
@@ -282,7 +261,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Unlimited DeviceKey</div>
-                  <div class="card__sub">Tambah deviceKey (SHA-256) untuk bypass limit bulanan.</div>
+                  <div class="card__sub">Tambah deviceKey (SHA256) untuk bypass limit bulanan.</div>
                 </div>
               </div>
 
@@ -290,13 +269,13 @@
                 <div class="formGrid">
                   <div class="field field--full">
                     <label class="label">Device ID</label>
-                    <input id="dev_id" class="input mono" />
+                    <input id="dev_id" class="input mono" placeholder="contoh: dev_android_1" />
                   </div>
 
                   <div class="field field--full">
                     <label class="label">Device Pepper</label>
-                    <input id="dev_pepper" class="input mono" />
-                    <div class="hint">Pepper harus sama dengan backend (DEVICE_PEPPER).</div>
+                    <input id="dev_pepper" class="input mono" placeholder="isi pepper yang sama dengan backend (DEVICE_PEPPER)" />
+                    <div class="hint">Pepper harus sama dengan backend. Kalau beda, deviceKey juga beda.</div>
                   </div>
 
                   <div class="field field--full">
@@ -305,13 +284,13 @@
                   </div>
                 </div>
 
-                <div class="btnRow" style="margin-top:10px;">
+                <div class="row row--gap">
                   <button id="btnGenKey" class="btn btn--ghost">Generate</button>
                   <button id="btnAddUnlimited" class="btn btn--primary">Add Unlimited</button>
                   <button id="btnRemoveUnlimited" class="btn btn--danger">Remove</button>
                 </div>
 
-                <div class="tableWrap tableWrap--mini" style="margin-top:12px;">
+                <div class="tableWrap tableWrap--mini">
                   <table class="table">
                     <thead>
                       <tr>
@@ -337,12 +316,10 @@
             <div class="card__head">
               <div>
                 <div class="card__title">Tools</div>
-                <div class="card__sub">Test discount.apply + commit + release.</div>
+                <div class="card__sub">Test discount.apply (reserve slot).</div>
               </div>
               <div class="row row--gap">
-                <button id="btnRunApply" class="btn btn--primary">Apply</button>
-                <button id="btnRunCommit" class="btn btn--ghost">Commit</button>
-                <button id="btnRunRelease" class="btn btn--danger">Release</button>
+                <button id="btnRunApply" class="btn btn--primary">Run</button>
               </div>
             </div>
 
@@ -350,7 +327,7 @@
               <div class="formGrid">
                 <div class="field">
                   <label class="label">Amount</label>
-                  <input id="t_amount" class="input mono" inputmode="numeric" value="10000" />
+                  <input id="t_amount" class="input mono" inputmode="numeric" value="3000" />
                 </div>
                 <div class="field">
                   <label class="label">Device ID</label>
@@ -366,7 +343,7 @@
                 </div>
               </div>
 
-              <div class="split split--top" style="margin-top:12px;">
+              <div class="split">
                 <div>
                   <div class="miniTitle">curl (auto)</div>
                   <pre class="codebox" id="curlApply">—</pre>
@@ -377,15 +354,9 @@
                 </div>
               </div>
 
-              <div class="hint" style="margin-top:10px;">
-                <b>Catatan:</b> Apply cuma “reserve slot”. Biar kepake permanen harus <b>Commit</b>.
-                Kalau batal / belum bayar, klik <b>Release</b> biar slot balik.
-              </div>
-
-              <div class="btnRow" style="margin-top:10px;">
-                <button id="btnCopyCurl" class="btn btn--ghost">Copy curl</button>
-                <button id="btnCopyJson" class="btn btn--ghost">Copy JSON body</button>
-                <button id="btnCopyResp" class="btn btn--ghost">Copy response</button>
+              <div class="hint">
+                Kalau Termux bisa tapi frontend nggak kepotong, biasanya frontend createqr belum pakai hasil
+                <span class="mono">discount.apply</span> untuk bikin QR.
               </div>
             </div>
           </div>
@@ -403,6 +374,6 @@
     </footer>
   </div>
 
-  <script src="./assets/admin.js"></script>
+  <script src="./admin.js"></script>
 </body>
 </html>
