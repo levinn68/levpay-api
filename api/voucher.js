@@ -33,8 +33,7 @@ module.exports = async (req, res) => {
       if (!Number.isFinite(amount) || amount < 1) return bad(res, 400, "amount invalid");
 
       const db = await loadDb();
-      const deviceKey = getDeviceKey(deviceId, process.env.DEVICE_PEPPER || "");
-
+      const deviceKey = getDeviceKey(deviceId);
       const out = applyDiscount(db, {
   amount,
   deviceKey,
