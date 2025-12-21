@@ -1,19 +1,20 @@
 // admin.js — LevPay Admin (router: /api/levpay?action=...)
-// Cocok buat HTML + admin.css yang lu kasih (id/id elem-nya itu).
+// - Voucher custom & promo bulanan (based on CODE)
+// - Unlimited deviceKey list for monthly bypass
 (() => {
   const $ = (id) => document.getElementById(id);
 
   // ====== CONFIG ======
-  const LS_ADMIN = "levpay_admin_key_v2";
-  const API_BASE_DEFAULT = `${location.origin}/api/levpay`; // router backend lu
-  const LS_API_BASE = "levpay_admin_api_base_v2"; // opsional kalau mau ganti host/base
+  const LS_ADMIN = "levpay_admin_key_v3";
+  const API_BASE_DEFAULT = `${location.origin}/api/levpay`;
+  const LS_API_BASE = "levpay_admin_api_base_v3";
 
-  // preset optional (biar device lu auto kebaca di tab unlimited)
+  // Optional preset (biar device lu auto kebaca di tab unlimited/tools)
   const PRESET_DEVICE_ID = "dev_rog6pro";
   const PRESET_PEPPER = "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4";
   const PRESET_DEVICEKEY = "3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805";
 
-  // ====== ELEMENTS (sesuai HTML lu) ======
+  // ====== ELEMENTS ======
   const gate = $("gate");
   const adminKeyInput = $("adminKeyInput");
   const btnLogin = $("btnLogin");
@@ -57,6 +58,7 @@
   const btnLoadMonthly = $("btnLoadMonthly");
   const btnSaveMonthly = $("btnSaveMonthly");
   const m_enabled = $("m_enabled");
+  const m_code = $("m_code");
   const m_name = $("m_name");
   const m_percent = $("m_percent");
   const m_maxRp = $("m_maxRp");
@@ -65,7 +67,7 @@
   const jsonMonthly = $("jsonMonthly");
   const msgMonthly = $("msgMonthly");
 
-  // unlimited tab section
+  // unlimited
   const dev_id = $("dev_id");
   const dev_pepper = $("dev_pepper");
   const dev_key = $("dev_key");
@@ -75,7 +77,7 @@
   const unlimitedTbody = $("unlimitedTbody");
   const msgUnlimited = $("msgUnlimited");
 
-  // tools tab
+  // tools
   const btnRunApply = $("btnRunApply");
   const t_amount = $("t_amount");
   const t_deviceId = $("t_deviceId");
@@ -87,7 +89,6 @@
   // ====== STATE ======
   let ADMIN = "";
   let API_BASE = localStorage.getItem(LS_API_BASE) || API_BASE_DEFAULT;
-
   let vouchers = [];
   let monthly = null;
 
@@ -99,6 +100,8 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+
+  const nowText = () => new Date().toLocaleString("id-ID");
 
   const fmtDate = (iso) => {
     if (!iso) return "—";
@@ -113,28 +116,25 @@
     return x.toLocaleString("id-ID");
   };
 
-  const fmtUses = (n) => {
-    if (n == null) return "∞";
-    const x = Number(n);
-    return Number.isFinite(x) ? String(x) : "∞";
+  const fmtUsesPair = (used, max) => {
+    const u = Number(used || 0);
+    if (max == null) return `${u} / ∞`;
+    const m = Number(max);
+    if (!Number.isFinite(m) || m <= 0) return `${u} / ∞`;
+    return `${u} / ${m}`;
   };
-
-  const nowText = () => new Date().toLocaleString("id-ID");
 
   function setMsg(el, text, warn = false) {
     el.textContent = text || "";
     el.classList.toggle("msg--warn", !!warn);
+    el.classList.toggle("msg--ok", !!text && !warn);
     el.style.display = text ? "block" : "none";
   }
 
   function setLocked(on) {
-    // gate overlay = blur
     gate.classList.toggle("is-on", !!on);
     gate.setAttribute("aria-hidden", on ? "false" : "true");
-
-    // app locked style (biar ga bisa interaksi kalau belum login)
     app.classList.toggle("is-locked", !!on);
-
     sysStatus.textContent = on ? "LOCKED" : "ACTIVE";
     btnLogout.disabled = on;
   }
@@ -147,14 +147,13 @@
   }
 
   function endpoint(action) {
-    // action via query param: /api/levpay?action=...
     const u = new URL(API_BASE, location.origin);
     u.searchParams.set("action", action);
     return u.toString();
   }
 
   function isAdminAction(action) {
-    return /^(voucher\.|monthly\.|tx\.)/.test(action);
+    return /^(voucher\.|monthly\.|tx\.|discount\.)/.test(action);
   }
 
   function sanitizeCode(s) {
@@ -180,9 +179,8 @@
     if (isAdminAction(action)) heads.push(`-H "X-Admin-Key: ${ADMINVAR}"`);
     if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
     const h = heads.length ? ` \\\n  ${heads.join(" \\\n  ")}` : "";
-    const data =
-      method === "GET" || body == null ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
-    const basePath = new URL(API_BASE).pathname; // biasanya /api/levpay
+    const data = method === "GET" || body == null ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
+    const basePath = new URL(API_BASE).pathname;
     return `curl -sS -X ${method} "${HOSTVAR}${basePath}?action=${action}"${h}${data} | jq`;
   }
 
@@ -246,7 +244,6 @@
         maxRp: Number(v.maxRp || 0),
         maxUses: v.maxUses == null ? null : Number(v.maxUses),
         expiresAt: v.expiresAt || null,
-        note: v.note || null,
         updatedAt: v.updatedAt || null,
         uses: Number(v.uses || 0),
       }))
@@ -266,14 +263,13 @@
 
     pillMonthly.textContent = monthly.enabled ? "ON" : "OFF";
 
-    // fill form
     m_enabled.checked = !!monthly.enabled;
+    m_code.value = String(monthly.code ?? "");
     m_name.value = String(monthly.name ?? "");
     m_percent.value = String(Number(monthly.percent ?? 0));
     m_maxRp.value = String(Number(monthly.maxRp ?? 0));
     m_maxUses.value = monthly.maxUses == null ? "" : String(Number(monthly.maxUses));
 
-    // render unlimited keys
     renderUnlimitedList();
     return monthly;
   }
@@ -331,16 +327,18 @@
     voucherTbody.innerHTML = list
       .sort((a, b) => a.code.localeCompare(b.code))
       .map((v) => {
-        const active = v.enabled ? `<span class="pill pill--ok">ON</span>` : `<span class="pill pill--muted">OFF</span>`;
+        const active = v.enabled
+          ? `<span class="badge on">ON</span>`
+          : `<span class="badge off">OFF</span>`;
         const exp = v.expiresAt ? fmtDate(v.expiresAt) : "—";
         return `
-        <tr data-code="${esc(v.code)}">
+        <tr>
           <td class="mono">${esc(v.code)}</td>
           <td>${esc(v.name || v.code)}</td>
           <td>${active}</td>
           <td class="mono">${esc(String(v.percent))}%</td>
           <td class="mono">${esc(fmtRp(v.maxRp))}</td>
-          <td class="mono">${esc(fmtUses(v.maxUses))}</td>
+          <td class="mono">${esc(fmtUsesPair(v.uses, v.maxUses))}</td>
           <td class="mono">${esc(exp)}</td>
           <td class="tRight">
             <button class="btn btn--ghost" data-pick="${esc(v.code)}" type="button">Edit</button>
@@ -364,7 +362,6 @@
         v_maxUses.value = v.maxUses == null ? "" : String(v.maxUses);
         v_enabled.checked = !!v.enabled;
 
-        // datetime-local expects "YYYY-MM-DDTHH:mm"
         if (v.expiresAt) {
           const d = new Date(v.expiresAt);
           if (Number.isFinite(d.getTime())) {
@@ -375,16 +372,13 @@
             const hh = pad(d.getHours());
             const mm = pad(d.getMinutes());
             v_expiresAt.value = `${y}-${m}-${da}T${hh}:${mm}`;
-          } else {
-            v_expiresAt.value = "";
-          }
-        } else {
-          v_expiresAt.value = "";
-        }
+          } else v_expiresAt.value = "";
+        } else v_expiresAt.value = "";
 
-        // auto curl preview
-        const body = buildVoucherPayload();
-        curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
+        try {
+          const body = buildVoucherPayload();
+          curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
+        } catch {}
       });
     });
   }
@@ -407,18 +401,13 @@
     if (mu !== "") {
       const n = Number(mu);
       if (Number.isFinite(n) && n > 0) payload.maxUses = n;
-    } else {
-      payload.maxUses = null;
-    }
+    } else payload.maxUses = null;
 
     const expRaw = String(v_expiresAt.value || "").trim();
     if (expRaw) {
-      // from datetime-local -> ISO
       const d = new Date(expRaw);
       if (Number.isFinite(d.getTime())) payload.expiresAt = d.toISOString();
-    } else {
-      payload.expiresAt = null;
-    }
+    } else payload.expiresAt = null;
 
     return payload;
   }
@@ -429,6 +418,7 @@
     setMsg(msgVoucher, "");
     setMsg(msgMonthly, "");
     setMsg(msgUnlimited, "");
+
     await pingPublic();
     await loadVouchers();
     await loadMonthly();
@@ -515,6 +505,7 @@
     try {
       const body = {
         enabled: !!m_enabled.checked,
+        code: sanitizeCode(m_code.value),
         name: String(m_name.value || "").trim(),
         percent: Number(String(m_percent.value || "0").trim()),
         maxRp: Number(String(m_maxRp.value || "0").trim()),
@@ -524,9 +515,7 @@
       if (mu !== "") {
         const n = Number(mu);
         if (Number.isFinite(n) && n > 0) body.maxUses = n;
-      } else {
-        body.maxUses = null; // kosong = unlimited
-      }
+      } else body.maxUses = null;
 
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
@@ -602,9 +591,7 @@
   }
 
   // ====== EVENTS ======
-  navItems.forEach((b) => {
-    b.addEventListener("click", () => setTab(b.dataset.tab));
-  });
+  navItems.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
   btnOpenGate.addEventListener("click", () => setLocked(true));
   btnRefreshAll.addEventListener("click", async () => {
@@ -660,15 +647,13 @@
 
   btnRunApply.addEventListener("click", runApply);
 
-  // realtime curl preview (biar enak)
+  // live curl preview
   [v_code, v_name, v_percent, v_maxRp, v_maxUses, v_expiresAt].forEach((el) => {
     el.addEventListener("input", () => {
       try {
         const body = buildVoucherPayload();
         curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
-      } catch {
-        // ignore
-      }
+      } catch {}
     });
   });
   v_enabled.addEventListener("change", () => {
@@ -678,10 +663,11 @@
     } catch {}
   });
 
-  [m_enabled, m_name, m_percent, m_maxRp, m_maxUses].forEach((el) => {
+  [m_enabled, m_code, m_name, m_percent, m_maxRp, m_maxUses].forEach((el) => {
     el.addEventListener("input", () => {
       const body = {
         enabled: !!m_enabled.checked,
+        code: sanitizeCode(m_code.value),
         name: String(m_name.value || "").trim(),
         percent: Number(String(m_percent.value || "0").trim()),
         maxRp: Number(String(m_maxRp.value || "0").trim()),
@@ -706,10 +692,9 @@
 
   // ====== INIT ======
   async function init() {
-    // show base
     apiBaseText.textContent = API_BASE;
 
-    // preset device fields (buat unlimited)
+    // preset device fields
     dev_id.value = PRESET_DEVICE_ID || dev_id.value;
     dev_pepper.value = PRESET_PEPPER || dev_pepper.value;
     dev_key.value = PRESET_DEVICEKEY || dev_key.value;
@@ -722,16 +707,19 @@
       name: "VIP LEVEL",
       percent: 10,
       maxRp: 0,
-      maxUses: 100,
+      maxUses: 5,
       expiresAt: "2026-12-31T23:59:59.000Z",
     });
+
     curlMonthly.textContent = curlFor("monthly.set", "POST", {
       enabled: true,
+      code: "PROMODEC",
       name: "PROMO BULANAN",
       percent: 5,
       maxRp: 2000,
       maxUses: null,
     });
+
     curlApply.textContent = curlFor("discount.apply", "POST", {
       amount: 10000,
       deviceId: PRESET_DEVICE_ID || "dev_frontend_1",
@@ -739,18 +727,14 @@
       reserveTtlMs: 360000,
     });
 
-    // tab default
     setTab("vouchers");
 
-    // try auto login from LS
     ADMIN = String(localStorage.getItem(LS_ADMIN) || "").trim();
-
     if (!ADMIN) {
       setLocked(true);
       return;
     }
 
-    // kalau ada, langsung load
     try {
       await pingPublic();
       const ok = await validateKey();
