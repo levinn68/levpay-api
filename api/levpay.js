@@ -1,53 +1,45 @@
-// api/levpay.js (Vercel SINGLE-FILE ROUTER) — FINAL (GH DB + monthly maxUses)
-// Endpoints via query action:
+// api/levpay.js  (Vercel SINGLE-FILE ROUTER + GitHub DB)
+// Actions:
 // - /api/levpay?action=ping | help | tutor
 // - /api/levpay?action=discount.apply|discount.commit|discount.release
-// - /api/levpay?action=voucher.upsert|voucher.disable|voucher.list|voucher.get
-// - /api/levpay?action=monthly.get|monthly.set
-// - /api/levpay?action=tx.upsert|tx.get|tx.list|tx.search|tx.clear
+// - /api/levpay?action=voucher.upsert|voucher.disable|voucher.list|voucher.get   (ADMIN)
+// - /api/levpay?action=monthly.get|monthly.set|monthly.resetMonth               (ADMIN)
+// - /api/levpay?action=tx.upsert|tx.get|tx.list|tx.search|tx.clear              (ADMIN)
 // - /api/levpay?action=paidhook
 //
+// Admin endpoints require header: X-Admin-Key: <ADMIN_KEY>
+//
+// GitHub DB ENV (Wajib prefix GH, bukan GITHUB):
+// - GH_OWNER, GH_REPO, GH_PATH (default: "tmp/levpay-db.json"), GH_BRANCH (default: "main"), GH_TOKEN
+//
 // Notes:
-// - Admin endpoints require header: X-Admin-Key: <ADMIN_KEY>
-// - DB stored in GitHub repo file (GH_* env). Fallback /tmp if GH missing.
-// - Monthly promo: 1× / device / month + OPTIONAL global maxUses per month (set via admin page)
+// - /tmp fallback tetap dipakai buat cache cepat (optional)
+// - Monthly limit:
+//    - Per-device: 1x/device/bulan (kecuali unlimited deviceKey)
+//    - Global per bulan: maxUses (optional). Commit akan nambah counter per bulan.
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 // ====== CONFIG ======
+const DB_PATH = path.join("/tmp", "levpay-db.json");
 
-// Fallback local tmp DB (dipakai kalau GH tidak di-setup / error)
-const TMP_DB_PATH = path.join("/tmp", "levpay-db.json");
-
-// Admin key untuk ADMIN endpoints (voucher/monthly/tx admin ops)
+// ADMIN
 const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
 
-// Secret optional buat callback/hook (kalau lu mau proteksi paidhook)
-const CALLBACK_SECRET = process.env.CALLBACK_SECRET || ""; // kosong = off
+// optional secret untuk paidhook
+const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
 
-// Pepper buat bikin deviceKey (monthly promo tracking)
-const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "ISI_PEPPER";
+// pepper buat bikin deviceKey (monthly tracking)
+const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4";
 
-// === GitHub DB storage (WAJIB GH_*, bukan GITHUB_*) ===
-// Repo yang nyimpen JSON db, mis: owner=db-levpay, repo=db-levpay, path=levpay-db.json
+// GitHub DB
 const GH_OWNER = process.env.GH_OWNER || "";
 const GH_REPO = process.env.GH_REPO || "";
-const GH_PATH = process.env.GH_PATH || "levpay-db.json";
+const GH_PATH = process.env.GH_PATH || "tmp/levpay-db.json";
 const GH_BRANCH = process.env.GH_BRANCH || "main";
-const GH_TOKEN = process.env.GH_TOKEN || ""; // PAT / Fine-grained token
-const GH_COMMITTER_NAME = process.env.GH_COMMITTER_NAME || "levpay-bot";
-const GH_COMMITTER_EMAIL = process.env.GH_COMMITTER_EMAIL || "levpay-bot@users.noreply.github.com";
-
-// DeviceKey yang unlimited (bypass limit promo bulanan)
-// MASUKIN HASIL SHA256(deviceId + "|" + DEVICE_PEPPER) via env (comma separated)
-const UNLIMITED_DEVICE_KEYS = new Set(
-  String(process.env.UNLIMITED_DEVICE_KEYS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-);
+const GH_TOKEN = process.env.GH_TOKEN || "";
 
 // ====== utils ======
 function send(res, code, obj) {
@@ -98,15 +90,17 @@ function yyyymm(d = new Date()) {
   return `${y}${m}`;
 }
 
+function sha256Hex(s) {
+  return crypto.createHash("sha256").update(String(s || "")).digest("hex");
+}
+
 function getDeviceKey(deviceId, pepper = DEVICE_PEPPER) {
-  return crypto
-    .createHash("sha256")
-    .update(String(deviceId || "") + "|" + String(pepper || ""))
-    .digest("hex");
+  return sha256Hex(String(deviceId || "") + "|" + String(pepper || ""));
 }
 
 async function readBody(req) {
-  if (req.body && typeof req.body === "object") return req.body; // vercel biasanya udah parse
+  // Vercel kadang sudah parse
+  if (req.body && typeof req.body === "object") return req.body;
   return new Promise((resolve) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
@@ -120,133 +114,112 @@ async function readBody(req) {
   });
 }
 
-function safeJsonParse(raw) {
+// ====== GitHub DB ======
+const hasGH = () => !!(GH_OWNER && GH_REPO && GH_PATH && GH_TOKEN);
+
+async function ghFetch(url, opts = {}) {
+  const headers = Object.assign(
+    {
+      Accept: "application/vnd.github+json",
+      Authorization: `token ${GH_TOKEN}`,
+      "User-Agent": "levpay-api",
+    },
+    opts.headers || {}
+  );
+  const r = await fetch(url, { ...opts, headers });
+  const txt = await r.text();
+  let json = {};
   try {
+    json = txt ? JSON.parse(txt) : {};
+  } catch {
+    json = { raw: txt };
+  }
+  return { ok: r.ok, status: r.status, json };
+}
+
+async function ghGetFile() {
+  if (!hasGH()) return { ok: false, status: 0, json: null };
+  const url =
+    `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/` +
+    `${encodeURIComponent(GH_PATH).replace(/%2F/g, "/")}?ref=${encodeURIComponent(GH_BRANCH)}`;
+
+  return ghFetch(url, { method: "GET" });
+}
+
+async function ghPutFile({ contentStr, message }) {
+  if (!hasGH()) return { ok: false, status: 0, json: null };
+
+  const cur = await ghGetFile();
+  const sha = cur.ok ? cur.json?.sha : undefined;
+
+  const url =
+    `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/` +
+    `${encodeURIComponent(GH_PATH).replace(/%2F/g, "/")}`;
+
+  const body = {
+    message: message || `levpay-db update ${new Date().toISOString()}`,
+    content: Buffer.from(String(contentStr || ""), "utf8").toString("base64"),
+    branch: GH_BRANCH,
+  };
+  if (sha) body.sha = sha;
+
+  return ghFetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+// ====== local /tmp fallback ======
+function readTmpDB() {
+  try {
+    if (!fs.existsSync(DB_PATH)) return {};
+    const raw = fs.readFileSync(DB_PATH, "utf8");
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-function tmpReadDB() {
+function writeTmpDB(db) {
   try {
-    if (!fs.existsSync(TMP_DB_PATH)) return {};
-    const raw = fs.readFileSync(TMP_DB_PATH, "utf8");
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function tmpWriteDB(db) {
-  try {
-    fs.writeFileSync(TMP_DB_PATH, JSON.stringify(db, null, 2));
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
     return true;
   } catch {
     return false;
   }
 }
 
-// ====== GitHub DB helpers ======
-function ghEnabled() {
-  return !!(GH_OWNER && GH_REPO && GH_PATH && GH_TOKEN);
-}
-
-async function ghRequest(url, { method = "GET", headers = {}, body } = {}) {
-  const r = await fetch(url, {
-    method,
-    headers: {
-      "User-Agent": "levpay-api",
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${GH_TOKEN}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...headers,
-    },
-    body,
-  });
-  const txt = await r.text();
-  const json = safeJsonParse(txt);
-  return { ok: r.ok, status: r.status, json, raw: txt };
-}
-
-async function ghReadFile() {
-  // GET /repos/{owner}/{repo}/contents/{path}?ref=branch
-  const url =
-    `https://api.github.com/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(
-      GH_REPO
-    )}/contents/${encodeURIComponent(GH_PATH)}` + `?ref=${encodeURIComponent(GH_BRANCH)}`;
-
-  const r = await ghRequest(url, { method: "GET" });
-  if (!r.ok) return { ok: false, status: r.status, error: r.json?.message || "gh read failed" };
-
-  const contentB64 = r.json?.content || "";
-  const sha = r.json?.sha || "";
-  const buf = Buffer.from(String(contentB64).replace(/\n/g, ""), "base64");
-  const raw = buf.toString("utf8");
-  const db = safeJsonParse(raw);
-  return { ok: true, status: 200, db, sha };
-}
-
-async function ghWriteFile(db, prevSha) {
-  // PUT /repos/{owner}/{repo}/contents/{path}
-  const url = `https://api.github.com/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(
-    GH_REPO
-  )}/contents/${encodeURIComponent(GH_PATH)}`;
-
-  const content = Buffer.from(JSON.stringify(db, null, 2), "utf8").toString("base64");
-  const payload = {
-    message: `levpay db update ${new Date().toISOString()}`,
-    content,
-    branch: GH_BRANCH,
-    committer: { name: GH_COMMITTER_NAME, email: GH_COMMITTER_EMAIL },
-    sha: prevSha || undefined,
-  };
-
-  const r = await ghRequest(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!r.ok) {
-    return { ok: false, status: r.status, error: r.json?.message || "gh write failed", raw: r.raw };
-  }
-  return { ok: true, status: 200, sha: r.json?.content?.sha || prevSha || "" };
-}
-
 // ====== DB init / ensure ======
 function ensure(db) {
+  db = db && typeof db === "object" ? db : {};
   db.vouchers = db.vouchers || {};
   db.promo = db.promo || {};
   db.tx = db.tx || {};
 
-  // monthly promo config + usage tracking
-  // - used: { deviceKey: "YYYYMM" }  (per-device 1× per month)
-  // - reserved: { deviceKey: {token,month,expiresAt,discountRp} }
-  // - unlimited: { deviceKey: true }
-  // - maxUses: optional global limit per month (null=unlimited)
-  // - usageByMonth: { YYYYMM: number }  (global count per month)
   db.promo.monthly =
     db.promo.monthly || {
       enabled: true,
       name: "PROMO BULANAN",
       percent: 5,
       maxRp: 2000,
-      maxUses: null, // ✅ NEW: global limit per month (admin configurable)
-      used: {},
-      reserved: {},
-      unlimited: {},
-      usageByMonth: {}, // ✅ NEW
+
+      // kalau requireCode=true -> monthly cuma aktif bila voucherCode == code
+      requireCode: false,
+      code: "MONTHLY",
+
+      // limit total pemakaian global per bulan (optional)
+      maxUses: null,
+
+      used: {},        // deviceKey -> yyyymm
+      reserved: {},    // deviceKey -> {token, month, expiresAt, discountRp}
+      unlimited: {},   // deviceKey -> true
+
+      usedCountByMonth: {}, // yyyymm -> number (commit only, exclude unlimited)
       updatedAt: null,
     };
 
-  db.promo.monthly.used = db.promo.monthly.used || {};
-  db.promo.monthly.reserved = db.promo.monthly.reserved || {};
-  db.promo.monthly.unlimited = db.promo.monthly.unlimited || {};
-  db.promo.monthly.usageByMonth = db.promo.monthly.usageByMonth || {};
-
-  // seed unlimited keys from env
-  for (const k of UNLIMITED_DEVICE_KEYS) db.promo.monthly.unlimited[k] = true;
+  const p = db.promo.monthly;
+  p.used = p.used || {};
+  p.reserved = p.reserved || {};
+  p.unlimited = p.unlimited || {};
+  p.usedCountByMonth = p.usedCountByMonth || {};
 
   return db;
 }
@@ -272,40 +245,108 @@ function cleanupExpiredReservations(db) {
   }
 }
 
-// ====== Discount engine (reserve/apply/commit/release) ======
-
-function canUseMonthlyGlobal(db, monthKey) {
+function monthlyStats(db) {
   ensure(db);
+  cleanupExpiredReservations(db);
   const p = db.promo.monthly;
-  const maxUses = p.maxUses == null ? null : Number(p.maxUses);
-  if (maxUses == null) return true;
-  if (!Number.isFinite(maxUses) || maxUses <= 0) return false;
+  const cur = yyyymm();
 
-  const used = Number(p.usageByMonth?.[monthKey] || 0);
-  return used < maxUses;
+  const usedDevicesThisMonth = Object.values(p.used || {}).filter((m) => m === cur).length;
+  const usedGlobalThisMonth = Number(p.usedCountByMonth?.[cur] || 0);
+
+  let reservedThisMonth = 0;
+  for (const r of Object.values(p.reserved || {})) {
+    if (r?.month === cur) reservedThisMonth++;
+  }
+
+  const unlimitedCount = Object.keys(p.unlimited || {}).length;
+
+  return {
+    month: cur,
+    usedDevicesThisMonth,
+    usedGlobalThisMonth,
+    reservedThisMonth,
+    maxUses: p.maxUses == null ? null : Number(p.maxUses),
+    unlimitedCount,
+  };
 }
 
-function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
+// ====== DB read/write (GH + tmp cache) ======
+async function readDB() {
+  // try GH first
+  if (hasGH()) {
+    const r = await ghGetFile();
+    if (r.ok && r.json?.content) {
+      try {
+        const raw = Buffer.from(String(r.json.content || ""), "base64").toString("utf8");
+        const db = raw ? JSON.parse(raw) : {};
+        // cache to /tmp
+        writeTmpDB(db);
+        return ensure(db);
+      } catch {
+        // fallthrough to tmp
+      }
+    }
+  }
+  // fallback tmp
+  return ensure(readTmpDB());
+}
+
+async function writeDB(db, msg) {
+  ensure(db);
+  // always cache tmp
+  writeTmpDB(db);
+  // push to GH if configured
+  if (hasGH()) {
+    const raw = JSON.stringify(db, null, 2);
+    const r = await ghPutFile({ contentStr: raw, message: msg });
+    return r.ok;
+  }
+  return true;
+}
+
+// ====== Discount engine ======
+function reserveMonthlyPromo(db, amount, deviceKey, voucherCode, ttlMs) {
   ensure(db);
   cleanupExpiredReservations(db);
 
   const p = db.promo.monthly;
-  if (!p.enabled) return { ok: false, discountRp: 0, reason: "monthly disabled" };
+  if (!p.enabled) return { ok: false, discountRp: 0 };
 
   const cur = yyyymm();
   const isUnlimited = !!(p.unlimited && p.unlimited[deviceKey]);
 
-  // ✅ global maxUses per month check (skip for unlimited)
-  if (!isUnlimited && !canUseMonthlyGlobal(db, cur)) {
-    return { ok: false, discountRp: 0, reason: "monthly global limit reached" };
+  // optional require code
+  if (p.requireCode) {
+    const need = String(p.code || "MONTHLY").trim().toUpperCase();
+    const got = String(voucherCode || "").trim().toUpperCase();
+    if (!need || got !== need) return { ok: false, discountRp: 0 };
   }
 
+  // per device 1x/bulan
   const lastUsed = p.used[deviceKey] || "";
-  if (!isUnlimited && lastUsed === cur) return { ok: false, discountRp: 0, reason: "device already used this month" };
+  if (!isUnlimited && lastUsed === cur) return { ok: false, discountRp: 0 };
 
-  // kalau sudah reserved bulan ini -> jangan kasih lagi sampai expired
+  // already reserved for this month
   const rsv = p.reserved[deviceKey];
-  if (rsv && rsv.month === cur) return { ok: false, discountRp: 0, reason: "already reserved" };
+  if (rsv && rsv.month === cur) return { ok: false, discountRp: 0 };
+
+  // global maxUses per month (commit only, reserve counts too)
+  if (!isUnlimited && p.maxUses != null) {
+    const maxUses = Math.max(0, Number(p.maxUses));
+    if (maxUses > 0) {
+      const usedGlobal = Number(p.usedCountByMonth?.[cur] || 0);
+
+      let reservedCount = 0;
+      for (const [dk, rr] of Object.entries(p.reserved || {})) {
+        if (rr?.month !== cur) continue;
+        if (p.unlimited?.[dk]) continue; // unlimited not counted
+        reservedCount++;
+      }
+
+      if (usedGlobal + reservedCount >= maxUses) return { ok: false, discountRp: 0 };
+    }
+  }
 
   const percent = clamp(Number(p.percent || 0), 0, 100);
   const maxRp = Math.max(0, Number(p.maxRp || 0));
@@ -320,12 +361,20 @@ function reserveMonthlyPromo(db, amount, deviceKey, ttlMs) {
     return {
       ok: true,
       discountRp,
-      info: { type: "monthly", name: p.name || "PROMO BULANAN", percent, maxRp, maxUses: p.maxUses ?? null },
+      info: {
+        type: "monthly",
+        name: p.name || "PROMO BULANAN",
+        percent,
+        maxRp,
+        requireCode: !!p.requireCode,
+        code: p.code || "MONTHLY",
+        maxUses: p.maxUses == null ? null : Number(p.maxUses),
+      },
       reservation: { type: "monthly", deviceKey, token: t, month: cur, expiresAt, discountRp },
     };
   }
 
-  return { ok: false, discountRp: 0, reason: "no discount" };
+  return { ok: false, discountRp: 0 };
 }
 
 function reserveVoucher(db, amount, voucherCode, ttlMs) {
@@ -371,21 +420,28 @@ function reserveVoucher(db, amount, voucherCode, ttlMs) {
       name: v.name || code,
       percent,
       maxRp,
-      maxUses: v.maxUses ?? null,
       expiresAt: v.expiresAt || null,
+      maxUses: v.maxUses == null ? null : Number(v.maxUses),
+      uses: Number(v.uses || 0),
     },
     reservation: { type: "voucher", code, token: t, expiresAt, discountRp },
   };
 }
 
-function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 60 * 1000 }) {
+function applyDiscount({
+  db,
+  amount,
+  deviceId = "",
+  deviceKey: deviceKeyIn = "",
+  voucherCode = "",
+  reserveTtlMs = 6 * 60 * 1000,
+}) {
   ensure(db);
 
-  const deviceKey = getDeviceKey(deviceId || "");
-  const amountOriginal = Number(amount || 0);
-
-  let finalAmount = amountOriginal;
+  const deviceKey = deviceKeyIn ? String(deviceKeyIn) : getDeviceKey(deviceId || "");
+  let finalAmount = Number(amount || 0);
   let discountRp = 0;
+
   const applied = [];
   const reservations = [];
 
@@ -399,7 +455,7 @@ function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 6
   }
 
   // monthly setelah voucher
-  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs);
+  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, voucherCode, reserveTtlMs);
   if (m.ok) {
     finalAmount = Math.max(1, finalAmount - m.discountRp);
     discountRp += m.discountRp;
@@ -407,14 +463,7 @@ function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 6
     reservations.push(m.reservation);
   }
 
-  return {
-    amountOriginal,
-    finalAmount,
-    discountRp,
-    applied,
-    reservations,
-    deviceKey,
-  };
+  return { finalAmount, discountRp, applied, reservations, deviceKey };
 }
 
 function releaseReservations(db, reservations) {
@@ -441,22 +490,24 @@ function commitReservations(db, reservations) {
   ensure(db);
   cleanupExpiredReservations(db);
 
+  const p = db.promo.monthly;
   for (const r of reservations || []) {
     if (!r || !r.type) continue;
 
     if (r.type === "monthly") {
-      const cur = db.promo.monthly.reserved?.[r.deviceKey];
+      const cur = p.reserved?.[r.deviceKey];
       if (cur && cur.token === r.token) {
-        // mark device used for month
-        db.promo.monthly.used[r.deviceKey] = r.month;
-        delete db.promo.monthly.reserved[r.deviceKey];
+        const isUnlimited = !!p.unlimited?.[r.deviceKey];
 
-        // ✅ increment global usage for that month (except unlimited)
-        const isUnlimited = !!db.promo.monthly.unlimited?.[r.deviceKey];
+        // per-device used only if not unlimited
         if (!isUnlimited) {
-          const k = String(r.month || yyyymm());
-          db.promo.monthly.usageByMonth[k] = Number(db.promo.monthly.usageByMonth[k] || 0) + 1;
+          p.used[r.deviceKey] = r.month;
+
+          // global counter per month (exclude unlimited)
+          p.usedCountByMonth[r.month] = Number(p.usedCountByMonth?.[r.month] || 0) + 1;
         }
+
+        delete p.reserved[r.deviceKey];
       }
     }
 
@@ -513,11 +564,13 @@ function adminSetMonthlyPromo(db, body) {
   if (body.percent != null) p.percent = clamp(Number(body.percent), 0, 100);
   if (body.maxRp != null) p.maxRp = Math.max(0, Number(body.maxRp));
 
-  // ✅ NEW: global maxUses per month (null=unlimited)
+  if (body.requireCode != null) p.requireCode = !!body.requireCode;
+  if (body.code != null) p.code = String(body.code || "MONTHLY").trim().toUpperCase();
+
+  // global maxUses / bulan (null = unlimited)
   if (Object.prototype.hasOwnProperty.call(body, "maxUses")) {
-    if (body.maxUses == null || body.maxUses === "" || body.maxUses === 0) {
-      p.maxUses = null;
-    } else {
+    if (body.maxUses == null || body.maxUses === "") p.maxUses = null;
+    else {
       const n = Number(body.maxUses);
       p.maxUses = Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
     }
@@ -533,14 +586,29 @@ function adminSetMonthlyPromo(db, body) {
     if (k && p.unlimited) delete p.unlimited[k];
   }
 
-  // optional admin ops: reset month usage (global)
-  if (body.resetMonth != null) {
-    const mk = String(body.resetMonth).trim();
-    if (mk && p.usageByMonth) delete p.usageByMonth[mk];
-  }
-
   p.updatedAt = new Date().toISOString();
   return p;
+}
+
+// reset only current month counters (ADMIN, buat debugging)
+function adminResetMonthlyForCurrentMonth(db) {
+  ensure(db);
+  const p = db.promo.monthly;
+  const cur = yyyymm();
+
+  // remove used markers for current month
+  for (const [dk, mon] of Object.entries(p.used || {})) {
+    if (mon === cur) delete p.used[dk];
+  }
+  // clear reserved current month
+  for (const [dk, r] of Object.entries(p.reserved || {})) {
+    if (r?.month === cur) delete p.reserved[dk];
+  }
+  // reset global count current month
+  if (p.usedCountByMonth) delete p.usedCountByMonth[cur];
+
+  p.updatedAt = new Date().toISOString();
+  return { ok: true, month: cur };
 }
 
 // ====== TX store ops (simple) ======
@@ -589,125 +657,48 @@ function txClear(db) {
 function help() {
   return {
     success: true,
-    service: "levpay-api (single file, GH DB)",
-    storage: ghEnabled()
-      ? { type: "github", owner: GH_OWNER, repo: GH_REPO, path: GH_PATH, branch: GH_BRANCH }
-      : { type: "tmp", path: TMP_DB_PATH },
-    paths: {
-      recommended: "/api/levpay?action=...",
-    },
+    service: "levpay-api (single file + GH DB)",
     actions: [
-      "ping",
-      "help",
-      "tutor",
-
-      "discount.apply",
-      "discount.commit",
-      "discount.release",
-
-      "voucher.upsert (ADMIN)",
-      "voucher.disable (ADMIN)",
-      "voucher.list (ADMIN)",
-      "voucher.get (ADMIN)",
-
-      "monthly.get (ADMIN)",
-      "monthly.set (ADMIN)",
-
-      "tx.upsert (ADMIN)",
-      "tx.get (ADMIN)",
-      "tx.list (ADMIN)",
-      "tx.search (ADMIN)",
-      "tx.clear (ADMIN)",
-
+      "ping", "help", "tutor",
+      "discount.apply", "discount.commit", "discount.release",
+      "voucher.upsert (ADMIN)", "voucher.disable (ADMIN)", "voucher.list (ADMIN)", "voucher.get (ADMIN)",
+      "monthly.get (ADMIN)", "monthly.set (ADMIN)", "monthly.resetMonth (ADMIN)",
+      "tx.upsert (ADMIN)", "tx.get (ADMIN)", "tx.list (ADMIN)", "tx.search (ADMIN)", "tx.clear (ADMIN)",
       "paidhook",
     ],
-    admin: {
-      header: "X-Admin-Key",
-      requiredFor: ["voucher.*", "monthly.*", "tx.*"],
+    admin: { header: "X-Admin-Key", requiredFor: ["voucher.*", "monthly.*", "tx.*"] },
+    githubDb: {
+      requiredEnv: ["GH_OWNER", "GH_REPO", "GH_PATH", "GH_BRANCH", "GH_TOKEN"],
+      usingGH: hasGH(),
+      path: GH_PATH,
+      branch: GH_BRANCH,
     },
   };
 }
 
 function tutor() {
-  const HOST = "$HOST";
-  const ADMIN = "$ADMIN";
   return {
     success: true,
-    tutor: {
-      ping: {
-        curl: `curl -sS "${HOST}/api/levpay?action=ping" | jq`,
-        response: { success: true, ok: true, time: "2025-01-01T00:00:00.000Z" },
-      },
-      discount_apply: {
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=discount.apply" \\\n` +
-          `  -H "Content-Type: application/json" \\\n` +
-          `  -d '{"amount":10000,"deviceId":"dev_termux_1","voucher":"VIPL"}' | jq`,
-        response: {
-          success: true,
-          data: {
-            amountOriginal: 10000,
-            finalAmount: 9000,
-            discountRp: 1000,
-            applied: [{ type: "voucher", code: "VIPL", name: "VIPL", percent: 10, maxRp: 0 }],
-            reservations: [],
-            deviceKey: "sha256...",
-          },
-        },
-      },
-      voucher_upsert: {
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.upsert" \\\n` +
-          `  -H "X-Admin-Key: ${ADMIN}" \\\n` +
-          `  -H "Content-Type: application/json" \\\n` +
-          `  -d '{"code":"VIPL","enabled":true,"name":"VIP LEVEL","percent":10,"maxRp":0,"maxUses":100,"expiresAt":"2026-12-31T23:59:59.000Z"}' | jq`,
-        response: { success: true, data: { code: "VIPL", enabled: true } },
-      },
-      voucher_disable: {
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" \\\n` +
-          `  -H "X-Admin-Key: ${ADMIN}" \\\n` +
-          `  -H "Content-Type: application/json" \\\n` +
-          `  -d '{"code":"VIPL"}' | jq`,
-        response: { success: true, data: { code: "VIPL", enabled: false } },
-      },
-      monthly_set: {
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" \\\n` +
-          `  -H "X-Admin-Key: ${ADMIN}" \\\n` +
-          `  -H "Content-Type: application/json" \\\n` +
-          `  -d '{"enabled":true,"name":"PROMO BULANAN","percent":5,"maxRp":2000,"maxUses":500}' | jq`,
-        response: { success: true, data: { enabled: true, maxUses: 500 } },
-      },
+    note: "Copy-paste contoh curl berikut. Set $HOST dan $ADMIN dulu.",
+    examples: {
+      ping: `curl -sS "$HOST/api/levpay?action=ping" | jq`,
+      apply: `curl -sS -X POST "$HOST/api/levpay?action=discount.apply" \\
+  -H "Content-Type: application/json" \\
+  -d '{"amount":10000,"deviceId":"dev_frontend_1","voucher":"VIPL"}' | jq`,
+      commit: `curl -sS -X POST "$HOST/api/levpay?action=discount.commit" \\
+  -H "Content-Type: application/json" \\
+  -d '{"reservations":[/* dari response apply */]}' | jq`,
+      voucherUpsert: `curl -sS -X POST "$HOST/api/levpay?action=voucher.upsert" \\
+  -H "X-Admin-Key: $ADMIN" -H "Content-Type: application/json" \\
+  -d '{"code":"VIPL","enabled":true,"name":"VIP LEVEL","percent":90,"maxRp":0,"maxUses":999,"expiresAt":null}' | jq`,
+      monthlySet: `curl -sS -X POST "$HOST/api/levpay?action=monthly.set" \\
+  -H "X-Admin-Key: $ADMIN" -H "Content-Type: application/json" \\
+  -d '{"enabled":true,"name":"PROMO BULANAN","percent":5,"maxRp":2000,"maxUses":100,"requireCode":false,"code":"MONTHLY"}' | jq`,
+      addUnlimited: `curl -sS -X POST "$HOST/api/levpay?action=monthly.set" \\
+  -H "X-Admin-Key: $ADMIN" -H "Content-Type: application/json" \\
+  -d '{"addUnlimitedDeviceKey":"<64hex deviceKey>"}' | jq`,
     },
   };
-}
-
-// ====== Storage orchestrator ======
-async function loadDB() {
-  if (ghEnabled()) {
-    const r = await ghReadFile();
-    if (r.ok) return { db: ensure(r.db), meta: { mode: "github", sha: r.sha } };
-    // fallback to tmp when GH read fails
-    const db = ensure(tmpReadDB());
-    return { db, meta: { mode: "tmp", sha: "" }, warn: `GH read failed: ${r.error || r.status}` };
-  }
-
-  const db = ensure(tmpReadDB());
-  return { db, meta: { mode: "tmp", sha: "" } };
-}
-
-async function saveDB(db, meta) {
-  if (meta?.mode === "github" && ghEnabled()) {
-    const w = await ghWriteFile(db, meta.sha);
-    if (w.ok) return { ok: true, mode: "github", sha: w.sha };
-    // fallback to tmp
-    tmpWriteDB(db);
-    return { ok: false, mode: "tmp", error: `GH write failed: ${w.error || w.status}` };
-  }
-
-  tmpWriteDB(db);
-  return { ok: true, mode: "tmp" };
 }
 
 // ====== MAIN HANDLER ======
@@ -717,25 +708,14 @@ module.exports = async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const action = String(url.searchParams.get("action") || "").trim();
 
-  // body
   const body = await readBody(req);
 
   // db
-  const loaded = await loadDB();
-  const db = loaded.db;
-  const meta = loaded.meta;
+  const db = await readDB();
 
-  // ping/help/tutor
   if (!action || action === "help") return send(res, 200, help());
   if (action === "tutor") return send(res, 200, tutor());
-  if (action === "ping")
-    return send(res, 200, {
-      success: true,
-      ok: true,
-      time: new Date().toISOString(),
-      storage: meta?.mode || "tmp",
-      warn: loaded.warn || null,
-    });
+  if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
 
   try {
     // ===== DISCOUNT =====
@@ -756,59 +736,32 @@ module.exports = async (req, res) => {
         reserveTtlMs: Number(body.reserveTtlMs || 6 * 60 * 1000),
       });
 
-      const saved = await saveDB(db, meta);
+      await writeDB(db, "discount.apply (reserve)");
 
       return send(res, 200, {
         success: true,
         data: {
-          amountOriginal: r.amountOriginal,
           finalAmount: r.finalAmount,
           discountRp: r.discountRp,
           applied: r.applied,
           reservations: r.reservations,
           deviceKey: r.deviceKey,
-          monthly: {
-            month: yyyymm(),
-            maxUses: db.promo.monthly.maxUses ?? null,
-            usedCountThisMonth: Number(db.promo.monthly.usageByMonth?.[yyyymm()] || 0),
-          },
         },
-        storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-        warn: loaded.warn || null,
       });
     }
 
     if (action === "discount.commit" || action === "commit") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       commitReservations(db, reservations);
-      const saved = await saveDB(db, meta);
-
-      return send(res, 200, {
-        success: true,
-        data: {
-          committed: reservations.length,
-          monthly: {
-            month: yyyymm(),
-            maxUses: db.promo.monthly.maxUses ?? null,
-            usedCountThisMonth: Number(db.promo.monthly.usageByMonth?.[yyyymm()] || 0),
-          },
-        },
-        storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-        warn: loaded.warn || null,
-      });
+      await writeDB(db, "discount.commit");
+      return send(res, 200, { success: true, data: { committed: reservations.length } });
     }
 
     if (action === "discount.release" || action === "release") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       releaseReservations(db, reservations);
-      const saved = await saveDB(db, meta);
-
-      return send(res, 200, {
-        success: true,
-        data: { released: reservations.length },
-        storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-        warn: loaded.warn || null,
-      });
+      await writeDB(db, "discount.release");
+      return send(res, 200, { success: true, data: { released: reservations.length } });
     }
 
     // ===== VOUCHER (ADMIN) =====
@@ -817,41 +770,29 @@ module.exports = async (req, res) => {
 
       if (action === "voucher.upsert") {
         const out = adminUpsertVoucher(db, body || {});
-        const saved = await saveDB(db, meta);
-        return send(res, 200, {
-          success: true,
-          data: out,
-          storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-          warn: loaded.warn || null,
-        });
+        await writeDB(db, "voucher.upsert");
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "voucher.disable") {
         const out = adminDisableVoucher(db, body || {});
-        const saved = await saveDB(db, meta);
-        return send(res, 200, {
-          success: true,
-          data: out,
-          storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-          warn: loaded.warn || null,
-        });
+        await writeDB(db, "voucher.disable");
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "voucher.list") {
         const items = Object.values(db.vouchers || {}).sort((a, b) =>
           String(a.code || "").localeCompare(String(b.code || ""))
         );
-        return send(res, 200, { success: true, data: items, warn: loaded.warn || null });
+        return send(res, 200, { success: true, data: items });
       }
 
       if (action === "voucher.get") {
-        const code = String(body.code || url.searchParams.get("code") || "")
-          .trim()
-          .toUpperCase();
+        const code = String(body.code || url.searchParams.get("code") || "").trim().toUpperCase();
         if (!code) return send(res, 400, { success: false, error: "code required" });
         const v = db.vouchers?.[code];
         if (!v) return send(res, 404, { success: false, error: "voucher not found" });
-        return send(res, 200, { success: true, data: v, warn: loaded.warn || null });
+        return send(res, 200, { success: true, data: v });
       }
 
       return send(res, 400, { success: false, error: "Unknown voucher action" });
@@ -863,30 +804,34 @@ module.exports = async (req, res) => {
 
       if (action === "monthly.get") {
         cleanupExpiredReservations(db);
-        const cur = yyyymm();
-        const usedCountThisMonth = Number(db.promo.monthly.usageByMonth?.[cur] || 0);
+        const p = db.promo.monthly;
         return send(res, 200, {
           success: true,
           data: {
-            ...db.promo.monthly,
-            month: cur,
-            usedCountThisMonth,
+            ...p,
+            stats: monthlyStats(db),
+            unlimitedKeys: Object.keys(p.unlimited || {}),
           },
-          warn: loaded.warn || null,
         });
       }
 
       if (action === "monthly.set") {
         const out = adminSetMonthlyPromo(db, body || {});
-        const saved = await saveDB(db, meta);
-        const cur = yyyymm();
-        const usedCountThisMonth = Number(db.promo.monthly.usageByMonth?.[cur] || 0);
+        await writeDB(db, "monthly.set");
         return send(res, 200, {
           success: true,
-          data: { ...out, month: cur, usedCountThisMonth },
-          storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-          warn: loaded.warn || null,
+          data: {
+            ...out,
+            stats: monthlyStats(db),
+            unlimitedKeys: Object.keys(out.unlimited || {}),
+          },
         });
+      }
+
+      if (action === "monthly.resetMonth") {
+        const out = adminResetMonthlyForCurrentMonth(db);
+        await writeDB(db, "monthly.resetMonth");
+        return send(res, 200, { success: true, data: out });
       }
 
       return send(res, 400, { success: false, error: "Unknown monthly action" });
@@ -898,13 +843,8 @@ module.exports = async (req, res) => {
 
       if (action === "tx.upsert") {
         const out = txUpsert(db, body || {});
-        const saved = await saveDB(db, meta);
-        return send(res, 200, {
-          success: true,
-          data: out,
-          storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-          warn: loaded.warn || null,
-        });
+        await writeDB(db, "tx.upsert");
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "tx.get") {
@@ -912,30 +852,25 @@ module.exports = async (req, res) => {
         if (!id) return send(res, 400, { success: false, error: "idTransaksi required" });
         const out = txGet(db, id);
         if (!out) return send(res, 404, { success: false, error: "not found" });
-        return send(res, 200, { success: true, data: out, warn: loaded.warn || null });
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "tx.list") {
         const limit = Number(body.limit || url.searchParams.get("limit") || 200);
         const out = txList(db, limit);
-        return send(res, 200, { success: true, data: out, warn: loaded.warn || null });
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "tx.search") {
         const q = body.q || url.searchParams.get("q") || "";
         const out = txSearch(db, q);
-        return send(res, 200, { success: true, data: out, warn: loaded.warn || null });
+        return send(res, 200, { success: true, data: out });
       }
 
       if (action === "tx.clear") {
         txClear(db);
-        const saved = await saveDB(db, meta);
-        return send(res, 200, {
-          success: true,
-          data: { cleared: true },
-          storage: { mode: saved.mode, ok: saved.ok, error: saved.error || null },
-          warn: loaded.warn || null,
-        });
+        await writeDB(db, "tx.clear");
+        return send(res, 200, { success: true, data: { cleared: true } });
       }
 
       return send(res, 400, { success: false, error: "Unknown tx action" });
@@ -945,11 +880,10 @@ module.exports = async (req, res) => {
     if (action === "paidhook") {
       if (!checkCallbackSecret(req)) return send(res, 401, { success: false, error: "bad secret" });
 
-      // simpan minimal ke tx store (kalau ada idTransaksi)
       const id = String(body.idTransaksi || body.id || "").trim();
       if (id) {
         txUpsert(db, { ...body, idTransaksi: id });
-        await saveDB(db, meta);
+        await writeDB(db, "paidhook");
       }
 
       return send(res, 200, { success: true, data: { received: true, idTransaksi: id || null } });
