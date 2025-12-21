@@ -35,13 +35,16 @@ module.exports = async (req, res) => {
       const db = await loadDb();
       const deviceKey = getDeviceKey(deviceId, process.env.DEVICE_PEPPER || "");
 
-      const out = applyDiscount({
-        db,
-        amount,
-        deviceKey,
-        voucherCode: voucher,
-        reserveTtlMs,
-      });
+      const out = applyDiscount(db, {
+  amount,
+  deviceKey,
+  voucherCode: voucher,
+  reserveTtlMs,
+  useVoucher: true,
+  useMonthly: true,
+  stackWithVoucher: true,
+  allowMonthlyWithoutVoucher: true,
+});
 
       // simpan reserved state
       await saveDb(db);
