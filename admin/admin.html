@@ -22,7 +22,7 @@
 
       <div class="gate__form">
         <label class="label">Admin Key</label>
-        <input id="adminKeyInput" class="input" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
+        <input id="adminKeyInput" class="input mono" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
 
         <div class="row row--gap">
           <button id="btnLogin" class="btn btn--primary">Masuk</button>
@@ -30,7 +30,7 @@
         </div>
 
         <div class="hint">
-          API router: <code class="mono">/api/levpay</code> (single file).
+          Endpoint router: <code class="mono">/api/levpay?action=...</code>
         </div>
 
         <div id="loginMsg" class="msg" style="display:none;"></div>
@@ -45,16 +45,17 @@
         <div class="brandMini">
           <div class="brandMini__logo">LP</div>
           <div>
-            <div class="brandMini__title">LevPay</div>
+            <div class="brandMini__title">LevPay Admin</div>
             <div class="brandMini__sub">
-              API: <span class="mono" id="apiBaseText">—</span>
+              API: <span class="mono" id="apiBaseText">/api/levpay</span>
+              <span class="sep">•</span>
+              <span class="pill pill--muted" id="pillUser">akun: admin</span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="topbar__right">
-        <div class="pill pill--muted" id="pillAccount">ACTIVE</div>
         <button id="btnRefreshAll" class="btn btn--ghost">Refresh</button>
         <button id="btnOpenGate" class="btn btn--ghost">Admin Key</button>
       </div>
@@ -63,10 +64,7 @@
     <main class="layout">
       <aside class="side">
         <div class="side__box">
-          <button class="navItem is-active" data-tab="info">
-            <span>Info Diskon</span><span class="pill" id="pillInfo">—</span>
-          </button>
-          <button class="navItem" data-tab="vouchers">
+          <button class="navItem is-active" data-tab="vouchers">
             <span>Voucher</span><span class="pill" id="pillVoucherCount">0</span>
           </button>
           <button class="navItem" data-tab="monthly">
@@ -86,127 +84,27 @@
             <div class="kv__k">Last Sync</div>
             <div class="kv__v mono" id="lastSync">—</div>
           </div>
+          <div class="kv">
+            <div class="kv__k">Host</div>
+            <div class="kv__v mono" id="hostInfo">—</div>
+          </div>
         </div>
       </aside>
 
       <section class="main">
-        <!-- INFO TAB -->
-        <div class="tab is-on" id="tab-info">
-          <div class="grid2">
-            <div class="card">
-              <div class="card__head">
-                <div>
-                  <div class="card__title">Promo Bulanan (Info)</div>
-                  <div class="card__sub">Status, diskon, limit global/bulan, dan usage bulan ini.</div>
-                </div>
-              </div>
-              <div class="card__body">
-                <div class="infoGrid">
-                  <div class="kv">
-                    <div class="kv__k">Enabled</div>
-                    <div class="kv__v" id="infoMonthlyEnabled">—</div>
-                  </div>
-                  <div class="kv">
-                    <div class="kv__k">Name</div>
-                    <div class="kv__v" id="infoMonthlyName">—</div>
-                  </div>
-                  <div class="kv">
-                    <div class="kv__k">Diskon</div>
-                    <div class="kv__v" id="infoMonthlyPercent">—</div>
-                  </div>
-                  <div class="kv">
-                    <div class="kv__k">Max Rp</div>
-                    <div class="kv__v" id="infoMonthlyMaxRp">—</div>
-                  </div>
-                  <div class="kv">
-                    <div class="kv__k">Max Uses (global/bulan)</div>
-                    <div class="kv__v" id="infoMonthlyMaxUses">—</div>
-                  </div>
-                  <div class="kv">
-                    <div class="kv__k">Used (bulan ini)</div>
-                    <div class="kv__v" id="infoMonthlyUsed">—</div>
-                  </div>
-                </div>
-
-                <div class="hr"></div>
-
-                <div class="miniTitle">Generate deviceKey (SHA-256)</div>
-                <div class="formGrid">
-                  <div class="field">
-                    <label class="label">Device ID</label>
-                    <input id="info_deviceId" class="input mono" placeholder="contoh: dev_android_1" />
-                  </div>
-                  <div class="field">
-                    <label class="label">Device Pepper</label>
-                    <input id="info_pepper" class="input mono" placeholder="harus sama dengan DEVICE_PEPPER backend" />
-                  </div>
-                  <div class="field field--full">
-                    <label class="label">deviceKey (SHA-256)</label>
-                    <input id="info_deviceKey" class="input mono" readonly />
-                    <div class="hint">Ini yang dipakai backend buat limit monthly (1×/device/bulan).</div>
-                  </div>
-                </div>
-                <div class="btnRow" style="margin-top:10px;">
-                  <button id="btnInfoGenKey" class="btn btn--ghost">Generate</button>
-                  <button id="btnInfoCopyKey" class="btn btn--ghost">Copy</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card__head">
-                <div>
-                  <div class="card__title">Voucher Aktif (Info)</div>
-                  <div class="card__sub">Daftar voucher ON. Scroll hanya di box.</div>
-                </div>
-                <div class="headActions">
-                  <label class="seg">
-                    <input id="onlyActiveToggle" type="checkbox" checked />
-                    <span>Hanya ON</span>
-                  </label>
-                  <button id="btnLoadVouchersInfo" class="btn btn--ghost">Load</button>
-                </div>
-              </div>
-              <div class="card__body card__body--pad0">
-                <div class="tableWrap" id="voucherInfoWrap">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Kode</th>
-                        <th>Nama</th>
-                        <th>Aktif</th>
-                        <th>%</th>
-                        <th>Max Rp</th>
-                        <th>Max Uses</th>
-                        <th>Expire</th>
-                      </tr>
-                    </thead>
-                    <tbody id="voucherInfoTbody">
-                      <tr><td colspan="7" class="mutedCell">Belum ada data.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div class="card__foot">
-                Kode voucher tidak disensor (sesuai request).
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- VOUCHERS TAB -->
-        <div class="tab" id="tab-vouchers">
+        <div class="tab is-on" id="tab-vouchers">
           <div class="grid2">
             <div class="card">
               <div class="card__head">
                 <div>
                   <div class="card__title">Voucher Manager</div>
-                  <div class="card__sub">Buat / update voucher, lalu disable voucher.</div>
+                  <div class="card__sub">Buat / update voucher, toggle ON/OFF, dan disable.</div>
                 </div>
-                <div class="headActions">
-                  <label class="seg">
-                    <input id="onlyActiveToggle2" type="checkbox" checked />
-                    <span>Hanya ON</span>
+                <div class="row row--gap">
+                  <label class="check">
+                    <input id="onlyActiveToggle" type="checkbox" checked />
+                    <span>Hanya yang aktif</span>
                   </label>
                   <button id="btnLoadVouchers" class="btn btn--ghost">Load</button>
                 </div>
@@ -224,7 +122,7 @@
                         <th>Max Rp</th>
                         <th>Max Uses</th>
                         <th>Expire</th>
-                        <th class="tRight">Pilih</th>
+                        <th class="tRight">Aksi</th>
                       </tr>
                     </thead>
                     <tbody id="voucherTbody">
@@ -233,24 +131,20 @@
                   </table>
                 </div>
               </div>
+              <div class="card__foot">
+                Klik <b>Edit</b> untuk isi form. Toggle aktif langsung update via <span class="mono">voucher.upsert</span>.
+              </div>
             </div>
 
             <div class="card">
               <div class="card__head">
                 <div>
                   <div class="card__title">Upsert Voucher</div>
-                  <div class="card__sub">curl + JSON otomatis di atas form.</div>
+                  <div class="card__sub">Isi detail voucher lalu simpan.</div>
                 </div>
               </div>
 
               <div class="card__body">
-                <div class="miniTitle">curl (auto)</div>
-                <pre class="codeBox" id="curlVoucher">—</pre>
-                <div class="miniTitle" style="margin-top:10px;">Response</div>
-                <pre class="codeBox codeBox--json" id="jsonVoucher">—</pre>
-
-                <div class="hr"></div>
-
                 <div class="formGrid">
                   <div class="field">
                     <label class="label">Code</label>
@@ -263,21 +157,21 @@
 
                   <div class="field">
                     <label class="label">Percent (0-100)</label>
-                    <input id="v_percent" class="input" inputmode="numeric" placeholder="contoh: 60" />
+                    <input id="v_percent" class="input mono" inputmode="numeric" placeholder="contoh: 60" />
                   </div>
                   <div class="field">
                     <label class="label">Max Rp (0 = unlimited)</label>
-                    <input id="v_maxRp" class="input" inputmode="numeric" placeholder="contoh: 5000" />
+                    <input id="v_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 5000" value="0" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Uses (kosong = unlimited)</label>
-                    <input id="v_maxUses" class="input" inputmode="numeric" placeholder="contoh: 100" />
+                    <input id="v_maxUses" class="input mono" inputmode="numeric" placeholder="contoh: 100" />
                   </div>
 
                   <div class="field">
                     <label class="label">Expires At</label>
-                    <input id="v_expiresAt" class="input" type="datetime-local" />
+                    <input id="v_expiresAt" class="input mono" type="datetime-local" />
                     <div class="hint">Kosongkan kalau tidak ada expire.</div>
                   </div>
 
@@ -289,9 +183,20 @@
                   </div>
                 </div>
 
-                <div class="btnRow" style="margin-top:12px;">
+                <div class="btnRow" style="margin-top:10px;">
                   <button id="btnUpsertVoucher" class="btn btn--primary">Simpan Voucher</button>
                   <button id="btnDisableVoucher" class="btn btn--danger">Disable Voucher</button>
+                </div>
+
+                <div class="split">
+                  <div>
+                    <div class="miniTitle">curl (auto)</div>
+                    <pre class="codebox" id="curlVoucher">—</pre>
+                  </div>
+                  <div>
+                    <div class="miniTitle">Response</div>
+                    <pre class="codebox" id="jsonVoucher">—</pre>
+                  </div>
                 </div>
 
                 <div id="msgVoucher" class="msg" style="display:none;"></div>
@@ -307,22 +212,18 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Promo Bulanan</div>
-                  <div class="card__sub">1× per device per bulan + optional maxUses global/bulan.</div>
+                  <div class="card__sub">
+                    Limit per device tetap <b>1×/bulan</b>. Di sini lo juga bisa set
+                    <b>limit total pemakaian global per bulan</b> (maxUses/bulan).
+                  </div>
                 </div>
-                <div class="headActions">
+                <div class="row row--gap">
                   <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
                   <button id="btnSaveMonthly" class="btn btn--primary">Save</button>
                 </div>
               </div>
 
               <div class="card__body">
-                <div class="miniTitle">curl (auto)</div>
-                <pre class="codeBox" id="curlMonthly">—</pre>
-                <div class="miniTitle" style="margin-top:10px;">Response</div>
-                <pre class="codeBox codeBox--json" id="jsonMonthly">—</pre>
-
-                <div class="hr"></div>
-
                 <div class="formGrid">
                   <div class="field field--full">
                     <label class="check">
@@ -338,18 +239,38 @@
 
                   <div class="field">
                     <label class="label">Percent (0-100)</label>
-                    <input id="m_percent" class="input" inputmode="numeric" placeholder="contoh: 5" />
+                    <input id="m_percent" class="input mono" inputmode="numeric" placeholder="contoh: 5" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Rp</label>
-                    <input id="m_maxRp" class="input" inputmode="numeric" placeholder="contoh: 2000" />
+                    <input id="m_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 2000" />
                   </div>
 
                   <div class="field">
                     <label class="label">Max Uses / bulan (kosong = unlimited)</label>
-                    <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 100 (global per bulan)" />
-                    <div class="hint">Device tetap 1×/bulan. Ini limit global pemakaian promo per bulan.</div>
+                    <input id="m_maxUses" class="input mono" inputmode="numeric" placeholder="contoh: 500" />
+                    <div class="hint">Ini limit total pemakaian promo per bulan (global). Device tetap 1×/bulan.</div>
+                  </div>
+
+                  <div class="field field--full">
+                    <div class="note">
+                      <div class="note__title">Info pemakaian (readonly)</div>
+                      <div class="kv"><div class="kv__k">Used count bulan ini</div><div class="kv__v mono" id="m_usedCount">—</div></div>
+                      <div class="kv"><div class="kv__k">Reserved count</div><div class="kv__v mono" id="m_reservedCount">—</div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- curl + json DI ATAS setting (sesuai request lo) -->
+                <div class="split split--top" style="margin-top:12px;">
+                  <div>
+                    <div class="miniTitle">curl (auto)</div>
+                    <pre class="codebox" id="curlMonthly">—</pre>
+                  </div>
+                  <div>
+                    <div class="miniTitle">Response</div>
+                    <pre class="codebox" id="jsonMonthly">—</pre>
                   </div>
                 </div>
 
@@ -361,7 +282,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Unlimited DeviceKey</div>
-                  <div class="card__sub">Tambah deviceKey (SHA256) untuk bypass limit monthly.</div>
+                  <div class="card__sub">Tambah deviceKey (SHA-256) untuk bypass limit bulanan.</div>
                 </div>
               </div>
 
@@ -369,12 +290,13 @@
                 <div class="formGrid">
                   <div class="field field--full">
                     <label class="label">Device ID</label>
-                    <input id="dev_id" class="input mono" placeholder="contoh: dev_android_1" />
+                    <input id="dev_id" class="input mono" />
                   </div>
 
                   <div class="field field--full">
                     <label class="label">Device Pepper</label>
-                    <input id="dev_pepper" class="input mono" placeholder="isi pepper sama dengan backend" />
+                    <input id="dev_pepper" class="input mono" />
+                    <div class="hint">Pepper harus sama dengan backend (DEVICE_PEPPER).</div>
                   </div>
 
                   <div class="field field--full">
@@ -389,7 +311,7 @@
                   <button id="btnRemoveUnlimited" class="btn btn--danger">Remove</button>
                 </div>
 
-                <div class="tableWrap" style="margin-top:12px; max-height:260px;">
+                <div class="tableWrap tableWrap--mini" style="margin-top:12px;">
                   <table class="table">
                     <thead>
                       <tr>
@@ -415,9 +337,9 @@
             <div class="card__head">
               <div>
                 <div class="card__title">Tools</div>
-                <div class="card__sub">Apply + Commit/Release (biar gak “kepake tapi belum bayar”).</div>
+                <div class="card__sub">Test discount.apply + commit + release.</div>
               </div>
-              <div class="headActions">
+              <div class="row row--gap">
                 <button id="btnRunApply" class="btn btn--primary">Apply</button>
                 <button id="btnRunCommit" class="btn btn--ghost">Commit</button>
                 <button id="btnRunRelease" class="btn btn--danger">Release</button>
@@ -432,7 +354,7 @@
                 </div>
                 <div class="field">
                   <label class="label">Device ID</label>
-                  <input id="t_deviceId" class="input mono" value="dev_frontend_1" />
+                  <input id="t_deviceId" class="input mono" value="dev_rog6pro" />
                 </div>
                 <div class="field">
                   <label class="label">Voucher</label>
@@ -444,14 +366,26 @@
                 </div>
               </div>
 
-              <div class="miniTitle" style="margin-top:12px;">curl (auto)</div>
-              <pre class="codeBox" id="curlApply">—</pre>
-              <div class="miniTitle" style="margin-top:10px;">Response</div>
-              <pre class="codeBox codeBox--json" id="jsonApply">—</pre>
+              <div class="split split--top" style="margin-top:12px;">
+                <div>
+                  <div class="miniTitle">curl (auto)</div>
+                  <pre class="codebox" id="curlApply">—</pre>
+                </div>
+                <div>
+                  <div class="miniTitle">Response</div>
+                  <pre class="codebox" id="jsonApply">—</pre>
+                </div>
+              </div>
 
-              <div class="hint">
-                Kalau apply doang tapi tidak bayar: klik <b>Release</b> supaya slot balik.
-                Kalau sudah bayar: klik <b>Commit</b> supaya benar-benar kepake (uses++ / used deviceKey).
+              <div class="hint" style="margin-top:10px;">
+                <b>Catatan:</b> Apply cuma “reserve slot”. Biar kepake permanen harus <b>Commit</b>.
+                Kalau batal / belum bayar, klik <b>Release</b> biar slot balik.
+              </div>
+
+              <div class="btnRow" style="margin-top:10px;">
+                <button id="btnCopyCurl" class="btn btn--ghost">Copy curl</button>
+                <button id="btnCopyJson" class="btn btn--ghost">Copy JSON body</button>
+                <button id="btnCopyResp" class="btn btn--ghost">Copy response</button>
               </div>
             </div>
           </div>
