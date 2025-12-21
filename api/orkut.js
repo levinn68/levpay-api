@@ -1,9 +1,10 @@
 // api/orkut.js
 const axios = require("axios");
 
-// IMPORTANT: admin page/levpay.js pakai GH_DB_PATH
-// lib/github.js pakai GH_PATH, jadi kita alias biar satu DB.
+// DB via GitHub (shared with admin)
 const { loadDb, saveDb } = require("../lib/github");
+
+// Voucher/promo logic (shared)
 const {
   getDeviceKey,
   applyDiscount,
@@ -21,18 +22,12 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "";
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Callback-Secret, X-Admin-Key"
-  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Callback-Secret, X-Admin-Key");
   res.setHeader("Cache-Control", "no-store");
 }
 
 function getBaseUrl(req) {
-  const proto = (req.headers["x-forwarded-proto"] || "https")
-    .toString()
-    .split(",")[0]
-    .trim();
+  const proto = (req.headers["x-forwarded-proto"] || "https").toString().split(",")[0].trim();
   const host = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
   return `${proto}://${host}`;
 }
@@ -59,6 +54,7 @@ function requireAdmin(req, res) {
   const got =
     (req.headers["x-admin-key"] || "").toString().trim() ||
     (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
+
   if (got !== ADMIN_KEY) {
     res.status(401).json({ success: false, error: "Unauthorized" });
     return false;
@@ -81,54 +77,70 @@ module.exports = async function handler(req, res) {
       dbPath: process.env.GH_PATH || "(GH_PATH not set)",
       routes: [
         "POST /api/orkut?action=createqr",
+        "POST /api/orkut?action=discount.apply (ADMIN dry-run)",
         "GET  /api/orkut?action=status&idTransaksi=...",
         "POST /api/orkut?action=cancel",
         "GET  /api/orkut?action=qr&idTransaksi=...",
         "POST /api/orkut?action=setstatus",
         "POST /api/orkut?action=paidhook",
-        "POST /api/orkut?action=admin_upsert_voucher",
-        "POST /api/orkut?action=admin_disable_voucher",
-        "POST /api/orkut?action=admin_set_monthly_promo",
+        "GET  /api/orkut?action=voucher.list (ADMIN)",
+        "POST /api/orkut?action=voucher.upsert (ADMIN)",
+        "POST /api/orkut?action=voucher.disable (ADMIN)",
+        "GET  /api/orkut?action=monthly.get (ADMIN)",
+        "POST /api/orkut?action=monthly.set (ADMIN)",
       ],
     });
   }
 
+  // ===================== DISCOUNT PREVIEW (ADMIN) =====================
+  // Admin tester: hit /api/orkut?action=discount.apply (POST)
+  // body: { amount, deviceId, voucher }
+  if (action === "discount.apply") {
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (!requireAdmin(req, res)) return;
+
+    const amount = Number(req.body?.amount);
+    const deviceId = String(req.body?.deviceId || "").trim();
+    const code = String(req.body?.voucher || req.body?.code || "").trim();
+
+    if (!Number.isFinite(amount) || amount < 1) return res.status(400).json({ success: false, error: "amount invalid" });
+    if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
+
+    const db = await loadDb();
+    const dbClone = JSON.parse(JSON.stringify(db || {})); // dry-run: jangan nulis reservation ke DB asli
+
+    const deviceKey = getDeviceKey(deviceId);
+    const out = applyDiscount(dbClone, { amount, deviceKey, voucherCode: code || null, reserveTtlMs: 6 * 60 * 1000 });
+
+    return res.status(200).json({ success: true, data: out });
+  }
+
   // ===================== CREATE QR =====================
+  // body: { amount, theme, deviceId, voucher? }
+  // - voucher kosong => TIDAK ADA POTONGAN
+  // - voucher terisi => bisa jadi voucher custom ATAU promo bulanan (kode wajib)
   if (action === "createqr") {
-    if (req.method !== "POST") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     const amount = Number(req.body?.amount);
     const theme = req.body?.theme === "theme1" ? "theme1" : "theme2";
     const deviceId = String(req.body?.deviceId || "").trim();
-    const voucher = String(req.body?.voucher || "").trim();
+    const code = String(req.body?.voucher || req.body?.code || "").trim();
 
-    if (!Number.isFinite(amount) || amount < 1) {
-      return res.status(400).json({ success: false, error: "amount invalid" });
-    }
-    if (!deviceId) {
-      return res.status(400).json({ success: false, error: "deviceId required" });
-    }
+    if (!Number.isFinite(amount) || amount < 1) return res.status(400).json({ success: false, error: "amount invalid" });
+    if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
 
     const db = await loadDb();
 
-    // PENTING: jangan override pepper dengan "change_me"
-    // getDeviceKey() udah punya default pepper yang sama kayak admin preset.
+    // ✅ pepper default ada di getDeviceKey()
     const deviceKey = getDeviceKey(deviceId);
 
-    // Supaya behavior sama kayak levpay.js:
-    // - voucher apply dulu
-    // - promo bulanan dicoba apply setelahnya (stack), kalau enabled & eligible
+    // reserve voucher/monthly (kalau code valid) — no auto discount
     const { finalAmount, discountRp, applied, reservations } = applyDiscount(db, {
       amount,
       deviceKey,
-      voucherCode: voucher || null,
+      voucherCode: code || null,
       reserveTtlMs: 6 * 60 * 1000,
-      useVoucher: true,
-      useMonthly: true,
-      stackWithVoucher: true,
-      allowMonthlyWithoutVoucher: true,
     });
 
     let r;
@@ -136,45 +148,27 @@ module.exports = async function handler(req, res) {
       r = await axios.post(
         `${VPS_BASE}/api/createqr`,
         { amount: finalAmount, theme },
-        {
-          timeout: 20000,
-          validateStatus: () => true,
-          headers: { "Content-Type": "application/json" },
-        }
+        { timeout: 20000, validateStatus: () => true, headers: { "Content-Type": "application/json" } }
       );
     } catch (err) {
-      // kalau VPS error/timeout: release reservation biar gak nyangkut kuota
       releaseReservations(db, reservations || []);
       await saveDb(db);
-      return res.status(502).json({
-        success: false,
-        error: "VPS createqr network error",
-        detail: String(err?.message || err),
-      });
+      return res.status(502).json({ success: false, error: "VPS createqr network error", detail: String(err?.message || err) });
     }
 
     const data = r.data;
 
-    // Accept semua 2xx (jangan cuma 200)
     if (r.status < 200 || r.status >= 300) {
       releaseReservations(db, reservations || []);
       await saveDb(db);
-      return res.status(r.status).json({
-        success: false,
-        error: "VPS createqr failed",
-        provider: data,
-      });
+      return res.status(r.status).json({ success: false, error: "VPS createqr failed", provider: data });
     }
 
     const idTransaksi = String(data?.data?.idTransaksi || data?.idTransaksi || "").trim();
     if (!idTransaksi) {
       releaseReservations(db, reservations || []);
       await saveDb(db);
-      return res.status(502).json({
-        success: false,
-        error: "VPS createqr missing idTransaksi",
-        provider: data,
-      });
+      return res.status(502).json({ success: false, error: "VPS createqr missing idTransaksi", provider: data });
     }
 
     const vpsQrPngUrl =
@@ -187,12 +181,15 @@ module.exports = async function handler(req, res) {
       idTransaksi,
       deviceKey,
       deviceIdMasked: deviceId.slice(0, 3) + "***",
+
       amountOriginal: amount,
       amountFinal: finalAmount,
       discountRp,
       applied,
+
       reservations: reservations || [],
       discountCommitted: false,
+
       status: "pending",
       createdAt: new Date().toISOString(),
       paidAt: null,
@@ -208,33 +205,22 @@ module.exports = async function handler(req, res) {
         idTransaksi,
         qrUrl: `${baseUrl}/api/orkut?action=qr&idTransaksi=${encodeURIComponent(idTransaksi)}`,
         qrVpsUrl: `${VPS_BASE}${vpsQrPngUrl}`,
-        pricing: {
-          amountOriginal: amount,
-          amountFinal: finalAmount,
-          discountRp,
-          applied,
-        },
+        pricing: { amountOriginal: amount, amountFinal: finalAmount, discountRp, applied },
       },
     });
   }
 
   // ===================== PAIDHOOK (commit/release diskon) =====================
   if (action === "paidhook") {
-    if (req.method !== "POST") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
     const { idTransaksi, status, paidAt, paidVia, note } = req.body || {};
-    if (!idTransaksi || !status) {
-      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
-    }
+    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
 
     const st = String(status).toLowerCase();
     const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
-    if (!terminal.has(st)) {
-      return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
-    }
+    if (!terminal.has(st)) return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
 
     const db = await loadDb();
     db.tx = db.tx || {};
@@ -247,16 +233,13 @@ module.exports = async function handler(req, res) {
     if (note) tx.note = note;
     tx.updatedAt = new Date().toISOString();
 
-    // commit kalau paid, release kalau bukan paid (dan belum committed)
     if (st === "paid") {
       if (!tx.discountCommitted) {
         commitReservations(db, tx.reservations || []);
         tx.discountCommitted = true;
       }
     } else {
-      if (!tx.discountCommitted) {
-        releaseReservations(db, tx.reservations || []);
-      }
+      if (!tx.discountCommitted) releaseReservations(db, tx.reservations || []);
       tx.discountCommitted = false;
     }
 
@@ -278,9 +261,7 @@ module.exports = async function handler(req, res) {
 
   // ===================== CANCEL =====================
   if (action === "cancel") {
-    if (req.method !== "POST") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     const idTransaksi = String(req.body?.idTransaksi || req.query?.idTransaksi || "").trim();
     if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
@@ -288,14 +269,9 @@ module.exports = async function handler(req, res) {
     const r = await axios.post(
       `${VPS_BASE}/api/cancel`,
       { idTransaksi },
-      {
-        timeout: 15000,
-        validateStatus: () => true,
-        headers: { "Content-Type": "application/json" },
-      }
+      { timeout: 15000, validateStatus: () => true, headers: { "Content-Type": "application/json" } }
     );
 
-    // release reservation kalau belum committed
     const db = await loadDb();
     const tx = db?.tx?.[idTransaksi];
     if (tx && !tx.discountCommitted) {
@@ -310,9 +286,8 @@ module.exports = async function handler(req, res) {
 
   // ===================== QR IMAGE PROXY =====================
   if (action === "qr") {
-    if (req.method !== "GET") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "GET") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+
     const idTransaksi = String(req.query?.idTransaksi || "").trim();
     if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
 
@@ -322,9 +297,7 @@ module.exports = async function handler(req, res) {
       validateStatus: () => true,
     });
 
-    if (r.status < 200 || r.status >= 300) {
-      return res.status(r.status).send("QR not found");
-    }
+    if (r.status < 200 || r.status >= 300) return res.status(r.status).send("QR not found");
 
     res.status(200);
     res.setHeader("Content-Type", "image/png");
@@ -334,15 +307,11 @@ module.exports = async function handler(req, res) {
 
   // ===================== SETSTATUS (internal) =====================
   if (action === "setstatus") {
-    if (req.method !== "POST") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
     const { idTransaksi, status } = req.body || {};
-    if (!idTransaksi || !status) {
-      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
-    }
+    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
 
     const db = await loadDb();
     const tx = db?.tx?.[idTransaksi];
@@ -355,32 +324,58 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ success: true, data: tx });
   }
 
-  // ===================== ADMIN (optional, kalau lu masih mau) =====================
-  if (action === "admin_upsert_voucher") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireAdmin(req, res)) return;
-    const db = await loadDb();
-    const out = adminUpsertVoucher(db, req.body || {});
-    await saveDb(db);
-    return res.status(200).json({ success: true, data: out });
-  }
+  // ===================== ADMIN: voucher + monthly =====================
+  // Admin page biasanya pakai action:
+  // - voucher.list | voucher.upsert | voucher.disable
+  // - monthly.get | monthly.set
+  //
+  // Kita support alias itu + action lama (admin_*).
+  const isAdminAction = new Set([
+    "voucher.list",
+    "voucher.upsert",
+    "voucher.disable",
+    "monthly.get",
+    "monthly.set",
+    "admin_upsert_voucher",
+    "admin_disable_voucher",
+    "admin_set_monthly_promo",
+  ]);
 
-  if (action === "admin_disable_voucher") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+  if (isAdminAction.has(action)) {
     if (!requireAdmin(req, res)) return;
-    const db = await loadDb();
-    const out = adminDisableVoucher(db, req.body || {});
-    await saveDb(db);
-    return res.status(200).json({ success: true, data: out });
-  }
 
-  if (action === "admin_set_monthly_promo") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireAdmin(req, res)) return;
     const db = await loadDb();
-    const out = adminSetMonthlyPromo(db, req.body || {});
-    await saveDb(db);
-    return res.status(200).json({ success: true, data: out });
+
+    if (action === "voucher.list") {
+      const list = Object.values(db.vouchers || {}).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+      return res.status(200).json({ success: true, data: list });
+    }
+
+    if (action === "voucher.upsert" || action === "admin_upsert_voucher") {
+      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      const out = adminUpsertVoucher(db, req.body || {});
+      await saveDb(db);
+      return res.status(200).json({ success: true, data: out });
+    }
+
+    if (action === "voucher.disable" || action === "admin_disable_voucher") {
+      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      const out = adminDisableVoucher(db, req.body || {});
+      await saveDb(db);
+      return res.status(200).json({ success: true, data: out });
+    }
+
+    if (action === "monthly.get") {
+      const p = db?.promo?.monthly || {};
+      return res.status(200).json({ success: true, data: p });
+    }
+
+    if (action === "monthly.set" || action === "admin_set_monthly_promo") {
+      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      const out = adminSetMonthlyPromo(db, req.body || {});
+      await saveDb(db);
+      return res.status(200).json({ success: true, data: out });
+    }
   }
 
   return res.status(404).json({ success: false, error: "Unknown action" });
