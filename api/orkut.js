@@ -14,7 +14,7 @@ const {
 const VPS_BASE = process.env.VPS_BASE || "http://82.27.2.229:5021";
 const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
-const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4";
+const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "change_me";
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
