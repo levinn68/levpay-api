@@ -15,14 +15,18 @@ const {
   adminSetMonthlyPromo,
 } = require("../lib/voucher");
 
-const VPS_BASE = process.env.VPS_BASE || "http://193.23.209.47:7032";
+// ✅ FIX: default VPS_BASE ke IP+PORT yang kebukti bisa (193.23.209.47:7032)
+const VPS_BASE = (process.env.VPS_BASE || "http://193.23.209.47:7032").replace(/\/+$/, "");
 const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Callback-Secret, X-Admin-Key");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Callback-Secret, X-Admin-Key"
+  );
   res.setHeader("Cache-Control", "no-store");
 }
 
@@ -51,6 +55,7 @@ function requireAdmin(req, res) {
     res.status(500).json({ success: false, error: "ADMIN_KEY not set" });
     return false;
   }
+
   const got =
     (req.headers["x-admin-key"] || "").toString().trim() ||
     (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
@@ -96,21 +101,28 @@ module.exports = async function handler(req, res) {
   // Admin tester: hit /api/orkut?action=discount.apply (POST)
   // body: { amount, deviceId, voucher }
   if (action === "discount.apply") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "POST")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireAdmin(req, res)) return;
 
     const amount = Number(req.body?.amount);
     const deviceId = String(req.body?.deviceId || "").trim();
     const code = String(req.body?.voucher || req.body?.code || "").trim();
 
-    if (!Number.isFinite(amount) || amount < 1) return res.status(400).json({ success: false, error: "amount invalid" });
+    if (!Number.isFinite(amount) || amount < 1)
+      return res.status(400).json({ success: false, error: "amount invalid" });
     if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
 
     const db = await loadDb();
     const dbClone = JSON.parse(JSON.stringify(db || {})); // dry-run: jangan nulis reservation ke DB asli
 
     const deviceKey = getDeviceKey(deviceId);
-    const out = applyDiscount(dbClone, { amount, deviceKey, voucherCode: code || null, reserveTtlMs: 6 * 60 * 1000 });
+    const out = applyDiscount(dbClone, {
+      amount,
+      deviceKey,
+      voucherCode: code || null,
+      reserveTtlMs: 6 * 60 * 1000,
+    });
 
     return res.status(200).json({ success: true, data: out });
   }
@@ -120,19 +132,19 @@ module.exports = async function handler(req, res) {
   // - voucher kosong => TIDAK ADA POTONGAN
   // - voucher terisi => bisa jadi voucher custom ATAU promo bulanan (kode wajib)
   if (action === "createqr") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "POST")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     const amount = Number(req.body?.amount);
     const theme = req.body?.theme === "theme1" ? "theme1" : "theme2";
     const deviceId = String(req.body?.deviceId || "").trim();
     const code = String(req.body?.voucher || req.body?.code || "").trim();
 
-    if (!Number.isFinite(amount) || amount < 1) return res.status(400).json({ success: false, error: "amount invalid" });
+    if (!Number.isFinite(amount) || amount < 1)
+      return res.status(400).json({ success: false, error: "amount invalid" });
     if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
 
     const db = await loadDb();
-
-    // ✅ pepper default ada di getDeviceKey()
     const deviceKey = getDeviceKey(deviceId);
 
     // reserve voucher/monthly (kalau code valid) — no auto discount
@@ -145,15 +157,29 @@ module.exports = async function handler(req, res) {
 
     let r;
     try {
+      // ✅ FIX: endpoint yang bener sesuai curl lu -> /api/orkut?action=createqr
+      // + kirim X-Admin-Key supaya match provider requirement (kalau provider minta)
       r = await axios.post(
-        `${VPS_BASE}/api/createqr`,
-        { amount: finalAmount, theme },
-        { timeout: 20000, validateStatus: () => true, headers: { "Content-Type": "application/json" } }
+        `${VPS_BASE}/api/orkut?action=createqr`,
+        { amount: finalAmount, deviceId, voucher: code || "", theme },
+        {
+          timeout: 20000,
+          validateStatus: () => true,
+          headers: {
+            "Content-Type": "application/json",
+            ...(ADMIN_KEY ? { "X-Admin-Key": ADMIN_KEY } : {}),
+          },
+        }
       );
     } catch (err) {
       releaseReservations(db, reservations || []);
       await saveDb(db);
-      return res.status(502).json({ success: false, error: "VPS createqr network error", detail: String(err?.message || err) });
+      return res.status(502).json({
+        success: false,
+        error: "VPS createqr network error",
+        detail: String(err?.message || err),
+        vps: VPS_BASE,
+      });
     }
 
     const data = r.data;
@@ -171,6 +197,7 @@ module.exports = async function handler(req, res) {
       return res.status(502).json({ success: false, error: "VPS createqr missing idTransaksi", provider: data });
     }
 
+    // dari response provider kadang udah ada path png; fallback ke /api/qr/{id}.png
     const vpsQrPngUrl =
       data?.data?.qrPngUrl ||
       data?.qrPngUrl ||
@@ -212,15 +239,18 @@ module.exports = async function handler(req, res) {
 
   // ===================== PAIDHOOK (commit/release diskon) =====================
   if (action === "paidhook") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "POST")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
     const { idTransaksi, status, paidAt, paidVia, note } = req.body || {};
-    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
+    if (!idTransaksi || !status)
+      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
 
     const st = String(status).toLowerCase();
     const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
-    if (!terminal.has(st)) return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
+    if (!terminal.has(st))
+      return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
 
     const db = await loadDb();
     db.tx = db.tx || {};
@@ -261,16 +291,34 @@ module.exports = async function handler(req, res) {
 
   // ===================== CANCEL =====================
   if (action === "cancel") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "POST")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     const idTransaksi = String(req.body?.idTransaksi || req.query?.idTransaksi || "").trim();
     if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
 
-    const r = await axios.post(
-      `${VPS_BASE}/api/cancel`,
-      { idTransaksi },
-      { timeout: 15000, validateStatus: () => true, headers: { "Content-Type": "application/json" } }
-    );
+    let r;
+    try {
+      r = await axios.post(
+        `${VPS_BASE}/api/cancel`,
+        { idTransaksi },
+        {
+          timeout: 15000,
+          validateStatus: () => true,
+          headers: {
+            "Content-Type": "application/json",
+            ...(ADMIN_KEY ? { "X-Admin-Key": ADMIN_KEY } : {}),
+          },
+        }
+      );
+    } catch (err) {
+      return res.status(502).json({
+        success: false,
+        error: "VPS cancel network error",
+        detail: String(err?.message || err),
+        vps: VPS_BASE,
+      });
+    }
 
     const db = await loadDb();
     const tx = db?.tx?.[idTransaksi];
@@ -286,32 +334,46 @@ module.exports = async function handler(req, res) {
 
   // ===================== QR IMAGE PROXY =====================
   if (action === "qr") {
-    if (req.method !== "GET") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "GET")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     const idTransaksi = String(req.query?.idTransaksi || "").trim();
     if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
 
-    const r = await axios.get(`${VPS_BASE}/api/qr/${encodeURIComponent(idTransaksi)}.png`, {
-      responseType: "arraybuffer",
-      timeout: 20000,
-      validateStatus: () => true,
-    });
+    let r;
+    try {
+      r = await axios.get(`${VPS_BASE}/api/qr/${encodeURIComponent(idTransaksi)}.png`, {
+        responseType: "arraybuffer",
+        timeout: 20000,
+        validateStatus: () => true,
+      });
+    } catch (err) {
+      return res.status(502).json({
+        success: false,
+        error: "VPS qr network error",
+        detail: String(err?.message || err),
+        vps: VPS_BASE,
+      });
+    }
 
     if (r.status < 200 || r.status >= 300) return res.status(r.status).send("QR not found");
 
     res.status(200);
     res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-store");
     res.send(Buffer.from(r.data));
     return;
   }
 
   // ===================== SETSTATUS (internal) =====================
   if (action === "setstatus") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    if (req.method !== "POST")
+      return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
     const { idTransaksi, status } = req.body || {};
-    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
+    if (!idTransaksi || !status)
+      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
 
     const db = await loadDb();
     const tx = db?.tx?.[idTransaksi];
@@ -325,11 +387,6 @@ module.exports = async function handler(req, res) {
   }
 
   // ===================== ADMIN: voucher + monthly =====================
-  // Admin page biasanya pakai action:
-  // - voucher.list | voucher.upsert | voucher.disable
-  // - monthly.get | monthly.set
-  //
-  // Kita support alias itu + action lama (admin_*).
   const isAdminAction = new Set([
     "voucher.list",
     "voucher.upsert",
@@ -347,19 +404,23 @@ module.exports = async function handler(req, res) {
     const db = await loadDb();
 
     if (action === "voucher.list") {
-      const list = Object.values(db.vouchers || {}).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+      const list = Object.values(db.vouchers || {}).sort((a, b) =>
+        String(a.code).localeCompare(String(b.code))
+      );
       return res.status(200).json({ success: true, data: list });
     }
 
     if (action === "voucher.upsert" || action === "admin_upsert_voucher") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      if (req.method !== "POST")
+        return res.status(405).json({ success: false, error: "Method Not Allowed" });
       const out = adminUpsertVoucher(db, req.body || {});
       await saveDb(db);
       return res.status(200).json({ success: true, data: out });
     }
 
     if (action === "voucher.disable" || action === "admin_disable_voucher") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      if (req.method !== "POST")
+        return res.status(405).json({ success: false, error: "Method Not Allowed" });
       const out = adminDisableVoucher(db, req.body || {});
       await saveDb(db);
       return res.status(200).json({ success: true, data: out });
@@ -371,7 +432,8 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "monthly.set" || action === "admin_set_monthly_promo") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      if (req.method !== "POST")
+        return res.status(405).json({ success: false, error: "Method Not Allowed" });
       const out = adminSetMonthlyPromo(db, req.body || {});
       await saveDb(db);
       return res.status(200).json({ success: true, data: out });
