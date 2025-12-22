@@ -15,7 +15,7 @@ const {
   adminSetMonthlyPromo,
 } = require("../lib/voucher");
 
-const VPS_BASE = process.env.VPS_BASE || "http://82.27.2.229:5021";
+const VPS_BASE = process.env.VPS_BASE || "http://193.23.209.47:7032";
 const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
 
