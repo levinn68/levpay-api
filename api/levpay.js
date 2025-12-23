@@ -1,23 +1,8 @@
 // api/levpay.js — FINAL
-// Router: /api/levpay?action=...
-// - voucher.* (ADMIN)
-// - monthly.* (ADMIN)
-// - system.* (ADMIN)  ✅ toggle unlimited whitelist ON/OFF (tanpa input sha di admin)
-// - discount.apply/commit/release (optional tools)
-// - tx.* (ADMIN) optional
-//
-// GH ENV (WAJIB GH_*):
-// GH_TOKEN, GH_OWNER, GH_REPO, GH_BRANCH, GH_DB_PATH, (optional GH_API_BASE)
-//
-// ADMIN ENV:
-// ADMIN_KEY (default LEVIN6824)
-//
-// DEVICE ENV:
-// DEVICE_PEPPER (wajib konsisten utk deviceKey sha256)
-// UNLIMITED_DEVICE_KEYS="sha256_1,sha256_2,..." (opsional; kalau kosong pakai hardcode seed di bawah)
-// api/levpay.js — ALIAS (biar /api/levpay?action=... tetap work)
-// semua logic ada di /api/orkut.js (1 sumber kebenaran)
-module.exports = require("./orkut");
+// - Voucher + Monthly promo (require code by default, bukan auto)
+// - Unlimited whitelist toggle (ON/OFF) tanpa nampilin SHA/pepper di admin page
+// - Voucher delete
+// - GH DB storage (recommended) + /tmp fallback
 
 const fs = require("fs");
 const path = require("path");
@@ -25,14 +10,17 @@ const crypto = require("crypto");
 
 const TMP_DB_PATH = path.join("/tmp", "levpay-db.json");
 
-// === ENV ===
-const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
-const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
-const DEVICE_PEPPER =
-  process.env.DEVICE_PEPPER ||
-  "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4"; // ✅ fallback pepper bener
+// ====== ENV ======
+const ADMIN_KEY = String(process.env.ADMIN_KEY || "LEVIN6824").trim();
+const CALLBACK_SECRET = String(process.env.CALLBACK_SECRET || "").trim();
 
-// === GH ENV (WAJIB) ===
+// Pepper (server only)
+const DEVICE_PEPPER = String(
+  process.env.DEVICE_PEPPER ||
+    "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4"
+).trim();
+
+// GH DB
 const GH_API_BASE = process.env.GH_API_BASE || "https://api.github.com";
 const GH_TOKEN = process.env.GH_TOKEN || "";
 const GH_OWNER = process.env.GH_OWNER || "";
@@ -40,27 +28,21 @@ const GH_REPO = process.env.GH_REPO || "";
 const GH_BRANCH = process.env.GH_BRANCH || "main";
 const GH_DB_PATH = process.env.GH_DB_PATH || "db/levpay-db.json";
 
-// ✅ Seed whitelist deviceKey dari backend (tanpa input di admin)
-function parseUnlimitedKeys() {
-  const raw = String(process.env.UNLIMITED_DEVICE_KEYS || "").trim();
-  const fromEnv = raw
-    ? raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+// Unlimited whitelist (SERVER ONLY; admin page gak nampilin)
+// Kamu bisa set salah satu:
+// - UNLIMITED_DEVICE_KEYS="sha256a,sha256b"
+// - UNLIMITED_DEVICE_IDS="dev_1,dev_2"  (lebih enak, backend yg hash)
+const ENV_UNLIMITED_DEVICE_KEYS = String(process.env.UNLIMITED_DEVICE_KEYS || "3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-  // fallback hardcode kalau env kosong (isi punya lo)
-  const fallback = [
-    "3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805",
-  ];
+const ENV_UNLIMITED_DEVICE_IDS = String(process.env.UNLIMITED_DEVICE_IDS || "dev_5a816e29352778_19b17b3bd88")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-  const list = fromEnv.length ? fromEnv : fallback;
-  return new Set(list);
-}
-const BACKEND_UNLIMITED_KEYS = parseUnlimitedKeys();
-
-// ===== utils =====
+// ====== helpers ======
 function send(res, code, obj) {
   res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -109,10 +91,10 @@ function yyyymm(d = new Date()) {
   return `${y}${m}`;
 }
 
-function getDeviceKey(deviceId, pepper = DEVICE_PEPPER) {
+function getDeviceKey(deviceId) {
   return crypto
     .createHash("sha256")
-    .update(String(deviceId || "") + "|" + String(pepper || ""))
+    .update(String(deviceId || "") + "|" + String(DEVICE_PEPPER || ""))
     .digest("hex");
 }
 
@@ -131,7 +113,7 @@ async function readBody(req) {
   });
 }
 
-// ===== GH DB helpers =====
+// ====== GH DB helpers ======
 function ghConfigured() {
   return !!(GH_TOKEN && GH_OWNER && GH_REPO && GH_DB_PATH);
 }
@@ -191,7 +173,7 @@ async function ghPutFile(jsonObj, shaMaybe) {
   return true;
 }
 
-// ===== DB read/write =====
+// ====== DB ======
 async function readDB() {
   if (ghConfigured()) {
     try {
@@ -203,6 +185,7 @@ async function readDB() {
       // fallback tmp
     }
   }
+
   try {
     if (!fs.existsSync(TMP_DB_PATH)) return {};
     const raw = fs.readFileSync(TMP_DB_PATH, "utf8");
@@ -227,46 +210,54 @@ async function writeDB(db) {
   }
 }
 
-// ===== DB ensure =====
+// ====== Ensure + Flags ======
 function ensure(db) {
   db.vouchers = db.vouchers || {};
   db.promo = db.promo || {};
   db.tx = db.tx || {};
-  db.system = db.system || {};
 
-  // ✅ GLOBAL: unlimited whitelist toggle + list (list diset dari backend seed)
-  db.system.unlimitedEnabled =
-    db.system.unlimitedEnabled != null ? !!db.system.unlimitedEnabled : true;
+  // global flags (admin toggle)
+  db.promo.flags = db.promo.flags || {
+    monthlyUnlimitedEnabled: true, // ON => device whitelist unlimited
+    voucherUnlimitedEnabled: true, // ON => device whitelist bypass voucher limits
+  };
 
-  db.system.unlimitedKeys = db.system.unlimitedKeys || {};
-  for (const k of BACKEND_UNLIMITED_KEYS) db.system.unlimitedKeys[k] = true;
-
-  // MONTHLY PROMO (kode wajib utk dipakai)
+  // monthly promo
   db.promo.monthly =
     db.promo.monthly || {
       enabled: true,
-      code: "PROMO",
       name: "PROMO BULANAN",
       percent: 5,
       maxRp: 2000,
 
-      used: {}, // deviceKey -> yyyymm
-      reserved: {}, // deviceKey -> {token, month, expiresAt}
+      // REQUIRE CODE by default (biar gak auto kepake)
+      requireCode: true,
+      code: "PROMO",
+
+      // per device tracking
+      used: {}, // deviceKey => yyyymm
+      reserved: {}, // deviceKey => {token, month, expiresAt}
+
+      // whitelist (server only)
+      unlimited: {}, // deviceKey => true
+
+      // optional global max uses per month
+      maxUses: null,
+      usedCountByMonth: {}, // yyyymm => count
+
       updatedAt: null,
     };
 
   db.promo.monthly.used = db.promo.monthly.used || {};
   db.promo.monthly.reserved = db.promo.monthly.reserved || {};
+  db.promo.monthly.unlimited = db.promo.monthly.unlimited || {};
+  db.promo.monthly.usedCountByMonth = db.promo.monthly.usedCountByMonth || {};
 
-  // vouchers: tambah reserved & perDeviceMonth default true
-  for (const [code, v] of Object.entries(db.vouchers)) {
-    if (!v) continue;
-    v.code = String(v.code || code).trim().toUpperCase();
-    if (v.enabled == null) v.enabled = true;
-    if (v.perDeviceMonth == null) v.perDeviceMonth = true; // ✅ default: 1x/bulan/device
-    if (!v.usedByDevice) v.usedByDevice = {};
-    if (!v.reserved) v.reserved = {};
-    if (!Number.isFinite(Number(v.uses))) v.uses = 0;
+  // seed unlimited whitelist from ENV
+  for (const k of ENV_UNLIMITED_DEVICE_KEYS) db.promo.monthly.unlimited[k] = true;
+  for (const id of ENV_UNLIMITED_DEVICE_IDS) {
+    const k = getDeviceKey(id);
+    db.promo.monthly.unlimited[k] = true;
   }
 
   return db;
@@ -282,7 +273,7 @@ function cleanupExpiredReservations(db) {
     if (Number.isFinite(exp) && now > exp) delete db.promo.monthly.reserved[deviceKey];
   }
 
-  // voucher reserved cleanup
+  // voucher reserved cleanup (token-based)
   for (const [code, v] of Object.entries(db.vouchers || {})) {
     if (!v || !v.reserved) continue;
     for (const [t, expAt] of Object.entries(v.reserved)) {
@@ -293,60 +284,91 @@ function cleanupExpiredReservations(db) {
   }
 }
 
-function isUnlimitedDevice(db, deviceKey) {
-  ensure(db);
-  if (!db.system.unlimitedEnabled) return false;
-  return !!db.system.unlimitedKeys?.[deviceKey];
-}
-
-// ===== Discount engine =====
-function reserveMonthly(db, amount, deviceKey, ttlMs, codeInput) {
+// ====== Discount ======
+function reserveMonthlyPromo(db, amount, deviceKey, ttlMs, voucherCodeMaybe) {
   ensure(db);
   cleanupExpiredReservations(db);
 
   const p = db.promo.monthly;
   if (!p.enabled) return { ok: false, discountRp: 0 };
 
-  const want = String(p.code || "").trim().toUpperCase();
-  const got = String(codeInput || "").trim().toUpperCase();
-  if (!want || got !== want) return { ok: false, discountRp: 0 };
+  // require code mode
+  if (p.requireCode) {
+    const want = String(p.code || "").trim().toUpperCase();
+    const got = String(voucherCodeMaybe || "").trim().toUpperCase();
+    if (!want || got !== want) return { ok: false, discountRp: 0 };
+  }
 
   const cur = yyyymm();
-  const unlimited = isUnlimitedDevice(db, deviceKey);
 
+  // Unlimited whitelist only works if flag ON
+  const unlimitedEnabled = !!db.promo.flags?.monthlyUnlimitedEnabled;
+  const isUnlimited = unlimitedEnabled && !!p.unlimited?.[deviceKey];
+
+  // per-device 1x/month
   const lastUsed = p.used[deviceKey] || "";
-  if (!unlimited && lastUsed === cur) return { ok: false, discountRp: 0 };
+  if (!isUnlimited && lastUsed === cur) return { ok: false, discountRp: 0 };
 
+  // already reserved this month
   const rsv = p.reserved[deviceKey];
-  if (!unlimited && rsv && rsv.month === cur) return { ok: false, discountRp: 0 };
+  if (!isUnlimited && rsv && rsv.month === cur) return { ok: false, discountRp: 0 };
+
+  // optional global maxUses per month
+  if (!isUnlimited && p.maxUses != null) {
+    const max = Number(p.maxUses);
+    if (Number.isFinite(max) && max > 0) {
+      const usedCnt = Number(p.usedCountByMonth?.[cur] || 0);
+      const reservedCnt = Object.values(p.reserved || {}).filter((x) => x?.month === cur).length;
+      if (usedCnt + reservedCnt >= max) return { ok: false, discountRp: 0 };
+    }
+  }
 
   const percent = clamp(Number(p.percent || 0), 0, 100);
   const maxRp = Math.max(0, Number(p.maxRp || 0));
   const raw = Math.floor((Number(amount || 0) * percent) / 100);
   const discountRp = maxRp ? Math.min(raw, maxRp) : raw;
 
-  if (discountRp <= 0) return { ok: false, discountRp: 0 };
+  if (discountRp > 0) {
+    const t = token();
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+    if (!isUnlimited) p.reserved[deviceKey] = { token: t, month: cur, expiresAt };
 
-  const t = token();
-  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-  p.reserved[deviceKey] = { token: t, month: cur, expiresAt };
+    return {
+      ok: true,
+      discountRp,
+      info: {
+        type: "monthly",
+        name: p.name || "PROMO BULANAN",
+        percent,
+        maxRp,
+        code: String(p.code || "").trim().toUpperCase(),
+        requireCode: !!p.requireCode,
+        unlimitedApplied: !!isUnlimited,
+      },
+      reservation: isUnlimited
+        ? null
+        : {
+            type: "monthly",
+            deviceKey,
+            token: t,
+            month: cur,
+            expiresAt,
+            discountRp,
+          },
+    };
+  }
 
-  return {
-    ok: true,
-    discountRp,
-    info: { type: "monthly", code: want, name: p.name || "PROMO", percent, maxRp },
-    reservation: { type: "monthly", deviceKey, token: t, month: cur, expiresAt, discountRp },
-  };
+  return { ok: false, discountRp: 0 };
 }
 
-function reserveVoucher(db, amount, deviceKey, codeInput, ttlMs) {
+function reserveVoucher(db, amount, voucherCode, ttlMs, deviceKey) {
   ensure(db);
   cleanupExpiredReservations(db);
 
-  const code = String(codeInput || "").trim().toUpperCase();
-  if (!code) return { ok: false, discountRp: 0 };
+  if (!voucherCode) return { ok: false, discountRp: 0 };
 
-  const v = db.vouchers?.[code];
+  const code = String(voucherCode).trim().toUpperCase();
+  const v = db.vouchers[code];
   if (!v || v.enabled === false) return { ok: false, discountRp: 0 };
 
   if (v.expiresAt) {
@@ -354,14 +376,9 @@ function reserveVoucher(db, amount, deviceKey, codeInput, ttlMs) {
     if (Number.isFinite(exp) && Date.now() > exp) return { ok: false, discountRp: 0 };
   }
 
-  const unlimited = isUnlimitedDevice(db, deviceKey);
-  const cur = yyyymm();
-
-  // ✅ per-device-per-month limit (default ON), tapi whitelist unlimited bypass
-  if (v.perDeviceMonth && !unlimited) {
-    const last = String(v.usedByDevice?.[deviceKey] || "");
-    if (last === cur) return { ok: false, discountRp: 0 };
-  }
+  const unlimitedEnabled = !!db.promo.flags?.voucherUnlimitedEnabled;
+  const monthlyWhitelist = !!db.promo.monthly?.unlimited?.[deviceKey];
+  const isUnlimited = unlimitedEnabled && monthlyWhitelist; // reuse whitelist
 
   const percent = clamp(Number(v.percent || 0), 0, 100);
   const maxRp = Math.max(0, Number(v.maxRp || 0));
@@ -369,17 +386,20 @@ function reserveVoucher(db, amount, deviceKey, codeInput, ttlMs) {
   const discountRp = maxRp ? Math.min(raw, maxRp) : raw;
   if (discountRp <= 0) return { ok: false, discountRp: 0 };
 
-  // maxUses global (uses + reserved)
+  // maxUses check (skip if unlimited device)
   v.reserved = v.reserved || {};
   const reservedCount = Object.keys(v.reserved).length;
-  if (v.maxUses != null) {
+
+  if (!isUnlimited && v.maxUses != null) {
     const used = Number(v.uses || 0);
     if (used + reservedCount >= Number(v.maxUses)) return { ok: false, discountRp: 0 };
   }
 
   const t = token();
   const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-  v.reserved[t] = expiresAt;
+
+  // if unlimited device => no reserve slot (biar gak ganggu counter)
+  if (!isUnlimited) v.reserved[t] = expiresAt;
 
   return {
     ok: true,
@@ -390,13 +410,14 @@ function reserveVoucher(db, amount, deviceKey, codeInput, ttlMs) {
       name: v.name || code,
       percent,
       maxRp,
-      perDeviceMonth: !!v.perDeviceMonth,
+      expiresAt: v.expiresAt || null,
+      unlimitedApplied: !!isUnlimited,
     },
-    reservation: { type: "voucher", code, deviceKey, token: t, expiresAt, month: cur, discountRp },
+    reservation: isUnlimited ? null : { type: "voucher", code, token: t, expiresAt, discountRp },
   };
 }
 
-function applyDiscount({ db, amount, deviceId, code, reserveTtlMs = 6 * 60 * 1000 }) {
+function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 60 * 1000 }) {
   ensure(db);
 
   const deviceKey = getDeviceKey(deviceId || "");
@@ -405,23 +426,22 @@ function applyDiscount({ db, amount, deviceId, code, reserveTtlMs = 6 * 60 * 100
   const applied = [];
   const reservations = [];
 
-  // 1) voucher
-  const v = reserveVoucher(db, finalAmount, deviceKey, code, reserveTtlMs);
+  // voucher first
+  const v = reserveVoucher(db, finalAmount, voucherCode, reserveTtlMs, deviceKey);
   if (v.ok) {
     finalAmount = Math.max(1, finalAmount - v.discountRp);
     discountRp += v.discountRp;
     applied.push(v.info);
-    reservations.push(v.reservation);
-    return { finalAmount, discountRp, applied, reservations, deviceKey };
+    if (v.reservation) reservations.push(v.reservation);
   }
 
-  // 2) monthly (kode bulanan)
-  const m = reserveMonthly(db, finalAmount, deviceKey, reserveTtlMs, code);
+  // monthly after voucher
+  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs, voucherCode);
   if (m.ok) {
     finalAmount = Math.max(1, finalAmount - m.discountRp);
     discountRp += m.discountRp;
     applied.push(m.info);
-    reservations.push(m.reservation);
+    if (m.reservation) reservations.push(m.reservation);
   }
 
   return { finalAmount, discountRp, applied, reservations, deviceKey };
@@ -451,6 +471,8 @@ function commitReservations(db, reservations) {
   ensure(db);
   cleanupExpiredReservations(db);
 
+  const curMonth = yyyymm();
+
   for (const r of reservations || []) {
     if (!r || !r.type) continue;
 
@@ -459,6 +481,9 @@ function commitReservations(db, reservations) {
       if (cur && cur.token === r.token) {
         db.promo.monthly.used[r.deviceKey] = r.month;
         delete db.promo.monthly.reserved[r.deviceKey];
+
+        db.promo.monthly.usedCountByMonth[curMonth] =
+          Number(db.promo.monthly.usedCountByMonth?.[curMonth] || 0) + 1;
       }
     }
 
@@ -467,19 +492,14 @@ function commitReservations(db, reservations) {
       if (v?.reserved?.[r.token]) {
         delete v.reserved[r.token];
         v.uses = Number(v.uses || 0) + 1;
-
-        // commit per-device-month ONLY kalau perDeviceMonth ON dan device bukan whitelist unlimited
-        const unlimited = isUnlimitedDevice(db, r.deviceKey);
-        if (v.perDeviceMonth && !unlimited) v.usedByDevice[r.deviceKey] = r.month;
-
         if (v.reserved && Object.keys(v.reserved).length === 0) delete v.reserved;
       }
     }
   }
 }
 
-// ===== ADMIN ops =====
-function upsertVoucher(db, body) {
+// ====== ADMIN ops ======
+function adminUpsertVoucher(db, body) {
   ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
   if (!code) throw new Error("code required");
@@ -489,63 +509,110 @@ function upsertVoucher(db, body) {
     code,
     name: body.name ? String(body.name) : prev.name || code,
     enabled: body.enabled != null ? !!body.enabled : prev.enabled !== false,
-
-    // ✅ ini switch “Limit 1x/bulan/device”
-    perDeviceMonth: body.perDeviceMonth != null ? !!body.perDeviceMonth : prev.perDeviceMonth !== false,
-
     percent: clamp(Number(body.percent || 0), 0, 100),
     maxRp: Math.max(0, Number(body.maxRp || 0)),
     expiresAt: body.expiresAt ? String(body.expiresAt) : prev.expiresAt || null,
-
     uses: Number(prev.uses || 0),
     maxUses: body.maxUses != null ? Number(body.maxUses) : prev.maxUses ?? null,
-
     note: body.note ? String(body.note) : prev.note || null,
     updatedAt: new Date().toISOString(),
-
-    usedByDevice: prev.usedByDevice || {},
-    reserved: prev.reserved || {},
+    reserved: prev.reserved || undefined,
   };
   return db.vouchers[code];
 }
 
-function deleteVoucher(db, body) {
+function adminDisableVoucher(db, body) {
   ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
   if (!code) throw new Error("code required");
-  if (!db.vouchers?.[code]) throw new Error("voucher not found");
+  if (!db.vouchers[code]) throw new Error("voucher not found");
+
+  if (body.enabled != null) db.vouchers[code].enabled = !!body.enabled;
+  else db.vouchers[code].enabled = false;
+
+  db.vouchers[code].updatedAt = new Date().toISOString();
+  return db.vouchers[code];
+}
+
+function adminDeleteVoucher(db, body) {
+  ensure(db);
+  const code = String(body.code || "").trim().toUpperCase();
+  if (!code) throw new Error("code required");
+  if (!db.vouchers[code]) throw new Error("voucher not found");
   delete db.vouchers[code];
   return true;
 }
 
-function setMonthly(db, body) {
+function adminSetMonthlyPromo(db, body) {
   ensure(db);
   const p = db.promo.monthly;
 
   if (body.enabled != null) p.enabled = !!body.enabled;
-  if (body.code != null) p.code = String(body.code || "").trim().toUpperCase();
-  if (body.name != null) p.name = String(body.name || "");
+  if (body.name != null) p.name = String(body.name);
 
   if (body.percent != null) p.percent = clamp(Number(body.percent), 0, 100);
   if (body.maxRp != null) p.maxRp = Math.max(0, Number(body.maxRp));
 
-  if (body.resetUsage) {
-    p.used = {};
-    p.reserved = {};
+  // requireCode ALWAYS supported
+  if (body.requireCode != null) p.requireCode = !!body.requireCode;
+  if (body.code != null) p.code = String(body.code || "").trim().toUpperCase();
+
+  if (body.maxUses != null) {
+    const v = body.maxUses === "" ? null : body.maxUses;
+    p.maxUses = v == null ? null : Number(v);
   }
 
   p.updatedAt = new Date().toISOString();
   return p;
 }
 
-function setSystem(db, body) {
+function adminSetFlags(db, body) {
   ensure(db);
-  if (body.unlimitedEnabled != null) db.system.unlimitedEnabled = !!body.unlimitedEnabled;
-  db.system.updatedAt = new Date().toISOString();
-  return db.system;
+  const f = db.promo.flags;
+
+  if (body.monthlyUnlimitedEnabled != null) f.monthlyUnlimitedEnabled = !!body.monthlyUnlimitedEnabled;
+  if (body.voucherUnlimitedEnabled != null) f.voucherUnlimitedEnabled = !!body.voucherUnlimitedEnabled;
+
+  return f;
 }
 
-// ===== MAIN HANDLER =====
+// ====== public views (hide internal maps) ======
+function publicMonthlyView(db) {
+  ensure(db);
+  const p = db.promo.monthly;
+  return {
+    enabled: !!p.enabled,
+    name: p.name || "PROMO BULANAN",
+    percent: Number(p.percent || 0),
+    maxRp: Number(p.maxRp || 0),
+    requireCode: !!p.requireCode,
+    code: String(p.code || "").trim().toUpperCase(),
+    maxUses: p.maxUses == null ? null : Number(p.maxUses),
+
+    // info only
+    unlimitedWhitelistCount: Object.keys(p.unlimited || {}).length,
+    flags: { ...(db.promo.flags || {}) },
+    updatedAt: p.updatedAt || null,
+  };
+}
+
+function publicVoucherView(v) {
+  if (!v) return null;
+  return {
+    code: String(v.code || "").trim().toUpperCase(),
+    name: v.name || v.code,
+    enabled: v.enabled !== false,
+    percent: Number(v.percent || 0),
+    maxRp: Number(v.maxRp || 0),
+    maxUses: v.maxUses == null ? null : Number(v.maxUses),
+    uses: Number(v.uses || 0),
+    expiresAt: v.expiresAt || null,
+    note: v.note || null,
+    updatedAt: v.updatedAt || null,
+  };
+}
+
+// ====== MAIN HANDLER ======
 module.exports = async (req, res) => {
   if (setCors(req, res)) return;
 
@@ -559,25 +626,25 @@ module.exports = async (req, res) => {
     return send(res, 200, {
       success: true,
       service: "levpay-api",
+      storage: { gh: ghConfigured(), path: GH_DB_PATH, branch: GH_BRANCH },
       actions: [
         "ping",
+        "help",
         "discount.apply",
         "discount.commit",
         "discount.release",
         "voucher.upsert (ADMIN)",
+        "voucher.disable (ADMIN)",
         "voucher.delete (ADMIN)",
         "voucher.list (ADMIN)",
         "voucher.get (ADMIN)",
         "monthly.get (ADMIN)",
         "monthly.set (ADMIN)",
-        "system.get (ADMIN)",
-        "system.set (ADMIN)",
+        "flags.get (ADMIN)",
+        "flags.set (ADMIN)",
+        "paidhook",
       ],
-      admin: { header: "X-Admin-Key" },
-      system: {
-        unlimitedEnabled: db.system.unlimitedEnabled,
-        unlimitedKeysCount: Object.keys(db.system.unlimitedKeys || {}).length,
-      },
+      adminHeader: "X-Admin-Key",
     });
   }
 
@@ -586,11 +653,11 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ===== discount tools =====
-    if (action === "discount.apply") {
+    // ===== DISCOUNT =====
+    if (action === "discount.apply" || action === "apply") {
       const amount = Number(body.amount);
-      const deviceId = body.deviceId || body.deviceid || "";
-      const code = body.voucher || body.code || "";
+      const deviceId = body.deviceId || body.deviceid || body.device_id || "";
+      const voucher = body.voucher || body.voucherCode || body.code || body.vouccer || "";
 
       if (!Number.isFinite(amount) || amount < 1) {
         return send(res, 400, { success: false, error: "amount invalid" });
@@ -600,100 +667,138 @@ module.exports = async (req, res) => {
         db,
         amount,
         deviceId,
-        code,
+        voucherCode: voucher,
         reserveTtlMs: Number(body.reserveTtlMs || 6 * 60 * 1000),
       });
 
       await writeDB(db);
-      return send(res, 200, { success: true, data: r });
+
+      return send(res, 200, {
+        success: true,
+        data: {
+          finalAmount: r.finalAmount,
+          discountRp: r.discountRp,
+          applied: r.applied,
+          reservations: r.reservations,
+          deviceKey: r.deviceKey,
+        },
+      });
     }
 
-    if (action === "discount.commit") {
+    if (action === "discount.commit" || action === "commit") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       commitReservations(db, reservations);
       await writeDB(db);
       return send(res, 200, { success: true, data: { committed: reservations.length } });
     }
 
-    if (action === "discount.release") {
+    if (action === "discount.release" || action === "release") {
       const reservations = Array.isArray(body.reservations) ? body.reservations : [];
       releaseReservations(db, reservations);
       await writeDB(db);
       return send(res, 200, { success: true, data: { released: reservations.length } });
     }
 
-    // ===== ADMIN required =====
-    const isAdminAction =
-      action.startsWith("voucher.") || action.startsWith("monthly.") || action.startsWith("system.");
-    if (isAdminAction && !isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+    // ===== FLAGS (ADMIN) =====
+    if (action.startsWith("flags.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
 
-    // ===== voucher.* =====
-    if (action === "voucher.upsert") {
-      const out = upsertVoucher(db, body || {});
-      await writeDB(db);
-      return send(res, 200, { success: true, data: out });
+      if (action === "flags.get") {
+        return send(res, 200, { success: true, data: db.promo.flags || {} });
+      }
+
+      if (action === "flags.set") {
+        const out = adminSetFlags(db, body || {});
+        await writeDB(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown flags action" });
     }
 
-    if (action === "voucher.delete") {
-      const ok = deleteVoucher(db, body || {});
-      await writeDB(db);
-      return send(res, 200, { success: true, data: { deleted: ok } });
+    // ===== VOUCHER (ADMIN) =====
+    if (action.startsWith("voucher.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "voucher.upsert") {
+        const out = adminUpsertVoucher(db, body || {});
+        await writeDB(db);
+        return send(res, 200, { success: true, data: publicVoucherView(out) });
+      }
+
+      if (action === "voucher.disable") {
+        const out = adminDisableVoucher(db, body || {});
+        await writeDB(db);
+        return send(res, 200, { success: true, data: publicVoucherView(out) });
+      }
+
+      if (action === "voucher.delete") {
+        const ok = adminDeleteVoucher(db, body || {});
+        await writeDB(db);
+        return send(res, 200, { success: true, data: { deleted: ok } });
+      }
+
+      if (action === "voucher.list") {
+        const items = Object.values(db.vouchers || {})
+          .map(publicVoucherView)
+          .filter(Boolean)
+          .sort((a, b) => String(a.code || "").localeCompare(String(b.code || "")));
+        return send(res, 200, { success: true, data: items });
+      }
+
+      if (action === "voucher.get") {
+        const code = String(body.code || url.searchParams.get("code") || "").trim().toUpperCase();
+        if (!code) return send(res, 400, { success: false, error: "code required" });
+        const v = publicVoucherView(db.vouchers?.[code]);
+        if (!v) return send(res, 404, { success: false, error: "voucher not found" });
+        return send(res, 200, { success: true, data: v });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown voucher action" });
     }
 
-    if (action === "voucher.list") {
-      const items = Object.values(db.vouchers || {}).sort((a, b) =>
-        String(a.code || "").localeCompare(String(b.code || ""))
-      );
-      return send(res, 200, { success: true, data: items });
+    // ===== MONTHLY (ADMIN) =====
+    if (action.startsWith("monthly.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "monthly.get") {
+        cleanupExpiredReservations(db);
+        return send(res, 200, { success: true, data: publicMonthlyView(db) });
+      }
+
+      if (action === "monthly.set") {
+        const out = adminSetMonthlyPromo(db, body || {});
+        await writeDB(db);
+        return send(res, 200, { success: true, data: publicMonthlyView(db) });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown monthly action" });
     }
 
-    if (action === "voucher.get") {
-      const code = String(body.code || url.searchParams.get("code") || "").trim().toUpperCase();
-      if (!code) return send(res, 400, { success: false, error: "code required" });
-      const v = db.vouchers?.[code];
-      if (!v) return send(res, 404, { success: false, error: "voucher not found" });
-      return send(res, 200, { success: true, data: v });
-    }
-
-    // ===== monthly.* =====
-    if (action === "monthly.get") {
-      cleanupExpiredReservations(db);
-      return send(res, 200, { success: true, data: db.promo.monthly });
-    }
-
-    if (action === "monthly.set") {
-      const out = setMonthly(db, body || {});
-      await writeDB(db);
-      return send(res, 200, { success: true, data: out });
-    }
-
-    // ===== system.* (GLOBAL unlimited toggle) =====
-    if (action === "system.get") {
-      return send(res, 200, {
-        success: true,
-        data: {
-          unlimitedEnabled: db.system.unlimitedEnabled,
-          unlimitedKeysCount: Object.keys(db.system.unlimitedKeys || {}).length,
-          // list boleh ditampilin read-only biar tau ada isinya
-          unlimitedKeys: Object.keys(db.system.unlimitedKeys || {}).sort(),
-          updatedAt: db.system.updatedAt || null,
-        },
-      });
-    }
-
-    if (action === "system.set") {
-      const out = setSystem(db, body || {});
-      await writeDB(db);
-      return send(res, 200, { success: true, data: out });
-    }
-
-    // ===== paidhook (optional) =====
+    // ===== PAIDHOOK (optional secret) =====
     if (action === "paidhook") {
       if (!checkCallbackSecret(req)) return send(res, 401, { success: false, error: "bad secret" });
-      return send(res, 200, { success: true, data: { received: true } });
+
+      const id = String(body.idTransaksi || body.id || "").trim();
+      if (id) {
+        db.tx[id] = {
+          ...(db.tx[id] || {}),
+          ...body,
+          idTransaksi: id,
+          updatedAt: new Date().toISOString(),
+          createdAt: (db.tx[id] || {}).createdAt || new Date().toISOString(),
+        };
+        await writeDB(db);
+      }
+
+      return send(res, 200, { success: true, data: { received: true, idTransaksi: id || null } });
     }
 
-    return send(res, 404, { success: false, error: "Unknown action" });
+    return send(res, 404, {
+      success: false,
+      error: "Unknown action",
+      hint: "use action=discount.*|voucher.*|monthly.*|flags.*|paidhook|help|ping",
+    });
   } catch (e) {
     return send(res, 500, { success: false, error: e?.message || "server error" });
   }
