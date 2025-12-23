@@ -8,7 +8,7 @@
 </head>
 
 <body>
-  <!-- Login Gate (WAJIB) -->
+  <!-- Blur gate (login wajib) -->
   <div id="gate" class="gate is-on" aria-hidden="false">
     <div class="gate__backdrop"></div>
     <div class="gate__panel">
@@ -30,9 +30,10 @@
         </div>
 
         <div class="hint">
-          API otomatis pakai:
-          <code class="mono">/api/levpay</code>
-          <div class="hint">Kalau admin key salah → 401.</div>
+          Endpoint API: <code class="mono">/api/levpay</code>
+          <div style="margin-top:6px;">
+            Catatan: promo bulanan sekarang <b>wajib input kode</b> (nggak auto).
+          </div>
         </div>
 
         <div id="loginMsg" class="msg" style="display:none;"></div>
@@ -56,6 +57,14 @@
       </div>
 
       <div class="topbar__right">
+        <div class="themePill">
+          <span class="themeText" id="themeText">Dark</span>
+          <label class="switch switch--theme" title="Toggle theme">
+            <input id="themeToggle" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
         <button id="btnRefreshAll" class="btn btn--ghost">Refresh</button>
         <button id="btnOpenGate" class="btn btn--ghost">Admin Key</button>
       </div>
@@ -86,7 +95,7 @@
           </div>
           <div class="divider"></div>
           <div class="hint">
-            Diskon hanya kepake kalau user input <b>KODE</b> dan cocok (voucher / promo bulanan).
+            Kalau diskon tools bisa tapi frontend nggak, cek frontend createqr udah pakai amountFinal belum.
           </div>
         </div>
       </aside>
@@ -174,10 +183,15 @@
                   </div>
 
                   <div class="field field--full">
-                    <label class="check">
-                      <input id="v_enabled" type="checkbox" checked />
-                      <span>Enabled</span>
-                    </label>
+                    <div class="row row--gap">
+                      <label class="switchLine">
+                        <span class="switchLabel">Enabled</span>
+                        <label class="switch">
+                          <input id="v_enabled" type="checkbox" checked />
+                          <span class="slider"></span>
+                        </label>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -209,8 +223,8 @@
             <div class="card">
               <div class="card__head">
                 <div>
-                  <div class="card__title">Promo Bulanan</div>
-                  <div class="card__sub"><b>Wajib KODE</b>. 1× per device per bulan (kecuali unlimited).</div>
+                  <div class="card__title">Promo Bulanan (CODE-BASED)</div>
+                  <div class="card__sub">Wajib input kode. Device normal: 1×/bulan, Unlimited: bebas.</div>
                 </div>
                 <div class="row row--gap">
                   <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
@@ -221,16 +235,19 @@
               <div class="card__body">
                 <div class="formGrid">
                   <div class="field field--full">
-                    <label class="check">
-                      <input id="m_enabled" type="checkbox" />
-                      <span>Enabled</span>
+                    <label class="switchLine">
+                      <span class="switchLabel">Enabled</span>
+                      <label class="switch">
+                        <input id="m_enabled" type="checkbox" />
+                        <span class="slider"></span>
+                      </label>
                     </label>
                   </div>
 
                   <div class="field">
                     <label class="label">Kode Promo Bulanan</label>
                     <input id="m_code" class="input mono" placeholder="contoh: PROMODEC" />
-                    <div class="hint">Kalau kosong / user tidak input kode ini → tidak ada diskon.</div>
+                    <div class="hint">User harus ngetik kode ini di input diskon.</div>
                   </div>
 
                   <div class="field">
@@ -251,7 +268,7 @@
                   <div class="field field--full">
                     <label class="label">Max Uses / bulan (kosong = unlimited)</label>
                     <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 10" />
-                    <div class="hint">Global limit per bulan (semua device). Unlimited device tetap bisa bypass limit per-device.</div>
+                    <div class="hint">Limit global per bulan. Unlimited deviceKey tetap bisa dipakai terus.</div>
                   </div>
                 </div>
 
@@ -274,7 +291,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Unlimited Device</div>
-                  <div class="card__sub">Masukkan Device ID → server hitung deviceKey (SHA-256) secara aman.</div>
+                  <div class="card__sub">Toggle Unlimited/Offline buat testing tanpa hapus data.</div>
                 </div>
               </div>
 
@@ -283,17 +300,17 @@
                   <div class="field field--full">
                     <label class="label">Device ID</label>
                     <input id="dev_id" class="input mono" placeholder="contoh: dev_android_1" />
+                    <div class="hint">deviceKey dihitung di backend (pepper gak muncul di UI).</div>
                   </div>
 
                   <div class="field field--full">
-                    <label class="label">deviceKey (SHA-256, auto dari server)</label>
+                    <label class="label">deviceKey (SHA-256)</label>
                     <input id="dev_key" class="input mono" readonly />
-                    <div class="hint">Pepper tidak pernah ditampilkan di admin UI.</div>
                   </div>
                 </div>
 
                 <div class="row row--gap">
-                  <button id="btnGenKey" class="btn btn--ghost">Generate</button>
+                  <button id="btnGenKey" class="btn btn--ghost">Generate Key</button>
                   <button id="btnAddUnlimited" class="btn btn--primary">Add Unlimited</button>
                   <button id="btnRemoveUnlimited" class="btn btn--danger">Remove</button>
                 </div>
@@ -303,11 +320,12 @@
                     <thead>
                       <tr>
                         <th>DeviceKey</th>
+                        <th class="tCenter">State</th>
                         <th class="tRight">Aksi</th>
                       </tr>
                     </thead>
                     <tbody id="unlimitedTbody">
-                      <tr><td colspan="2" class="mutedCell">Belum ada data.</td></tr>
+                      <tr><td colspan="3" class="mutedCell">Belum ada data.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -324,7 +342,7 @@
             <div class="card__head">
               <div>
                 <div class="card__title">Tools</div>
-                <div class="card__sub">Test <span class="mono">discount.apply</span> (reserve slot).</div>
+                <div class="card__sub">Test discount.apply (reserve slot).</div>
               </div>
               <div class="row row--gap">
                 <button id="btnRunApply" class="btn btn--primary">Run</button>
@@ -339,7 +357,7 @@
                 </div>
                 <div class="field">
                   <label class="label">Device ID</label>
-                  <input id="t_deviceId" class="input mono" value="dev_rog6pro" />
+                  <input id="t_deviceId" class="input mono" value="dev_android_1" />
                 </div>
                 <div class="field">
                   <label class="label">Kode Diskon</label>
@@ -363,7 +381,7 @@
               </div>
 
               <div class="hint">
-                Kalau kode kosong / salah → diskon 0 (sesuai rule: harus input kode).
+                Promo bulanan <b>wajib input</b> kode monthly. Voucher custom pakai kode voucher.
               </div>
             </div>
           </div>
@@ -376,7 +394,7 @@
       <div class="footer__inner">
         <span>LevPay Admin</span>
         <span class="sep">•</span>
-        <span class="mono">premium</span>
+        <span class="mono">v4</span>
       </div>
     </footer>
   </div>

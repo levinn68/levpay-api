@@ -1,18 +1,23 @@
-// admin/admin.js — FINAL (NO location.origin)
-// API hardcode ke domain API biar admin bisa dibuka dari mana aja.
+// /admin/admin.js — LevPay Admin (Premium UI)
+// NOTE: pakai endpoint ABSOLUTE path: /api/levpay (AMAN walau admin page di /admin/)
+// - Login gate wajib (admin key disimpan localStorage)
+// - Theme toggle (dark/light)
+// - Promo bulanan wajib KODE (ga auto)
+// - Unlimited deviceKey punya toggle Unlimited/Offline (buat testing tanpa hapus)
 
 (() => {
   const $ = (id) => document.getElementById(id);
 
   // ====== CONFIG ======
-  const LS_ADMIN = "levpay_admin_key_v5";
-  const LS_API_BASE = "levpay_admin_api_base_v5";
+  const LS_ADMIN = "levpay_admin_key_v4";
+  const LS_THEME = "levpay_admin_theme_v1";
 
-  // ✅ HARDCODE API DOMAIN (NO location.origin)
-  const API_BASE_DEFAULT = "https://levpay-api.vercel.app/api/levpay";
+  // selalu aman: absolute path dari root domain
+  const API_PATH = "/api/levpay";
 
-  // Optional preset
-  const PRESET_DEVICE_ID = "dev_rog6pro";
+  // allow override via query ?api=/api/levpay (kalau lu mau)
+  const qs = new URLSearchParams(location.search);
+  const API_BASE = String(qs.get("api") || API_PATH).trim() || API_PATH;
 
   // ====== ELEMENTS ======
   const gate = $("gate");
@@ -22,21 +27,25 @@
   const loginMsg = $("loginMsg");
 
   const app = $("app");
+  const apiBaseText = $("apiBaseText");
+  const sysStatus = $("sysStatus");
+  const lastSync = $("lastSync");
+
   const btnRefreshAll = $("btnRefreshAll");
   const btnOpenGate = $("btnOpenGate");
-  const apiBaseText = $("apiBaseText");
+
+  const themeToggle = $("themeToggle");
+  const themeText = $("themeText");
 
   const navItems = Array.from(document.querySelectorAll(".navItem"));
   const tabVouchers = $("tab-vouchers");
   const tabMonthly = $("tab-monthly");
   const tabTools = $("tab-tools");
 
-  const sysStatus = $("sysStatus");
-  const lastSync = $("lastSync");
   const pillVoucherCount = $("pillVoucherCount");
   const pillMonthly = $("pillMonthly");
 
-  // vouchers tab
+  // vouchers
   const onlyActiveToggle = $("onlyActiveToggle");
   const btnLoadVouchers = $("btnLoadVouchers");
   const voucherTbody = $("voucherTbody");
@@ -54,7 +63,7 @@
   const jsonVoucher = $("jsonVoucher");
   const msgVoucher = $("msgVoucher");
 
-  // monthly tab
+  // monthly
   const btnLoadMonthly = $("btnLoadMonthly");
   const btnSaveMonthly = $("btnSaveMonthly");
   const m_enabled = $("m_enabled");
@@ -67,7 +76,7 @@
   const jsonMonthly = $("jsonMonthly");
   const msgMonthly = $("msgMonthly");
 
-  // unlimited
+  // unlimited (no pepper in UI)
   const dev_id = $("dev_id");
   const dev_key = $("dev_key");
   const btnGenKey = $("btnGenKey");
@@ -80,14 +89,13 @@
   const btnRunApply = $("btnRunApply");
   const t_amount = $("t_amount");
   const t_deviceId = $("t_deviceId");
-  const t_code = $("t_voucher"); // kode voucher/promo
+  const t_voucher = $("t_voucher");
   const t_ttl = $("t_ttl");
   const curlApply = $("curlApply");
   const jsonApply = $("jsonApply");
 
   // ====== STATE ======
   let ADMIN = "";
-  let API_BASE = (localStorage.getItem(LS_API_BASE) || API_BASE_DEFAULT).trim();
   let vouchers = [];
   let monthly = null;
 
@@ -101,27 +109,6 @@
       .replaceAll("'", "&#039;");
 
   const nowText = () => new Date().toLocaleString("id-ID");
-
-  const fmtDate = (iso) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (!Number.isFinite(d.getTime())) return "—";
-    return d.toLocaleString("id-ID");
-  };
-
-  const fmtRp = (n) => {
-    const x = Number(n || 0);
-    if (!x) return "∞";
-    return x.toLocaleString("id-ID");
-  };
-
-  const fmtUsesPair = (used, max) => {
-    const u = Number(used || 0);
-    if (max == null) return `${u} / ∞`;
-    const m = Number(max);
-    if (!Number.isFinite(m) || m <= 0) return `${u} / ∞`;
-    return `${u} / ${m}`;
-  };
 
   function setMsg(el, text, warn = false) {
     el.textContent = text || "";
@@ -145,24 +132,15 @@
     tabTools.classList.toggle("is-on", name === "tools");
   }
 
-  function normalizeApiBase(s) {
-    let x = String(s || "").trim();
-    if (!x) x = API_BASE_DEFAULT;
-    x = x.replace(/\/+$/, "");
-    const q = x.indexOf("?");
-    if (q >= 0) x = x.slice(0, q);
-    return x;
-  }
-
-  // ✅ endpoint tanpa location.origin sama sekali
   function endpoint(action) {
-    const base = normalizeApiBase(API_BASE);
-    const glue = base.includes("?") ? "&" : "?";
-    return `${base}${glue}action=${encodeURIComponent(action)}`;
+    // API_BASE udah absolute path (/api/levpay) jadi aman walau admin page di /admin/
+    const u = new URL(API_BASE, window.location.origin);
+    u.searchParams.set("action", action);
+    return u.toString();
   }
 
   function isAdminAction(action) {
-    return /^(voucher\.|monthly\.|tx\.|devicekey)$/.test(action);
+    return /^(voucher\.|monthly\.|tx\.|discount\.|tools\.)/.test(action);
   }
 
   function sanitizeCode(s) {
@@ -182,21 +160,21 @@
   }
 
   function curlFor(action, method, body) {
-    const HOSTVAR = "https://levpay-api.vercel.app";
+    const HOSTVAR = "$HOST";
     const ADMINVAR = "$ADMIN";
     const heads = [];
     if (isAdminAction(action)) heads.push(`-H "X-Admin-Key: ${ADMINVAR}"`);
     if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
     const h = heads.length ? ` \\\n  ${heads.join(" \\\n  ")}` : "";
     const data = method === "GET" || body == null ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
-    return `curl -sS -X ${method} "${HOSTVAR}/api/levpay?action=${action}"${h}${data} | jq`;
+    const basePath = API_PATH; // selalu /api/levpay biar jelas
+    return `curl -sS -X ${method} "${HOSTVAR}${basePath}?action=${action}"${h}${data} | jq`;
   }
 
   async function callAction(action, { method = "GET", body = null } = {}) {
     const headers = {};
     if (method !== "GET") headers["Content-Type"] = "application/json";
     if (isAdminAction(action)) headers["X-Admin-Key"] = ADMIN;
-
     return jfetch(endpoint(action), {
       method,
       headers,
@@ -204,10 +182,19 @@
     });
   }
 
+  // ====== THEME ======
+  function applyTheme(theme) {
+    const t = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem(LS_THEME, t);
+    if (themeToggle) themeToggle.checked = t === "light";
+    if (themeText) themeText.textContent = t === "light" ? "Light" : "Dark";
+  }
+
   // ====== LOADERS ======
   async function pingPublic() {
-    const r = await callAction("ping", { method: "GET" });
-    apiBaseText.textContent = normalizeApiBase(API_BASE);
+    const r = await jfetch(endpoint("ping"), { method: "GET" });
+    apiBaseText.textContent = `${location.origin}${API_PATH}`;
     if (!r.ok) throw new Error(`API ping error (${r.status})`);
     return r.json;
   }
@@ -247,7 +234,6 @@
     const r = await callAction("monthly.get", { method: "GET" });
     if (!r.ok) throw new Error(`monthly.get error (${r.status})`);
     monthly = r.json?.data ?? r.json ?? null;
-
     if (!monthly || typeof monthly !== "object") throw new Error("monthly invalid");
 
     pillMonthly.textContent = monthly.enabled ? "ON" : "OFF";
@@ -263,47 +249,28 @@
     return monthly;
   }
 
-  function renderUnlimitedList() {
-    const keys = Object.keys(monthly?.unlimited || {});
-    if (!keys.length) {
-      unlimitedTbody.innerHTML = `<tr><td colspan="2" class="mutedCell">Belum ada data.</td></tr>`;
-      return;
-    }
-
-    unlimitedTbody.innerHTML = keys
-      .sort()
-      .map(
-        (k) => `
-      <tr>
-        <td class="mono">${esc(k)}</td>
-        <td class="tRight">
-          <button class="btn btn--danger" data-del="${esc(k)}" type="button">Remove</button>
-        </td>
-      </tr>
-    `
-      )
-      .join("");
-
-    unlimitedTbody.querySelectorAll("button[data-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const k = btn.getAttribute("data-del");
-        if (!k) return;
-        if (!confirm("Remove deviceKey dari unlimited?")) return;
-        try {
-          const body = { removeUnlimitedDeviceKey: k };
-          const rr = await callAction("monthly.set", { method: "POST", body });
-          curlMonthly.textContent = curlFor("monthly.set", "POST", body);
-          jsonMonthly.textContent = JSON.stringify({ ok: rr.ok, status: rr.status, data: rr.json }, null, 2);
-          await loadMonthly();
-          setMsg(msgUnlimited, "Removed ✅");
-        } catch (e) {
-          setMsg(msgUnlimited, `Error: ${e?.message || e}`, true);
-        }
-      });
-    });
+  // ====== RENDER ======
+  function fmtRp(n) {
+    const x = Number(n || 0);
+    if (!x) return "∞";
+    return x.toLocaleString("id-ID");
   }
 
-  // ====== RENDER ======
+  function fmtUsesPair(used, max) {
+    const u = Number(used || 0);
+    if (max == null) return `${u} / ∞`;
+    const m = Number(max);
+    if (!Number.isFinite(m) || m <= 0) return `${u} / ∞`;
+    return `${u} / ${m}`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "—";
+    return d.toLocaleString("id-ID");
+  }
+
   function renderVoucherTable() {
     const onlyActive = !!onlyActiveToggle.checked;
     const list = onlyActive ? vouchers.filter((v) => v.enabled) : vouchers.slice();
@@ -316,7 +283,9 @@
     voucherTbody.innerHTML = list
       .sort((a, b) => a.code.localeCompare(b.code))
       .map((v) => {
-        const active = v.enabled ? `<span class="badge on">ON</span>` : `<span class="badge off">OFF</span>`;
+        const active = v.enabled
+          ? `<span class="badge on">ON</span>`
+          : `<span class="badge off">OFF</span>`;
         const exp = v.expiresAt ? fmtDate(v.expiresAt) : "—";
         return `
         <tr>
@@ -328,7 +297,7 @@
           <td class="mono">${esc(fmtUsesPair(v.uses, v.maxUses))}</td>
           <td class="mono">${esc(exp)}</td>
           <td class="tRight">
-            <button class="btn btn--ghost" data-pick="${esc(v.code)}" type="button">Edit</button>
+            <button class="btn btn--ghost btn--sm" data-pick="${esc(v.code)}" type="button">Edit</button>
           </td>
         </tr>
       `;
@@ -353,12 +322,9 @@
           const d = new Date(v.expiresAt);
           if (Number.isFinite(d.getTime())) {
             const pad = (n) => String(n).padStart(2, "0");
-            const y = d.getFullYear();
-            const m = pad(d.getMonth() + 1);
-            const da = pad(d.getDate());
-            const hh = pad(d.getHours());
-            const mm = pad(d.getMinutes());
-            v_expiresAt.value = `${y}-${m}-${da}T${hh}:${mm}`;
+            v_expiresAt.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+              d.getHours()
+            )}:${pad(d.getMinutes())}`;
           } else v_expiresAt.value = "";
         } else v_expiresAt.value = "";
 
@@ -385,18 +351,89 @@
     };
 
     const mu = String(v_maxUses.value || "").trim();
-    if (mu !== "") {
-      const n = Number(mu);
-      if (Number.isFinite(n) && n > 0) payload.maxUses = n;
-    } else payload.maxUses = null;
+    payload.maxUses = mu ? Number(mu) : null;
 
     const expRaw = String(v_expiresAt.value || "").trim();
     if (expRaw) {
       const d = new Date(expRaw);
-      if (Number.isFinite(d.getTime())) payload.expiresAt = d.toISOString();
+      payload.expiresAt = Number.isFinite(d.getTime()) ? d.toISOString() : null;
     } else payload.expiresAt = null;
 
     return payload;
+  }
+
+  function renderUnlimitedList() {
+    const map = monthly?.unlimited || {};
+    const keys = Object.keys(map || {});
+    if (!keys.length) {
+      unlimitedTbody.innerHTML = `<tr><td colspan="3" class="mutedCell">Belum ada data.</td></tr>`;
+      return;
+    }
+
+    unlimitedTbody.innerHTML = keys
+      .sort()
+      .map((k) => {
+        const state = map[k] === true; // true=Unlimited, false=Offline
+        return `
+          <tr>
+            <td class="mono">${esc(k)}</td>
+            <td class="tCenter">
+              <label class="switch">
+                <input type="checkbox" data-toggle="${esc(k)}" ${state ? "checked" : ""} />
+                <span class="slider"></span>
+              </label>
+              <span class="pill pill--mini ${state ? "pill--ok" : "pill--muted"}">
+                ${state ? "Unlimited" : "Offline"}
+              </span>
+            </td>
+            <td class="tRight">
+              <button class="btn btn--danger btn--sm" data-del="${esc(k)}" type="button">Remove</button>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    unlimitedTbody.querySelectorAll("input[data-toggle]").forEach((inp) => {
+      inp.addEventListener("change", async () => {
+        const k = inp.getAttribute("data-toggle");
+        if (!k) return;
+        const enabledUnlimited = !!inp.checked;
+
+        try {
+          const body = { setUnlimitedDeviceKey: k, enabledUnlimited };
+          const rr = await callAction("monthly.set", { method: "POST", body });
+          curlMonthly.textContent = curlFor("monthly.set", "POST", body);
+          jsonMonthly.textContent = JSON.stringify({ ok: rr.ok, status: rr.status, data: rr.json }, null, 2);
+          if (!rr.ok) throw new Error(rr.json?.error || `Error ${rr.status}`);
+          await loadMonthly();
+          setMsg(msgUnlimited, enabledUnlimited ? "Unlimited ON ✅" : "Unlimited OFF (Offline) ✅");
+        } catch (e) {
+          setMsg(msgUnlimited, `Error: ${e?.message || e}`, true);
+          // revert visual
+          inp.checked = !enabledUnlimited;
+        }
+      });
+    });
+
+    unlimitedTbody.querySelectorAll("button[data-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const k = btn.getAttribute("data-del");
+        if (!k) return;
+        if (!confirm("Remove deviceKey dari list? (hapus permanen)")) return;
+        try {
+          const body = { removeUnlimitedDeviceKey: k };
+          const rr = await callAction("monthly.set", { method: "POST", body });
+          curlMonthly.textContent = curlFor("monthly.set", "POST", body);
+          jsonMonthly.textContent = JSON.stringify({ ok: rr.ok, status: rr.status, data: rr.json }, null, 2);
+          if (!rr.ok) throw new Error(rr.json?.error || `Error ${rr.status}`);
+          await loadMonthly();
+          setMsg(msgUnlimited, "Removed ✅");
+        } catch (e) {
+          setMsg(msgUnlimited, `Error: ${e?.message || e}`, true);
+        }
+      });
+    });
   }
 
   // ====== ACTIONS ======
@@ -455,7 +492,6 @@
 
       const r = await callAction("voucher.upsert", { method: "POST", body });
       jsonVoucher.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
       setMsg(msgVoucher, "Voucher disimpan ✅");
@@ -477,7 +513,6 @@
 
       const r = await callAction("voucher.disable", { method: "POST", body });
       jsonVoucher.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
       setMsg(msgVoucher, "Voucher disabled ✅");
@@ -496,19 +531,13 @@
         name: String(m_name.value || "").trim(),
         percent: Number(String(m_percent.value || "0").trim()),
         maxRp: Number(String(m_maxRp.value || "0").trim()),
+        maxUses: String(m_maxUses.value || "").trim() ? Number(String(m_maxUses.value).trim()) : null,
       };
-
-      const mu = String(m_maxUses.value || "").trim();
-      if (mu !== "") {
-        const n = Number(mu);
-        if (Number.isFinite(n) && n > 0) body.maxUses = n;
-      } else body.maxUses = null;
 
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
       const r = await callAction("monthly.set", { method: "POST", body });
       jsonMonthly.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
       setMsg(msgMonthly, "Monthly updated ✅");
@@ -518,22 +547,18 @@
     }
   }
 
-  async function genDeviceKeyServer() {
+  async function genDeviceKey() {
     try {
       const deviceId = String(dev_id.value || "").trim();
       if (!deviceId) throw new Error("Device ID kosong");
-
-      const body = { deviceId };
-      const r = await callAction("devicekey", { method: "POST", body });
+      const r = await callAction("tools.devicekey", { method: "POST", body: { deviceId } });
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
-
-      const dk = r.json?.data?.deviceKey || "";
-      dev_key.value = dk;
+      dev_key.value = String(r.json?.data?.deviceKey || "");
       setMsg(msgUnlimited, "deviceKey generated ✅");
-      return dk;
+      return dev_key.value;
     } catch (e) {
+      setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
       dev_key.value = "";
-      setMsg(msgUnlimited, `Gagal generate: ${e?.message || e}`, true);
       return "";
     }
   }
@@ -542,17 +567,15 @@
     try {
       const deviceId = String(dev_id.value || "").trim();
       if (!deviceId) throw new Error("Device ID kosong");
-
       const body = { addUnlimitedDeviceId: deviceId };
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
       const r = await callAction("monthly.set", { method: "POST", body });
       jsonMonthly.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
       await loadMonthly();
-      await genDeviceKeyServer();
+      await genDeviceKey();
       setMsg(msgUnlimited, "Added unlimited ✅");
     } catch (e) {
       setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
@@ -561,20 +584,17 @@
 
   async function removeUnlimited() {
     try {
-      const deviceId = String(dev_id.value || "").trim();
-      if (!deviceId) throw new Error("Device ID kosong");
-
-      const body = { removeUnlimitedDeviceId: deviceId };
+      const k = String(dev_key.value || "").trim();
+      if (!k) throw new Error("deviceKey kosong (generate dulu)");
+      const body = { removeUnlimitedDeviceKey: k };
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
       const r = await callAction("monthly.set", { method: "POST", body });
       jsonMonthly.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      await loadMonthly();
-      await genDeviceKeyServer();
       setMsg(msgUnlimited, "Removed ✅");
+      await loadMonthly();
     } catch (e) {
       setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
     }
@@ -585,7 +605,7 @@
       const body = {
         amount: Number(String(t_amount.value || "0").trim()),
         deviceId: String(t_deviceId.value || "").trim(),
-        code: String(t_code.value || "").trim(),
+        voucher: String(t_voucher.value || "").trim(),
         reserveTtlMs: Number(String(t_ttl.value || "360000").trim()),
       };
 
@@ -593,7 +613,6 @@
 
       const r = await callAction("discount.apply", { method: "POST", body });
       jsonApply.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
-
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
     } catch (e) {
       jsonApply.textContent = JSON.stringify({ ok: false, error: e?.message || String(e) }, null, 2);
@@ -642,27 +661,105 @@
 
   btnSaveMonthly.addEventListener("click", saveMonthly);
 
-  btnGenKey.addEventListener("click", genDeviceKeyServer);
+  btnGenKey.addEventListener("click", genDeviceKey);
   btnAddUnlimited.addEventListener("click", addUnlimited);
   btnRemoveUnlimited.addEventListener("click", removeUnlimited);
 
   btnRunApply.addEventListener("click", runApply);
 
+  // theme toggle
+  if (themeToggle) {
+    themeToggle.addEventListener("change", () => {
+      applyTheme(themeToggle.checked ? "light" : "dark");
+    });
+  }
+
+  // live curl preview
+  [v_code, v_name, v_percent, v_maxRp, v_maxUses, v_expiresAt].forEach((el) => {
+    el.addEventListener("input", () => {
+      try {
+        const body = buildVoucherPayload();
+        curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
+      } catch {}
+    });
+  });
+  v_enabled.addEventListener("change", () => {
+    try {
+      const body = buildVoucherPayload();
+      curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
+    } catch {}
+  });
+
+  [m_enabled, m_code, m_name, m_percent, m_maxRp, m_maxUses].forEach((el) => {
+    el.addEventListener("input", () => {
+      const body = {
+        enabled: !!m_enabled.checked,
+        code: sanitizeCode(m_code.value),
+        name: String(m_name.value || "").trim(),
+        percent: Number(String(m_percent.value || "0").trim()),
+        maxRp: Number(String(m_maxRp.value || "0").trim()),
+        maxUses: String(m_maxUses.value || "").trim() ? Number(String(m_maxUses.value).trim()) : null,
+      };
+      curlMonthly.textContent = curlFor("monthly.set", "POST", body);
+    });
+  });
+
+  [t_amount, t_deviceId, t_voucher, t_ttl].forEach((el) => {
+    el.addEventListener("input", () => {
+      const body = {
+        amount: Number(String(t_amount.value || "0").trim()),
+        deviceId: String(t_deviceId.value || "").trim(),
+        voucher: String(t_voucher.value || "").trim(),
+        reserveTtlMs: Number(String(t_ttl.value || "360000").trim()),
+      };
+      curlApply.textContent = curlFor("discount.apply", "POST", body);
+    });
+  });
+
   // ====== INIT ======
   async function init() {
-    API_BASE = normalizeApiBase(API_BASE);
-    apiBaseText.textContent = API_BASE;
+    // theme
+    const savedTheme = localStorage.getItem(LS_THEME) || "dark";
+    applyTheme(savedTheme);
 
-    dev_id.value = PRESET_DEVICE_ID || dev_id.value;
-    t_deviceId.value = PRESET_DEVICE_ID || t_deviceId.value;
+    apiBaseText.textContent = `${location.origin}${API_PATH}`;
+
+    // default curl previews
+    curlVoucher.textContent = curlFor("voucher.upsert", "POST", {
+      code: "VIPL",
+      enabled: true,
+      name: "VIP LEVEL",
+      percent: 10,
+      maxRp: 0,
+      maxUses: null,
+      expiresAt: null,
+    });
+
+    curlMonthly.textContent = curlFor("monthly.set", "POST", {
+      enabled: true,
+      code: "PROMODEC",
+      name: "PROMO BULANAN",
+      percent: 5,
+      maxRp: 2000,
+      maxUses: null,
+    });
+
+    curlApply.textContent = curlFor("discount.apply", "POST", {
+      amount: 10000,
+      deviceId: "dev_android_1",
+      voucher: "VIPL",
+      reserveTtlMs: 360000,
+    });
 
     setTab("vouchers");
 
+    // gate always on first, auto-login if key exists & valid
     ADMIN = String(localStorage.getItem(LS_ADMIN) || "").trim();
     if (!ADMIN) {
       setLocked(true);
       return;
     }
+    adminKeyInput.value = ADMIN;
 
     try {
       await pingPublic();
@@ -673,7 +770,6 @@
       }
       setLocked(false);
       await refreshAll();
-      await genDeviceKeyServer();
     } catch {
       setLocked(true);
     }
