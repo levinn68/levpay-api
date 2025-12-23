@@ -1,43 +1,28 @@
-// api/levpay.js (Vercel SINGLE-FILE ROUTER) — FINAL (GH DB + flexible monthly + tutor)
-// Endpoints via query action (recommended):
-// - /api/levpay?action=ping | help | tutor
-// - /api/levpay?action=discount.apply|discount.commit|discount.release
-// - /api/levpay?action=voucher.upsert|voucher.disable|voucher.list|voucher.get
-// - /api/levpay?action=monthly.get|monthly.set
-// - /api/levpay?action=tx.upsert|tx.get|tx.list|tx.search|tx.clear
-// - /api/levpay?action=paidhook
+// api/levpay.js — FINAL (Vercel single-file router)
+// - Voucher & Promo Bulanan: WAJIB pakai KODE (user harus input)
+// - Unlimited device: aman (admin input Device ID, server hitung SHA256 pakai DEVICE_PEPPER)
+// - Admin gate: voucher/monthly/tx/devicekey wajib X-Admin-Key
 //
-// Notes:
-// - Admin endpoints require header: X-Admin-Key: <ADMIN_KEY>
-// - DB stored in GitHub file (recommended). /tmp fallback only if GH config missing.
-//
-// ===== GH ENV (WAJIB GH_*, JANGAN GITHUB_*) =====
-// - GH_TOKEN  : GitHub PAT (repo scope for private / contents:write)
-// - GH_OWNER  : owner/org
-// - GH_REPO   : repo name
-// - GH_BRANCH : default "main"
-// - GH_DB_PATH: default "db/levpay-db.json"  (bebas, tapi harus file json)
+// ENV wajib disaranin:
+// - ADMIN_KEY        (jangan hardcode di client)
+// - DEVICE_PEPPER    (RAHASIA, jangan dibocorin)
+// - GH_TOKEN, GH_OWNER, GH_REPO, GH_BRANCH(optional), GH_DB_PATH(optional)
 // Optional:
-// - GH_API_BASE: default "https://api.github.com" (kalau enterprise, isi base API)
-// =================================================================
+// - CALLBACK_SECRET
+// - UNLIMITED_DEVICE_KEYS  (comma-separated deviceKey sha256)
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-// ====== CONFIG ======
 const TMP_DB_PATH = path.join("/tmp", "levpay-db.json");
 
-// Admin key untuk ADMIN endpoints (voucher/monthly/tx admin ops)
-const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
+// ===== CONFIG =====
+const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824"; // set di env biar aman
+const CALLBACK_SECRET = process.env.CALLBACK_SECRET || ""; // optional
+const DEVICE_PEPPER = process.env.DEVICE_PEPPER || ""; // WAJIB disarankan
 
-// Secret optional buat callback/hook (kalau lu mau proteksi paidhook)
-const CALLBACK_SECRET = process.env.CALLBACK_SECRET || ""; // kosong = off
-
-// Pepper buat bikin deviceKey (monthly promo tracking)
-const DEVICE_PEPPER = process.env.DEVICE_PEPPER || "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4";
-
-// ====== GH CONFIG (WAJIB pakai GH_) ======
+// ===== GH CONFIG =====
 const GH_API_BASE = process.env.GH_API_BASE || "https://api.github.com";
 const GH_TOKEN = process.env.GH_TOKEN || "";
 const GH_OWNER = process.env.GH_OWNER || "";
@@ -45,25 +30,28 @@ const GH_REPO = process.env.GH_REPO || "";
 const GH_BRANCH = process.env.GH_BRANCH || "main";
 const GH_DB_PATH = process.env.GH_DB_PATH || "db/levpay-db.json";
 
-// DeviceKey yang unlimited (bypass limit promo bulanan)
-// MASUKIN HASIL SHA256(deviceId + "|" + DEVICE_PEPPER)
-const UNLIMITED_DEVICE_KEYS = new Set(["3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805"]);
+// ===== seed unlimited keys (optional via env) =====
+function parseUnlimitedKeys() {
+  const raw = String(process.env.UNLIMITED_DEVICE_KEYS || "3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return new Set(raw);
+}
+const UNLIMITED_DEVICE_KEYS = parseUnlimitedKeys();
 
-// ====== utils ======
-function send(res, code, obj) {
-  res.statusCode = code;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store");
-  res.end(JSON.stringify(obj));
+// ===== fetch polyfill (buat runtime yang belum ada fetch) =====
+async function ensureFetch() {
+  if (typeof fetch !== "undefined") return fetch;
+  const mod = await import("node-fetch");
+  return mod.default;
 }
 
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Admin-Key, X-Callback-Secret"
-  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Callback-Secret");
+  res.setHeader("Cache-Control", "no-store");
   if (req.method === "OPTIONS") {
     res.statusCode = 200;
     res.end("");
@@ -72,15 +60,10 @@ function setCors(req, res) {
   return false;
 }
 
-function isAdmin(req) {
-  const k = String(req.headers["x-admin-key"] || "").trim();
-  return !!(k && k === ADMIN_KEY);
-}
-
-function checkCallbackSecret(req) {
-  if (!CALLBACK_SECRET) return true;
-  const k = String(req.headers["x-callback-secret"] || "").trim();
-  return !!(k && k === CALLBACK_SECRET);
+function send(res, code, obj) {
+  res.statusCode = code;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(obj));
 }
 
 function clamp(n, a, b) {
@@ -98,10 +81,12 @@ function yyyymm(d = new Date()) {
   return `${y}${m}`;
 }
 
-function getDeviceKey(deviceId, pepper = DEVICE_PEPPER) {
+function getDeviceKey(deviceId) {
+  // DEVICE_PEPPER wajib (biar konsisten deviceKey)
+  if (!DEVICE_PEPPER) return crypto.createHash("sha256").update(String(deviceId || "") + "|").digest("hex");
   return crypto
     .createHash("sha256")
-    .update(String(deviceId || "") + "|" + String(pepper || ""))
+    .update(String(deviceId || "") + "|" + String(DEVICE_PEPPER))
     .digest("hex");
 }
 
@@ -120,7 +105,22 @@ async function readBody(req) {
   });
 }
 
-// ====== GH DB helpers ======
+function isAdmin(req) {
+  const got =
+    String(req.headers["x-admin-key"] || "").trim() ||
+    String(req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  return !!(got && got === ADMIN_KEY);
+}
+
+function checkCallbackSecret(req) {
+  if (!CALLBACK_SECRET) return true;
+  const got =
+    String(req.headers["x-callback-secret"] || "").trim() ||
+    String(req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  return !!(got && got === CALLBACK_SECRET);
+}
+
+// ===== GH helpers =====
 function ghConfigured() {
   return !!(GH_TOKEN && GH_OWNER && GH_REPO && GH_DB_PATH);
 }
@@ -134,12 +134,12 @@ function ghHeaders() {
 }
 
 async function ghGetFile() {
+  const _fetch = await ensureFetch();
   const url =
-    `${GH_API_BASE}/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(
-      GH_REPO
-    )}/contents/${GH_DB_PATH}` + `?ref=${encodeURIComponent(GH_BRANCH)}`;
+    `${GH_API_BASE}/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(GH_REPO)}/contents/${GH_DB_PATH}` +
+    `?ref=${encodeURIComponent(GH_BRANCH)}`;
 
-  const r = await fetch(url, { method: "GET", headers: ghHeaders() });
+  const r = await _fetch(url, { method: "GET", headers: ghHeaders() });
   if (r.status === 404) return { exists: false, sha: null, content: null };
   if (!r.ok) {
     const t = await r.text().catch(() => "");
@@ -152,13 +152,10 @@ async function ghGetFile() {
 }
 
 async function ghPutFile(jsonObj, shaMaybe) {
-  const url = `${GH_API_BASE}/repos/${encodeURIComponent(
-    GH_OWNER
-  )}/${encodeURIComponent(GH_REPO)}/contents/${GH_DB_PATH}`;
+  const _fetch = await ensureFetch();
+  const url = `${GH_API_BASE}/repos/${encodeURIComponent(GH_OWNER)}/${encodeURIComponent(GH_REPO)}/contents/${GH_DB_PATH}`;
 
-  const content = Buffer.from(JSON.stringify(jsonObj, null, 2), "utf8").toString(
-    "base64"
-  );
+  const content = Buffer.from(JSON.stringify(jsonObj, null, 2), "utf8").toString("base64");
 
   const body = {
     message: `levpay db update ${new Date().toISOString()}`,
@@ -167,7 +164,7 @@ async function ghPutFile(jsonObj, shaMaybe) {
   };
   if (shaMaybe) body.sha = shaMaybe;
 
-  const r = await fetch(url, {
+  const r = await _fetch(url, {
     method: "PUT",
     headers: { ...ghHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -180,9 +177,8 @@ async function ghPutFile(jsonObj, shaMaybe) {
   return true;
 }
 
-// ====== DB read/write ======
+// ===== DB read/write =====
 async function readDB() {
-  // prefer GitHub
   if (ghConfigured()) {
     try {
       const f = await ghGetFile();
@@ -190,11 +186,10 @@ async function readDB() {
       const raw = f.content || "";
       return raw ? JSON.parse(raw) : {};
     } catch {
-      // fallback /tmp kalau GH error
+      // fallback /tmp
     }
   }
 
-  // fallback /tmp (testing)
   try {
     if (!fs.existsSync(TMP_DB_PATH)) return {};
     const raw = fs.readFileSync(TMP_DB_PATH, "utf8");
@@ -205,7 +200,6 @@ async function readDB() {
 }
 
 async function writeDB(db) {
-  // prefer GitHub
   if (ghConfigured()) {
     const f = await ghGetFile().catch(() => ({ exists: false, sha: null }));
     const sha = f.exists ? f.sha : null;
@@ -213,7 +207,6 @@ async function writeDB(db) {
     return true;
   }
 
-  // fallback /tmp (testing)
   try {
     fs.writeFileSync(TMP_DB_PATH, JSON.stringify(db, null, 2));
     return true;
@@ -222,41 +215,36 @@ async function writeDB(db) {
   }
 }
 
-// ====== DB init / ensure ======
+// ===== DB init =====
 function ensure(db) {
   db.vouchers = db.vouchers || {};
   db.promo = db.promo || {};
   db.tx = db.tx || {};
 
-  // MONTHLY PROMO — flexible
-  // - enabled: on/off
-  // - name: label tampil
-  // - percent/maxRp: diskon
-  // - requireCode: kalau true, monthly hanya jalan jika voucherCode == code
-  // - code: kode monthly kalau requireCode = true
+  // Promo bulanan: WAJIB KODE (user harus input)
   db.promo.monthly =
     db.promo.monthly || {
       enabled: true,
+      code: "", // wajib diset di admin, kalau kosong = promo gak bisa kepake
       name: "PROMO BULANAN",
       percent: 5,
       maxRp: 2000,
-
-      // NEW (flex)
-      requireCode: false,
-      code: "",
-
-      used: {},
-      reserved: {},
-      unlimited: {},
+      maxUses: null, // global per bulan (kosong = unlimited)
+      used: {}, // per deviceKey => yyyymm
+      usedCount: {}, // yyyymm => count (global)
+      reserved: {}, // deviceKey => { token, month, expiresAt }
+      unlimited: {}, // deviceKey => true
       updatedAt: null,
     };
 
-  db.promo.monthly.used = db.promo.monthly.used || {};
-  db.promo.monthly.reserved = db.promo.monthly.reserved || {};
-  db.promo.monthly.unlimited = db.promo.monthly.unlimited || {};
+  const p = db.promo.monthly;
+  p.used = p.used || {};
+  p.usedCount = p.usedCount || {};
+  p.reserved = p.reserved || {};
+  p.unlimited = p.unlimited || {};
 
-  // seed unlimited keys
-  for (const k of UNLIMITED_DEVICE_KEYS) db.promo.monthly.unlimited[k] = true;
+  // seed from env (optional)
+  for (const k of UNLIMITED_DEVICE_KEYS) p.unlimited[k] = true;
 
   return db;
 }
@@ -264,14 +252,13 @@ function ensure(db) {
 function cleanupExpiredReservations(db) {
   ensure(db);
   const now = Date.now();
+  const p = db.promo.monthly;
 
-  // monthly reserved cleanup
-  for (const [deviceKey, r] of Object.entries(db.promo.monthly.reserved || {})) {
+  for (const [deviceKey, r] of Object.entries(p.reserved || {})) {
     const exp = Date.parse(r?.expiresAt || "");
-    if (Number.isFinite(exp) && now > exp) delete db.promo.monthly.reserved[deviceKey];
+    if (Number.isFinite(exp) && now > exp) delete p.reserved[deviceKey];
   }
 
-  // voucher reserved cleanup
   for (const [code, v] of Object.entries(db.vouchers || {})) {
     if (!v || !v.reserved) continue;
     for (const [t, expAt] of Object.entries(v.reserved)) {
@@ -282,65 +269,7 @@ function cleanupExpiredReservations(db) {
   }
 }
 
-// ====== Discount engine (reserve/apply/commit/release) ======
-function reserveMonthlyPromo(db, amount, deviceKey, ttlMs, voucherCodeMaybe) {
-  ensure(db);
-  cleanupExpiredReservations(db);
-
-  const p = db.promo.monthly;
-  if (!p.enabled) return { ok: false, discountRp: 0 };
-
-  // FLEX: requireCode mode
-  if (p.requireCode) {
-    const want = String(p.code || "").trim().toUpperCase();
-    const got = String(voucherCodeMaybe || "").trim().toUpperCase();
-    if (!want || got !== want) return { ok: false, discountRp: 0 };
-  }
-
-  const cur = yyyymm();
-  const isUnlimited = !!(p.unlimited && p.unlimited[deviceKey]);
-
-  const lastUsed = p.used[deviceKey] || "";
-  if (!isUnlimited && lastUsed === cur) return { ok: false, discountRp: 0 };
-
-  // kalau sudah reserved bulan ini -> jangan kasih lagi sampai expired
-  const rsv = p.reserved[deviceKey];
-  if (rsv && rsv.month === cur) return { ok: false, discountRp: 0 };
-
-  const percent = clamp(Number(p.percent || 0), 0, 100);
-  const maxRp = Math.max(0, Number(p.maxRp || 0));
-  const raw = Math.floor((Number(amount || 0) * percent) / 100);
-  const discountRp = maxRp ? Math.min(raw, maxRp) : raw;
-
-  if (discountRp > 0) {
-    const t = token();
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    p.reserved[deviceKey] = { token: t, month: cur, expiresAt };
-
-    return {
-      ok: true,
-      discountRp,
-      info: {
-        type: "monthly",
-        name: p.name || "PROMO BULANAN",
-        percent,
-        maxRp,
-        code: p.requireCode ? String(p.code || "").trim().toUpperCase() : null,
-      },
-      reservation: {
-        type: "monthly",
-        deviceKey,
-        token: t,
-        month: cur,
-        expiresAt,
-        discountRp,
-      },
-    };
-  }
-
-  return { ok: false, discountRp: 0 };
-}
-
+// ===== Discount engine =====
 function reserveVoucher(db, amount, voucherCode, ttlMs) {
   ensure(db);
   cleanupExpiredReservations(db);
@@ -363,9 +292,9 @@ function reserveVoucher(db, amount, voucherCode, ttlMs) {
 
   if (discountRp <= 0) return { ok: false, discountRp: 0 };
 
-  // maxUses check (uses + reserved)
   v.reserved = v.reserved || {};
   const reservedCount = Object.keys(v.reserved).length;
+
   if (v.maxUses != null) {
     const used = Number(v.uses || 0);
     if (used + reservedCount >= Number(v.maxUses)) return { ok: false, discountRp: 0 };
@@ -390,7 +319,63 @@ function reserveVoucher(db, amount, voucherCode, ttlMs) {
   };
 }
 
-function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 60 * 1000 }) {
+function reserveMonthlyPromo(db, amount, deviceKey, ttlMs, inputCode) {
+  ensure(db);
+  cleanupExpiredReservations(db);
+
+  const p = db.promo.monthly;
+  if (!p.enabled) return { ok: false, discountRp: 0 };
+
+  // WAJIB KODE: kalau p.code kosong / input gak match -> NO DISKON
+  const want = String(p.code || "").trim().toUpperCase();
+  const got = String(inputCode || "").trim().toUpperCase();
+  if (!want || got !== want) return { ok: false, discountRp: 0 };
+
+  const cur = yyyymm();
+  const isUnlimited = !!p.unlimited?.[deviceKey];
+
+  // global max uses per month (optional)
+  const maxUses = p.maxUses == null ? null : Number(p.maxUses);
+  if (Number.isFinite(maxUses) && maxUses > 0) {
+    const usedCount = Number(p.usedCount?.[cur] || 0);
+    const reservedCount = Object.values(p.reserved || {}).filter((r) => r && r.month === cur).length;
+    if (usedCount + reservedCount >= maxUses) return { ok: false, discountRp: 0 };
+  }
+
+  // per device 1x/bulan (kecuali unlimited)
+  const lastUsed = p.used?.[deviceKey] || "";
+  if (!isUnlimited && lastUsed === cur) return { ok: false, discountRp: 0 };
+
+  const rsv = p.reserved?.[deviceKey];
+  if (rsv && rsv.month === cur) return { ok: false, discountRp: 0 };
+
+  const percent = clamp(Number(p.percent || 0), 0, 100);
+  const maxRp = Math.max(0, Number(p.maxRp || 0));
+  const raw = Math.floor((Number(amount || 0) * percent) / 100);
+  const discountRp = maxRp ? Math.min(raw, maxRp) : raw;
+
+  if (discountRp <= 0) return { ok: false, discountRp: 0 };
+
+  const t = token();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  p.reserved[deviceKey] = { token: t, month: cur, expiresAt };
+
+  return {
+    ok: true,
+    discountRp,
+    info: {
+      type: "monthly",
+      name: p.name || "PROMO BULANAN",
+      code: want,
+      percent,
+      maxRp,
+      maxUses: p.maxUses ?? null,
+    },
+    reservation: { type: "monthly", deviceKey, token: t, month: cur, expiresAt, discountRp },
+  };
+}
+
+function applyDiscount({ db, amount, deviceId, code, reserveTtlMs = 6 * 60 * 1000 }) {
   ensure(db);
 
   const deviceKey = getDeviceKey(deviceId || "");
@@ -399,8 +384,8 @@ function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 6
   const applied = [];
   const reservations = [];
 
-  // voucher dulu
-  const v = reserveVoucher(db, finalAmount, voucherCode, reserveTtlMs);
+  // 1) Voucher (kalau kode cocok voucher)
+  const v = reserveVoucher(db, finalAmount, code, reserveTtlMs);
   if (v.ok) {
     finalAmount = Math.max(1, finalAmount - v.discountRp);
     discountRp += v.discountRp;
@@ -408,8 +393,8 @@ function applyDiscount({ db, amount, deviceId, voucherCode, reserveTtlMs = 6 * 6
     reservations.push(v.reservation);
   }
 
-  // monthly setelah voucher (atau requireCode mode, voucherCode bisa jadi monthly code)
-  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs, voucherCode);
+  // 2) Monthly (kalau kode cocok monthly.code)
+  const m = reserveMonthlyPromo(db, finalAmount, deviceKey, reserveTtlMs, code);
   if (m.ok) {
     finalAmount = Math.max(1, finalAmount - m.discountRp);
     discountRp += m.discountRp;
@@ -444,14 +429,17 @@ function commitReservations(db, reservations) {
   ensure(db);
   cleanupExpiredReservations(db);
 
+  const p = db.promo.monthly;
+
   for (const r of reservations || []) {
     if (!r || !r.type) continue;
 
     if (r.type === "monthly") {
-      const cur = db.promo.monthly.reserved?.[r.deviceKey];
+      const cur = p.reserved?.[r.deviceKey];
       if (cur && cur.token === r.token) {
-        db.promo.monthly.used[r.deviceKey] = r.month;
-        delete db.promo.monthly.reserved[r.deviceKey];
+        p.used[r.deviceKey] = r.month;
+        p.usedCount[r.month] = Number(p.usedCount?.[r.month] || 0) + 1;
+        delete p.reserved[r.deviceKey];
       }
     }
 
@@ -466,7 +454,7 @@ function commitReservations(db, reservations) {
   }
 }
 
-// ====== ADMIN ops ======
+// ===== Admin ops =====
 function adminUpsertVoucher(db, body) {
   ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
@@ -476,17 +464,12 @@ function adminUpsertVoucher(db, body) {
   db.vouchers[code] = {
     code,
     name: body.name ? String(body.name) : prev.name || code,
-
-    // allow toggle via admin page
     enabled: body.enabled != null ? !!body.enabled : prev.enabled !== false,
-
     percent: clamp(Number(body.percent || 0), 0, 100),
     maxRp: Math.max(0, Number(body.maxRp || 0)),
     expiresAt: body.expiresAt ? String(body.expiresAt) : prev.expiresAt || null,
-
     uses: Number(prev.uses || 0),
     maxUses: body.maxUses != null ? Number(body.maxUses) : prev.maxUses ?? null,
-
     note: body.note ? String(body.note) : prev.note || null,
     updatedAt: new Date().toISOString(),
     reserved: prev.reserved || undefined,
@@ -494,7 +477,6 @@ function adminUpsertVoucher(db, body) {
   return db.vouchers[code];
 }
 
-// voucher.disable (admin) — by default OFF, but can also toggle if body.enabled provided
 function adminDisableVoucher(db, body) {
   ensure(db);
   const code = String(body.code || "").trim().toUpperCase();
@@ -513,16 +495,20 @@ function adminSetMonthlyPromo(db, body) {
   const p = db.promo.monthly;
 
   if (body.enabled != null) p.enabled = !!body.enabled;
-  if (body.name != null) p.name = String(body.name);
-
+  if (body.code != null) p.code = String(body.code || "").trim().toUpperCase();
+  if (body.name != null) p.name = String(body.name || "").trim();
   if (body.percent != null) p.percent = clamp(Number(body.percent), 0, 100);
   if (body.maxRp != null) p.maxRp = Math.max(0, Number(body.maxRp));
+  if (body.maxUses !== undefined) {
+    const mu = body.maxUses;
+    if (mu == null || String(mu).trim() === "") p.maxUses = null;
+    else {
+      const n = Number(mu);
+      p.maxUses = Number.isFinite(n) && n > 0 ? n : null;
+    }
+  }
 
-  // FLEX: monthly code config
-  if (body.requireCode != null) p.requireCode = !!body.requireCode;
-  if (body.code != null) p.code = String(body.code || "").trim().toUpperCase();
-
-  // add/remove unlimited by deviceKey (sha256)
+  // unlimited: bisa input deviceKey langsung ATAU deviceId (lebih aman)
   if (body.addUnlimitedDeviceKey != null) {
     const k = String(body.addUnlimitedDeviceKey).trim();
     if (k) p.unlimited[k] = true;
@@ -531,12 +517,20 @@ function adminSetMonthlyPromo(db, body) {
     const k = String(body.removeUnlimitedDeviceKey).trim();
     if (k && p.unlimited) delete p.unlimited[k];
   }
+  if (body.addUnlimitedDeviceId != null) {
+    const dk = getDeviceKey(String(body.addUnlimitedDeviceId || "").trim());
+    if (dk) p.unlimited[dk] = true;
+  }
+  if (body.removeUnlimitedDeviceId != null) {
+    const dk = getDeviceKey(String(body.removeUnlimitedDeviceId || "").trim());
+    if (dk && p.unlimited) delete p.unlimited[dk];
+  }
 
   p.updatedAt = new Date().toISOString();
   return p;
 }
 
-// ====== TX store ops (simple) ======
+// ===== TX ops =====
 function txUpsert(db, body) {
   ensure(db);
   const id = String(body.idTransaksi || body.id || "").trim();
@@ -578,229 +572,56 @@ function txClear(db) {
   return true;
 }
 
-// ====== HELP / TUTOR ======
 function help() {
   return {
     success: true,
-    service: "levpay-api (single file)",
-    storage: {
-      gh: {
-        enabled: ghConfigured(),
-        owner: GH_OWNER || null,
-        repo: GH_REPO || null,
-        branch: GH_BRANCH || "main",
-        path: GH_DB_PATH || null,
-        apiBase: GH_API_BASE || "https://api.github.com",
-      },
-      tmpFallback: !ghConfigured(),
+    service: "levpay-api",
+    note: "Diskon hanya jalan jika user input KODE dan cocok (voucher / monthly).",
+    env: {
+      adminKeySet: !!process.env.ADMIN_KEY,
+      devicePepperSet: !!process.env.DEVICE_PEPPER,
+      ghConfigured: ghConfigured(),
     },
-    paths: { recommended: "/api/levpay?action=..." },
-    actions: [
-      "ping",
-      "help",
-      "tutor",
-
-      "discount.apply",
-      "discount.commit",
-      "discount.release",
-
-      "voucher.upsert (ADMIN)",
-      "voucher.disable (ADMIN)",
-      "voucher.list (ADMIN)",
-      "voucher.get (ADMIN)",
-
-      "monthly.get (ADMIN)",
-      "monthly.set (ADMIN)",
-
-      "tx.upsert (ADMIN)",
-      "tx.get (ADMIN)",
-      "tx.list (ADMIN)",
-      "tx.search (ADMIN)",
-      "tx.clear (ADMIN)",
-
-      "paidhook",
+    routes: [
+      "GET  /api/levpay?action=ping",
+      "POST /api/levpay?action=discount.apply (public)",
+      "POST /api/levpay?action=discount.commit (public)",
+      "POST /api/levpay?action=discount.release (public)",
+      "POST /api/levpay?action=paidhook (optional secret)",
+      "ADMIN: voucher.* monthly.* tx.* devicekey",
     ],
-    admin: { header: "X-Admin-Key", requiredFor: ["voucher.*", "monthly.*", "tx.*"] },
   };
 }
 
-function tutor(hostHint) {
-  const HOST = hostHint || "https://YOUR-VERCEL-DOMAIN";
-  return {
-    success: true,
-    note: "Copy-paste curl sesuai endpoint. ADMIN endpoints wajib header X-Admin-Key.",
-    host: HOST,
-    examples: {
-      ping: {
-        method: "GET",
-        curl: `curl -sS "${HOST}/api/levpay?action=ping" | jq`,
-      },
-      help: {
-        method: "GET",
-        curl: `curl -sS "${HOST}/api/levpay?action=help" | jq`,
-      },
-      discount_apply: {
-        method: "POST",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=discount.apply" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"amount":10000,"deviceId":"dev_1","voucher":"LEVPAYVIP"}' | jq`,
-      },
-      discount_commit: {
-        method: "POST",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=discount.commit" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"reservations":[{"type":"voucher","code":"LEVPAYVIP","token":"..."}]}' | jq`,
-      },
-      discount_release: {
-        method: "POST",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=discount.release" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"reservations":[{"type":"voucher","code":"LEVPAYVIP","token":"..."}]}' | jq`,
-      },
-
-      voucher_upsert: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.upsert" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"code":"KINGLEV","name":"KINGLEV 60%","enabled":true,"percent":60,"maxRp":0,"maxUses":null,"expiresAt":null,"note":"custom"}' | jq`,
-      },
-      voucher_disable: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"code":"KINGLEV"}' | jq`,
-      },
-      voucher_enable_again: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.disable" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"code":"KINGLEV","enabled":true}' | jq`,
-      },
-      voucher_list: {
-        method: "GET (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=voucher.list" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" -d '{}' | jq`,
-      },
-      voucher_get: {
-        method: "GET/POST (ADMIN)",
-        curl:
-          `curl -sS "${HOST}/api/levpay?action=voucher.get&code=KINGLEV" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
-      },
-
-      monthly_get: {
-        method: "GET (ADMIN)",
-        curl: `curl -sS "${HOST}/api/levpay?action=monthly.get" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
-      },
-      monthly_set_auto: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"enabled":true,"name":"PROMO BULANAN","percent":10,"maxRp":5000,"requireCode":false}' | jq`,
-      },
-      monthly_set_require_code: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"enabled":true,"name":"PROMO BULANAN KODE","percent":15,"maxRp":7000,"requireCode":true,"code":"MONTHLYVIP"}' | jq`,
-      },
-      monthly_add_unlimited_deviceKey: {
-        method: "POST (ADMIN)",
-        note: "deviceKey = SHA256(deviceId + '|' + DEVICE_PEPPER)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=monthly.set" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"addUnlimitedDeviceKey":"<DEVICE_KEY_SHA256>"}' | jq`,
-      },
-
-      tx_upsert: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=tx.upsert" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" ` +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"idTransaksi":"TRX123","status":"paid","amount":10000}' | jq`,
-      },
-      tx_list: {
-        method: "GET (ADMIN)",
-        curl: `curl -sS "${HOST}/api/levpay?action=tx.list&limit=50" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
-      },
-      tx_search: {
-        method: "GET (ADMIN)",
-        curl: `curl -sS "${HOST}/api/levpay?action=tx.search&q=TRX" -H "X-Admin-Key: ${ADMIN_KEY}" | jq`,
-      },
-      tx_clear: {
-        method: "POST (ADMIN)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=tx.clear" ` +
-          `-H "X-Admin-Key: ${ADMIN_KEY}" -H "Content-Type: application/json" -d '{}' | jq`,
-      },
-
-      paidhook: {
-        method: "POST (optional secret)",
-        curl:
-          `curl -sS -X POST "${HOST}/api/levpay?action=paidhook" ` +
-          (CALLBACK_SECRET ? `-H "X-Callback-Secret: ${CALLBACK_SECRET}" ` : "") +
-          `-H "Content-Type: application/json" ` +
-          `-d '{"idTransaksi":"TRX123","status":"paid","paidAt":"${new Date().toISOString()}"}' | jq`,
-      },
-    },
-  };
-}
-
-// ====== MAIN HANDLER ======
+// ===== MAIN HANDLER =====
 module.exports = async (req, res) => {
   if (setCors(req, res)) return;
 
   const url = new URL(req.url, "http://localhost");
   const action = String(url.searchParams.get("action") || "").trim();
 
-  // body
   const body = await readBody(req);
 
-  // db
   const db = ensure(await readDB());
 
-  // ping/help/tutor
   if (!action || action === "help") return send(res, 200, help());
-  if (action === "tutor") {
-    const host = url.searchParams.get("host") || "";
-    return send(res, 200, tutor(host));
-  }
   if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
 
   try {
-    // ===== DISCOUNT =====
+    // ===== PUBLIC: discount =====
     if (action === "discount.apply" || action === "apply") {
       const amount = Number(body.amount);
       const deviceId = body.deviceId || body.deviceid || body.device_id || "";
-      const voucher = body.voucher || body.voucherCode || body.code || "";
+      const code = body.voucher || body.code || body.voucherCode || "";
 
-      if (!Number.isFinite(amount) || amount < 1) {
-        return send(res, 400, { success: false, error: "amount invalid" });
-      }
+      if (!Number.isFinite(amount) || amount < 1) return send(res, 400, { success: false, error: "amount invalid" });
+      if (!String(deviceId || "").trim()) return send(res, 400, { success: false, error: "deviceId required" });
 
       const r = applyDiscount({
         db,
         amount,
         deviceId,
-        voucherCode: voucher,
+        code,
         reserveTtlMs: Number(body.reserveTtlMs || 6 * 60 * 1000),
       });
 
@@ -832,7 +653,16 @@ module.exports = async (req, res) => {
       return send(res, 200, { success: true, data: { released: reservations.length } });
     }
 
-    // ===== VOUCHER (ADMIN) =====
+    // ===== ADMIN: devicekey (biar UI gak butuh pepper) =====
+    if (action === "devicekey") {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+      const deviceId = String(body.deviceId || body.deviceid || "").trim();
+      if (!deviceId) return send(res, 400, { success: false, error: "deviceId required" });
+      const deviceKey = getDeviceKey(deviceId);
+      return send(res, 200, { success: true, data: { deviceId, deviceKey } });
+    }
+
+    // ===== ADMIN: voucher =====
     if (action.startsWith("voucher.")) {
       if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
 
@@ -849,9 +679,7 @@ module.exports = async (req, res) => {
       }
 
       if (action === "voucher.list") {
-        const items = Object.values(db.vouchers || {}).sort((a, b) =>
-          String(a.code || "").localeCompare(String(b.code || ""))
-        );
+        const items = Object.values(db.vouchers || {}).sort((a, b) => String(a.code || "").localeCompare(String(b.code || "")));
         return send(res, 200, { success: true, data: items });
       }
 
@@ -866,7 +694,7 @@ module.exports = async (req, res) => {
       return send(res, 400, { success: false, error: "Unknown voucher action" });
     }
 
-    // ===== MONTHLY (ADMIN) =====
+    // ===== ADMIN: monthly =====
     if (action.startsWith("monthly.")) {
       if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
 
@@ -884,7 +712,7 @@ module.exports = async (req, res) => {
       return send(res, 400, { success: false, error: "Unknown monthly action" });
     }
 
-    // ===== TX (ADMIN) =====
+    // ===== ADMIN: tx =====
     if (action.startsWith("tx.")) {
       if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
 
@@ -923,25 +751,19 @@ module.exports = async (req, res) => {
       return send(res, 400, { success: false, error: "Unknown tx action" });
     }
 
-    // ===== PAIDHOOK (optional secret) =====
+    // ===== paidhook =====
     if (action === "paidhook") {
       if (!checkCallbackSecret(req)) return send(res, 401, { success: false, error: "bad secret" });
 
-      // simpan minimal ke tx store (kalau ada idTransaksi)
       const id = String(body.idTransaksi || body.id || "").trim();
       if (id) {
         txUpsert(db, { ...body, idTransaksi: id });
         await writeDB(db);
       }
-
       return send(res, 200, { success: true, data: { received: true, idTransaksi: id || null } });
     }
 
-    return send(res, 404, {
-      success: false,
-      error: "Unknown action",
-      hint: "use action=discount.apply|discount.commit|discount.release|voucher.*|monthly.*|tx.*|paidhook|help|ping|tutor",
-    });
+    return send(res, 404, { success: false, error: "Unknown action" });
   } catch (e) {
     return send(res, 500, { success: false, error: e?.message || "server error" });
   }
