@@ -8,342 +8,426 @@
 </head>
 
 <body>
-  <!-- GATE / LOGIN (WAJIB MUNCUL DULUAN) -->
+  <!-- OPTIONAL override host API (biar admin.js gak ngandelin location.origin) -->
+  <script>
+    window.LevPayAPIBase = "https://levpay-api.vercel.app";
+  </script>
+
+  <!-- Login Gate -->
   <div id="gate" class="gate is-on" aria-hidden="false">
     <div class="gate__backdrop"></div>
     <div class="gate__panel">
-      <div class="gate__brand">
-        <div class="logo">LP</div>
-        <div class="txt">
-          <div class="t1">LevPay Admin</div>
-          <div class="t2">Masukkan Admin Key untuk akses pengaturan.</div>
+      <div class="brand">
+        <div class="brand__logo">LP</div>
+        <div>
+          <div class="brand__title">LevPay Admin</div>
+          <div class="brand__sub">Masukkan Admin Key untuk mengakses pengaturan.</div>
         </div>
       </div>
 
       <div class="gate__form">
         <label class="label">Admin Key</label>
-        <input id="adminKeyInput" class="input mono" placeholder="ADMIN_KEY (env)" type="password" autocomplete="off" />
-
-        <div class="row">
-          <button id="btnLogin" class="btn primary">Masuk</button>
-          <button id="btnLogout" class="btn ghost">Logout</button>
+        <input id="adminKeyInput" class="input mono" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
+        <div class="row row--gap">
+          <button id="btnLogin" class="btn btn--primary">Masuk</button>
+          <button id="btnLogout" class="btn btn--ghost" disabled>Keluar</button>
         </div>
 
         <div class="hint">
-          Endpoint API: <span class="mono">/api/levpay</span>
+          API Base: <code class="mono" id="apiBaseHint">—</code>
         </div>
 
-        <div id="gateMsg" class="msg" style="display:none;"></div>
+        <div id="loginMsg" class="msg" style="display:none;"></div>
       </div>
     </div>
   </div>
 
-  <!-- APP -->
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo sm">LP</div>
-      <div class="txt">
-        <div class="t1">LevPay Admin</div>
-        <div class="t2">API: <span id="apiText" class="mono">—</span></div>
-      </div>
-    </div>
-
-    <div class="row">
-      <button id="btnRefresh" class="btn ghost">Refresh</button>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <aside class="side">
-      <button id="navVouchers" class="nav is-active">
-        <span>Voucher</span>
-        <span class="chip">manage</span>
-      </button>
-      <button id="navMonthly" class="nav">
-        <span>Promo Bulanan</span>
-        <span class="chip">code</span>
-      </button>
-      <button id="navTools" class="nav">
-        <span>Tools</span>
-        <span class="chip">test</span>
-      </button>
-
-      <div class="side__note">
-        <div class="noteTitle">Catatan</div>
-        <div class="noteText">
-          Promo bulanan <b>wajib pakai kode</b>. Unlimited device sudah diset di backend/DB,
-          admin cuma punya toggle global <b>Unlimited Mode</b> (ON/OFF).
+  <!-- App -->
+  <div id="app" class="app is-locked">
+    <header class="topbar">
+      <div class="topbar__left">
+        <div class="brandMini">
+          <div class="brandMini__logo">LP</div>
+          <div>
+            <div class="brandMini__title">LevPay Admin</div>
+            <div class="brandMini__sub">API: <span class="mono" id="apiBaseText">—</span></div>
+          </div>
         </div>
       </div>
-    </aside>
+      <div class="topbar__right">
+        <button id="btnRefreshAll" class="btn btn--ghost">Refresh</button>
+        <button id="btnOpenGate" class="btn btn--ghost">Admin Key</button>
+      </div>
+    </header>
 
-    <section class="main">
-      <!-- TAB: VOUCHERS -->
-      <div id="tabVouchers" class="tab is-on">
-        <div class="grid2">
-          <div class="card">
-            <div class="card__head">
-              <div>
-                <div class="h1">Voucher List</div>
-                <div class="h2">Toggle ON/OFF beneran (langsung update backend).</div>
+    <main class="layout">
+      <aside class="side">
+        <div class="side__box">
+          <button class="navItem is-active" data-tab="vouchers">
+            <span>Voucher</span><span class="pill" id="pillVoucherCount">0</span>
+          </button>
+          <button class="navItem" data-tab="monthly">
+            <span>Promo Bulanan</span><span class="pill" id="pillMonthly">—</span>
+          </button>
+          <button class="navItem" data-tab="system">
+            <span>System</span><span class="pill pill--tag">mode</span>
+          </button>
+          <button class="navItem" data-tab="tools">
+            <span>Tools</span><span class="pill pill--tag">test</span>
+          </button>
+        </div>
+
+        <div class="side__box side__box--mini">
+          <div class="kv">
+            <div class="kv__k">Status</div>
+            <div class="kv__v" id="sysStatus">LOCKED</div>
+          </div>
+          <div class="kv">
+            <div class="kv__k">Last Sync</div>
+            <div class="kv__v mono" id="lastSync">—</div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="hint">
+            Catatan penting:
+            <br/>• Diskon <b>baru kepotong</b> kalau voucher/promo <b>enabled</b> + <b>percent &gt; 0</b>.
+            <br/>• Unlimited hanya berlaku buat <b>device whitelist</b> yang udah diset di backend.
+          </div>
+        </div>
+      </aside>
+
+      <section class="main">
+        <!-- TAB: VOUCHERS -->
+        <div class="tab is-on" id="tab-vouchers">
+          <div class="grid2">
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Voucher Manager</div>
+                  <div class="card__sub">List voucher + hapus biar gak numpuk.</div>
+                </div>
+                <div class="row row--gap">
+                  <label class="check">
+                    <input id="onlyActiveToggle" type="checkbox" checked />
+                    <span>Hanya aktif</span>
+                  </label>
+                  <button id="btnLoadVouchers" class="btn btn--ghost">Load</button>
+                </div>
+              </div>
+
+              <div class="card__body card__body--pad0">
+                <div class="tableWrap">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Kode</th>
+                        <th>Nama</th>
+                        <th>Aktif</th>
+                        <th>%</th>
+                        <th>Max Rp</th>
+                        <th>Uses</th>
+                        <th>Expire</th>
+                        <th class="tRight">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="voucherTbody">
+                      <tr><td colspan="8" class="mutedCell">Belum ada data.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
-            <div class="card__body pad0">
-              <div class="tableWrap">
-                <table class="table">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Name</th>
-                      <th>ON/OFF</th>
-                      <th>%</th>
-                      <th>Max Rp</th>
-                      <th>Uses</th>
-                      <th>Expire</th>
-                      <th class="right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody id="voucherTbody">
-                    <tr><td colspan="8" class="muted">Loading…</td></tr>
-                  </tbody>
-                </table>
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Edit / Buat Voucher</div>
+                  <div class="card__sub">Switch & toggle beneran ngaruh ke API.</div>
+                </div>
+              </div>
+
+              <div class="card__body">
+                <div class="formGrid">
+                  <div class="field">
+                    <label class="label">Code</label>
+                    <input id="v_code" class="input mono" placeholder="contoh: VIPL" />
+                  </div>
+                  <div class="field">
+                    <label class="label">Name</label>
+                    <input id="v_name" class="input" placeholder="contoh: VIP LEVEL" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Percent (0-100)</label>
+                    <input id="v_percent" class="input mono" inputmode="numeric" placeholder="contoh: 60" />
+                  </div>
+                  <div class="field">
+                    <label class="label">Max Rp (0 = unlimited)</label>
+                    <input id="v_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 5000" value="0" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Max Uses (kosong = unlimited)</label>
+                    <input id="v_maxUses" class="input mono" inputmode="numeric" placeholder="contoh: 5" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Expires At</label>
+                    <input id="v_expiresAt" class="input mono" type="datetime-local" />
+                  </div>
+
+                  <div class="field field--full">
+                    <div class="switchRow">
+                      <div class="switchGroup">
+                        <span class="switchLabel">Enabled</span>
+                        <label class="switch">
+                          <input id="v_enabled" type="checkbox" checked />
+                          <span class="switch__ui"></span>
+                        </label>
+                      </div>
+
+                      <div class="switchGroup">
+                        <span class="switchLabel">Limit 1× / bulan / device</span>
+                        <label class="switch">
+                          <input id="v_perDeviceMonth" type="checkbox" checked />
+                          <span class="switch__ui"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="hint">
+                      Unlimited device (whitelist) bakal <b>bypass</b> limit ini kalau System → Unlimited Mode ON.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row row--gap">
+                  <button id="btnUpsertVoucher" class="btn btn--primary">Simpan</button>
+                  <button id="btnDeleteVoucher" class="btn btn--danger">Hapus</button>
+                </div>
+
+                <div class="split">
+                  <div>
+                    <div class="miniTitle">curl (auto)</div>
+                    <pre class="codebox" id="curlVoucher">—</pre>
+                  </div>
+                  <div>
+                    <div class="miniTitle">Response</div>
+                    <pre class="codebox" id="jsonVoucher">—</pre>
+                  </div>
+                </div>
+
+                <div id="msgVoucher" class="msg" style="display:none;"></div>
               </div>
             </div>
           </div>
+        </div>
 
+        <!-- TAB: MONTHLY -->
+        <div class="tab" id="tab-monthly">
+          <div class="grid2">
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Promo Bulanan (Kode)</div>
+                  <div class="card__sub">1×/bulan/device (kecuali device whitelist saat Unlimited Mode ON).</div>
+                </div>
+                <div class="row row--gap">
+                  <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
+                  <button id="btnSaveMonthly" class="btn btn--primary">Save</button>
+                </div>
+              </div>
+
+              <div class="card__body">
+                <div class="formGrid">
+                  <div class="field field--full">
+                    <div class="switchRow">
+                      <div class="switchGroup">
+                        <span class="switchLabel">Enabled</span>
+                        <label class="switch">
+                          <input id="m_enabled" type="checkbox" />
+                          <span class="switch__ui"></span>
+                        </label>
+                      </div>
+
+                      <button id="btnResetMonthly" class="btn btn--ghost">Reset Usage</button>
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Kode</label>
+                    <input id="m_code" class="input mono" placeholder="contoh: KLZ" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Name</label>
+                    <input id="m_name" class="input" placeholder="contoh: PROMO BULANAN" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Percent (0-100)</label>
+                    <input id="m_percent" class="input mono" inputmode="numeric" placeholder="contoh: 5" />
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Max Rp</label>
+                    <input id="m_maxRp" class="input mono" inputmode="numeric" placeholder="contoh: 2000" />
+                  </div>
+                </div>
+
+                <div class="split">
+                  <div>
+                    <div class="miniTitle">curl (auto)</div>
+                    <pre class="codebox" id="curlMonthly">—</pre>
+                  </div>
+                  <div>
+                    <div class="miniTitle">Response</div>
+                    <pre class="codebox" id="jsonMonthly">—</pre>
+                  </div>
+                </div>
+
+                <div id="msgMonthly" class="msg" style="display:none;"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Info</div>
+                  <div class="card__sub">Promo bulanan hanya aktif kalau user input kodenya.</div>
+                </div>
+              </div>
+              <div class="card__body">
+                <div class="hint">
+                  Kalau masih “Promo Terpakai” tapi <b>Diskon Rp0</b>, biasanya:
+                  <br/>• kodenya salah / beda huruf
+                  <br/>• promo/voucher <b>enabled = OFF</b>
+                  <br/>• percent = 0
+                  <br/>• device udah pernah pakai bulan ini (kalau bukan whitelist unlimited)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: SYSTEM -->
+        <div class="tab" id="tab-system">
+          <div class="grid2">
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Unlimited Mode (Whitelist)</div>
+                  <div class="card__sub">Tanpa input SHA di admin. Whitelist diset dari backend.</div>
+                </div>
+                <div class="row row--gap">
+                  <button id="btnLoadSystem" class="btn btn--ghost">Load</button>
+                  <button id="btnSaveSystem" class="btn btn--primary">Save</button>
+                </div>
+              </div>
+
+              <div class="card__body">
+                <div class="switchRow">
+                  <div class="switchGroup">
+                    <span class="switchLabel">Unlimited Mode</span>
+                    <label class="switch">
+                      <input id="s_unlimitedEnabled" type="checkbox" />
+                      <span class="switch__ui"></span>
+                    </label>
+                  </div>
+                  <div class="pill pill--tag">Whitelist: <span id="s_keyCount">0</span></div>
+                </div>
+
+                <div class="hint">
+                  • Kalau ON: device yang <b>udah ada di whitelist</b> bisa pakai voucher/promo berkali-kali.
+                  <br/>• Kalau OFF: semua device dianggap normal (1×/bulan/device).
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="miniTitle">Whitelist (read-only)</div>
+                <pre class="codebox" id="jsonSystem">—</pre>
+
+                <div id="msgSystem" class="msg" style="display:none;"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__title">Catatan</div>
+                  <div class="card__sub">List device unlimitednya bukan dari admin UI.</div>
+                </div>
+              </div>
+              <div class="card__body">
+                <div class="hint">
+                  Kalau mau nambah device unlimited:
+                  <br/>• edit ENV <code class="mono">UNLIMITED_DEVICE_KEYS</code> (CSV)
+                  <br/>atau
+                  <br/>• edit fallback hardcode di <code class="mono">api/levpay.js</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: TOOLS -->
+        <div class="tab" id="tab-tools">
           <div class="card">
             <div class="card__head">
               <div>
-                <div class="h1">Edit / Upsert Voucher</div>
-                <div class="h2">Klik “Edit” dari tabel atau isi manual.</div>
+                <div class="card__title">Tools</div>
+                <div class="card__sub">Test <span class="mono">discount.apply</span> biar keliatan diskonnya bener.</div>
+              </div>
+              <div class="row row--gap">
+                <button id="btnRunApply" class="btn btn--primary">Run</button>
               </div>
             </div>
 
             <div class="card__body">
               <div class="formGrid">
                 <div class="field">
-                  <label class="label">Code</label>
-                  <input id="v_code" class="input mono" placeholder="VIPL" />
+                  <label class="label">Amount</label>
+                  <input id="t_amount" class="input mono" inputmode="numeric" value="3000" />
                 </div>
                 <div class="field">
-                  <label class="label">Name</label>
-                  <input id="v_name" class="input" placeholder="VIP LEVEL" />
+                  <label class="label">Device ID</label>
+                  <input id="t_deviceId" class="input mono" value="dev_rog6pro" />
                 </div>
-
-                <div class="field">
-                  <label class="label">Percent (0-100)</label>
-                  <input id="v_percent" class="input mono" inputmode="numeric" placeholder="10" />
+                <div class="field field--full">
+                  <label class="label">Kode (Voucher / Promo Bulanan)</label>
+                  <input id="t_code" class="input mono" placeholder="contoh: 2030 / KLZ" />
                 </div>
-                <div class="field">
-                  <label class="label">Max Rp (0 = ∞)</label>
-                  <input id="v_maxRp" class="input mono" inputmode="numeric" value="0" />
-                </div>
-
-                <div class="field">
-                  <label class="label">Max Uses (kosong = ∞)</label>
-                  <input id="v_maxUses" class="input mono" inputmode="numeric" placeholder="5" />
-                </div>
-
-                <div class="field">
-                  <label class="label">Expires At</label>
-                  <input id="v_expiresAt" class="input mono" type="datetime-local" />
-                </div>
-
-                <div class="field full">
-                  <div class="row between">
-                    <div class="label">Enabled</div>
-                    <label class="switch">
-                      <input id="v_enabled" type="checkbox" checked />
-                      <span class="track"></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div class="row gap">
-                <button id="btnVoucherSave" class="btn primary">Save</button>
-                <button id="btnVoucherDisable" class="btn danger">Force OFF</button>
               </div>
 
               <div class="split">
                 <div>
-                  <div class="mini">curl</div>
-                  <pre id="curlVoucher" class="codebox">—</pre>
+                  <div class="miniTitle">curl (auto)</div>
+                  <pre class="codebox" id="curlApply">—</pre>
                 </div>
                 <div>
-                  <div class="mini">response</div>
-                  <pre id="jsonVoucher" class="codebox">—</pre>
+                  <div class="miniTitle">Response</div>
+                  <pre class="codebox" id="jsonApply">—</pre>
                 </div>
               </div>
 
-              <div id="voucherMsg" class="msg" style="display:none;"></div>
+              <div class="hint">
+                Kalau Tools diskon bener tapi frontend Rp0,
+                berarti frontend createQR belum pakai hasil diskon untuk amountFinal.
+              </div>
             </div>
           </div>
         </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__inner">
+        <span>LevPay Admin</span>
+        <span class="sep">•</span>
+        <span class="mono">vFinal</span>
       </div>
-
-      <!-- TAB: MONTHLY -->
-      <div id="tabMonthly" class="tab">
-        <div class="card">
-          <div class="card__head">
-            <div>
-              <div class="h1">Promo Bulanan (CODE)</div>
-              <div class="h2">User harus input kode yang sama persis.</div>
-            </div>
-            <div class="row gap">
-              <button id="btnMonthlySave" class="btn primary">Save</button>
-            </div>
-          </div>
-
-          <div class="card__body">
-            <div class="grid2">
-              <div class="card miniCard">
-                <div class="miniHead">
-                  <div class="miniTitle">Status Promo</div>
-                </div>
-                <div class="miniBody">
-                  <div class="row between">
-                    <div>
-                      <div class="k">Promo Enabled</div>
-                      <div class="s">ON/OFF promo bulanan.</div>
-                    </div>
-                    <label class="switch">
-                      <input id="m_enabled" type="checkbox" />
-                      <span class="track"></span>
-                    </label>
-                  </div>
-
-                  <div class="hr"></div>
-
-                  <div class="row between">
-                    <div>
-                      <div class="k">Unlimited Mode</div>
-                      <div class="s">ON = device whitelist di backend jadi unlimited. OFF = semua device 1×/bulan.</div>
-                    </div>
-                    <label class="switch glow">
-                      <input id="m_unlimitedEnabled" type="checkbox" />
-                      <span class="track"></span>
-                    </label>
-                  </div>
-
-                  <div class="hr"></div>
-
-                  <div class="row between">
-                    <div class="k">Whitelisted devices</div>
-                    <div class="mono pill" id="m_unlimitedCount">0</div>
-                  </div>
-
-                  <div class="row between">
-                    <div class="k">Updated</div>
-                    <div class="mono" id="m_updatedAt">—</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="card miniCard">
-                <div class="miniHead">
-                  <div class="miniTitle">Config</div>
-                </div>
-                <div class="miniBody">
-                  <div class="formGrid">
-                    <div class="field">
-                      <label class="label">Kode Bulanan</label>
-                      <input id="m_code" class="input mono" placeholder="PROMODEC" />
-                      <div class="hint">Wajib diisi. Kalau kosong, monthly gak akan pernah kepake.</div>
-                    </div>
-                    <div class="field">
-                      <label class="label">Nama</label>
-                      <input id="m_name" class="input" placeholder="PROMO BULANAN" />
-                    </div>
-
-                    <div class="field">
-                      <label class="label">Percent</label>
-                      <input id="m_percent" class="input mono" inputmode="numeric" placeholder="5" />
-                    </div>
-                    <div class="field">
-                      <label class="label">Max Rp</label>
-                      <input id="m_maxRp" class="input mono" inputmode="numeric" placeholder="2000" />
-                    </div>
-
-                    <div class="field full">
-                      <label class="label">Max Uses / bulan (kosong = ∞)</label>
-                      <input id="m_maxUses" class="input mono" inputmode="numeric" placeholder="10" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="split">
-              <div>
-                <div class="mini">curl</div>
-                <pre id="curlMonthly" class="codebox">—</pre>
-              </div>
-              <div>
-                <div class="mini">response</div>
-                <pre id="jsonMonthly" class="codebox">—</pre>
-              </div>
-            </div>
-
-            <div id="monthlyMsg" class="msg" style="display:none;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB: TOOLS -->
-      <div id="tabTools" class="tab">
-        <div class="card">
-          <div class="card__head">
-            <div>
-              <div class="h1">Tools: discount.apply</div>
-              <div class="h2">Buat ngetes voucher / monthly code langsung.</div>
-            </div>
-            <div class="row gap">
-              <button id="btnRunApply" class="btn primary">Run</button>
-            </div>
-          </div>
-
-          <div class="card__body">
-            <div class="formGrid">
-              <div class="field">
-                <label class="label">Amount</label>
-                <input id="t_amount" class="input mono" inputmode="numeric" value="10000" />
-              </div>
-              <div class="field">
-                <label class="label">Device ID</label>
-                <input id="t_deviceId" class="input mono" value="dev_test_1" />
-              </div>
-              <div class="field">
-                <label class="label">Kode (Voucher / Monthly)</label>
-                <input id="t_code" class="input mono" placeholder="VIPL / PROMODEC" />
-              </div>
-              <div class="field">
-                <label class="label">reserveTtlMs</label>
-                <input id="t_ttl" class="input mono" inputmode="numeric" value="360000" />
-              </div>
-            </div>
-
-            <div class="split">
-              <div>
-                <div class="mini">curl</div>
-                <pre id="curlApply" class="codebox">—</pre>
-              </div>
-              <div>
-                <div class="mini">response</div>
-                <pre id="jsonApply" class="codebox">—</pre>
-              </div>
-            </div>
-
-            <div class="hint">
-              Kalau tools kepotong tapi frontend tidak, biasanya frontend <b>belum pakai finalAmount</b> dari response buat create QR.
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </section>
-  </main>
+    </footer>
+  </div>
 
   <script src="./admin.js"></script>
 </body>

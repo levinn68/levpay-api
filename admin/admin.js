@@ -1,90 +1,93 @@
-// /admin/admin.js — FINAL (Premium UI, toggles real, no sha/device fields)
-// Admin page path: /admin/admin.html
-// API default: /api/levpay (ABSOLUTE, so ga bakal jadi admin.html/api/levpay)
-
+// admin/admin.js — FINAL (NO location.origin)
+// - API base pakai window.LevPayAPIBase (default https://levpay-api.vercel.app)
+// - Login gate wajib
 (() => {
-  const $ = (s) => document.querySelector(s);
+  const $ = (id) => document.getElementById(id);
 
-  // ====== CONFIG ======
-  const LS_ADMIN = "levpay_admin_key_v4";
-  const LS_API = "levpay_admin_api_v4";
+  // ===== CONFIG =====
+  const LS_ADMIN = "levpay_admin_key_final";
+  const API_HOST = String(window.LevPayAPIBase || "https://levpay-api.vercel.app").replace(/\/+$/, "");
+  const API_BASE = `${API_HOST}/api/levpay`;
 
-  // ✅ ABSOLUTE URL (anti "admin.html/api/levpay")
-  const DEFAULT_API = new URL("/api/levpay", location.origin).toString();
+  // ===== ELEMENTS =====
+  const gate = $("gate");
+  const adminKeyInput = $("adminKeyInput");
+  const btnLogin = $("btnLogin");
+  const btnLogout = $("btnLogout");
+  const loginMsg = $("loginMsg");
+  const apiBaseText = $("apiBaseText");
+  const apiBaseHint = $("apiBaseHint");
 
-  // Optional override via global:
-  // window.LevPayAdminAPI = "https://levpay-api.vercel.app/api/levpay"
-  const API = String(window.LevPayAdminAPI || localStorage.getItem(LS_API) || DEFAULT_API).trim();
+  const app = $("app");
+  const btnRefreshAll = $("btnRefreshAll");
+  const btnOpenGate = $("btnOpenGate");
+  const sysStatus = $("sysStatus");
+  const lastSync = $("lastSync");
 
-  // ====== ELEMENTS ======
-  const gate = $("#gate");
-  const gateInput = $("#adminKeyInput");
-  const gateBtn = $("#btnLogin");
-  const gateMsg = $("#gateMsg");
+  const navItems = Array.from(document.querySelectorAll(".navItem"));
+  const tabVouchers = $("tab-vouchers");
+  const tabMonthly = $("tab-monthly");
+  const tabSystem = $("tab-system");
+  const tabTools = $("tab-tools");
 
-  const topApiText = $("#apiText");
-  const btnLogout = $("#btnLogout");
-  const btnRefresh = $("#btnRefresh");
+  // pills
+  const pillVoucherCount = $("pillVoucherCount");
+  const pillMonthly = $("pillMonthly");
 
-  const navVouchers = $("#navVouchers");
-  const navMonthly = $("#navMonthly");
-  const navTools = $("#navTools");
+  // vouchers tab
+  const onlyActiveToggle = $("onlyActiveToggle");
+  const btnLoadVouchers = $("btnLoadVouchers");
+  const voucherTbody = $("voucherTbody");
+  const v_code = $("v_code");
+  const v_name = $("v_name");
+  const v_percent = $("v_percent");
+  const v_maxRp = $("v_maxRp");
+  const v_maxUses = $("v_maxUses");
+  const v_expiresAt = $("v_expiresAt");
+  const v_enabled = $("v_enabled");
+  const v_perDeviceMonth = $("v_perDeviceMonth");
+  const btnUpsertVoucher = $("btnUpsertVoucher");
+  const btnDeleteVoucher = $("btnDeleteVoucher");
+  const curlVoucher = $("curlVoucher");
+  const jsonVoucher = $("jsonVoucher");
+  const msgVoucher = $("msgVoucher");
 
-  const tabVouchers = $("#tabVouchers");
-  const tabMonthly = $("#tabMonthly");
-  const tabTools = $("#tabTools");
+  // monthly tab
+  const btnLoadMonthly = $("btnLoadMonthly");
+  const btnSaveMonthly = $("btnSaveMonthly");
+  const btnResetMonthly = $("btnResetMonthly");
+  const m_enabled = $("m_enabled");
+  const m_code = $("m_code");
+  const m_name = $("m_name");
+  const m_percent = $("m_percent");
+  const m_maxRp = $("m_maxRp");
+  const curlMonthly = $("curlMonthly");
+  const jsonMonthly = $("jsonMonthly");
+  const msgMonthly = $("msgMonthly");
 
-  // vouchers
-  const voucherTbody = $("#voucherTbody");
-  const vForm = {
-    code: $("#v_code"),
-    name: $("#v_name"),
-    enabled: $("#v_enabled"),
-    percent: $("#v_percent"),
-    maxRp: $("#v_maxRp"),
-    maxUses: $("#v_maxUses"),
-    expiresAt: $("#v_expiresAt"),
-    btnSave: $("#btnVoucherSave"),
-    btnDisable: $("#btnVoucherDisable"),
-    msg: $("#voucherMsg"),
-    curl: $("#curlVoucher"),
-    json: $("#jsonVoucher"),
-  };
+  // system tab
+  const btnLoadSystem = $("btnLoadSystem");
+  const btnSaveSystem = $("btnSaveSystem");
+  const s_unlimitedEnabled = $("s_unlimitedEnabled");
+  const s_keyCount = $("s_keyCount");
+  const jsonSystem = $("jsonSystem");
+  const msgSystem = $("msgSystem");
 
-  // monthly
-  const mForm = {
-    enabled: $("#m_enabled"),
-    unlimitedEnabled: $("#m_unlimitedEnabled"),
-    code: $("#m_code"),
-    name: $("#m_name"),
-    percent: $("#m_percent"),
-    maxRp: $("#m_maxRp"),
-    maxUses: $("#m_maxUses"),
-    count: $("#m_unlimitedCount"),
-    updatedAt: $("#m_updatedAt"),
-    btnSave: $("#btnMonthlySave"),
-    msg: $("#monthlyMsg"),
-    curl: $("#curlMonthly"),
-    json: $("#jsonMonthly"),
-  };
+  // tools tab
+  const btnRunApply = $("btnRunApply");
+  const t_amount = $("t_amount");
+  const t_deviceId = $("t_deviceId");
+  const t_code = $("t_code");
+  const curlApply = $("curlApply");
+  const jsonApply = $("jsonApply");
 
-  // tools (discount.apply tester)
-  const tForm = {
-    amount: $("#t_amount"),
-    deviceId: $("#t_deviceId"),
-    code: $("#t_code"),
-    ttl: $("#t_ttl"),
-    btnRun: $("#btnRunApply"),
-    curl: $("#curlApply"),
-    json: $("#jsonApply"),
-  };
-
-  // ====== STATE ======
-  let ADMIN = String(localStorage.getItem(LS_ADMIN) || "").trim();
+  // ===== STATE =====
+  let ADMIN = "";
   let vouchers = [];
   let monthly = null;
+  let system = null;
 
-  // ====== UTILS ======
+  // ===== UTILS =====
   const esc = (s) =>
     String(s ?? "")
       .replaceAll("&", "&amp;")
@@ -93,303 +96,306 @@
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
 
-  function setTab(name) {
-    navVouchers.classList.toggle("is-active", name === "vouchers");
-    navMonthly.classList.toggle("is-active", name === "monthly");
-    navTools.classList.toggle("is-active", name === "tools");
+  const nowText = () => new Date().toLocaleString("id-ID");
+  const sanitizeCode = (s) => String(s || "").trim().toUpperCase().replace(/\s+/g, "");
 
+  function setMsg(el, text, warn = false) {
+    el.textContent = text || "";
+    el.classList.toggle("msg--warn", !!warn);
+    el.classList.toggle("msg--ok", !!text && !warn);
+    el.style.display = text ? "block" : "none";
+  }
+
+  function setLocked(on) {
+    gate.classList.toggle("is-on", !!on);
+    gate.setAttribute("aria-hidden", on ? "false" : "true");
+    app.classList.toggle("is-locked", !!on);
+    sysStatus.textContent = on ? "LOCKED" : "ACTIVE";
+    btnLogout.disabled = on;
+  }
+
+  function setTab(name) {
+    navItems.forEach((b) => b.classList.toggle("is-active", b.dataset.tab === name));
     tabVouchers.classList.toggle("is-on", name === "vouchers");
     tabMonthly.classList.toggle("is-on", name === "monthly");
+    tabSystem.classList.toggle("is-on", name === "system");
     tabTools.classList.toggle("is-on", name === "tools");
   }
 
-  function setGate(on) {
-    gate.classList.toggle("is-on", !!on);
-    document.body.classList.toggle("locked", !!on);
-    if (on) setTimeout(() => gateInput?.focus?.(), 0);
-  }
-
-  function setMsg(el, txt, warn = false) {
-    el.textContent = txt || "";
-    el.classList.toggle("warn", !!warn);
-    el.classList.toggle("ok", !!txt && !warn);
-    el.style.display = txt ? "block" : "none";
-  }
-
-  function sanitizeCode(s) {
-    return String(s || "").trim().toUpperCase().replace(/\s+/g, "");
-  }
-
-  function hdrs(extra = {}) {
-    const h = { ...extra };
-    if (ADMIN) h["X-Admin-Key"] = ADMIN;
-    return h;
-  }
-
-  async function jfetch(url, opts) {
-    const r = await fetch(url, opts);
-    const text = await r.text();
-    let json = {};
-    try {
-      json = text ? JSON.parse(text) : {};
-    } catch {
-      json = { raw: text };
-    }
-    return { ok: r.ok, status: r.status, json };
-  }
-
   function endpoint(action) {
-    const u = new URL(API);
+    const u = new URL(API_BASE);
     u.searchParams.set("action", action);
     return u.toString();
   }
 
-  function curlFor(action, method, body) {
-    const hostVar = "$HOST";
-    const adminVar = "$ADMIN";
-    const basePath = new URL(API).pathname;
-
-    const heads = [];
-    if (action.startsWith("voucher.") || action.startsWith("monthly.")) heads.push(`-H "X-Admin-Key: ${adminVar}"`);
-    if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
-
-    const h = heads.length ? ` \\\n  ${heads.join(" \\\n  ")}` : "";
-    const data = method === "GET" ? "" : ` \\\n  -d '${JSON.stringify(body || {})}'`;
-
-    return `curl -sS -X ${method} "${hostVar}${basePath}?action=${action}"${h}${data} | jq`;
+  function isAdminAction(action) {
+    return /^(voucher\.|monthly\.|system\.)/.test(action);
   }
 
-  // ====== API calls ======
-  async function ping() {
-    topApiText.textContent = API;
-    const r = await jfetch(endpoint("ping"), { method: "GET" });
-    if (!r.ok) throw new Error(r.json?.error || `ping error ${r.status}`);
+  async function jfetch(url, opts) {
+    const r = await fetch(url, opts);
+    const txt = await r.text();
+    let json = {};
+    try {
+      json = txt ? JSON.parse(txt) : {};
+    } catch {
+      json = { raw: txt };
+    }
+    return { ok: r.ok, status: r.status, json };
+  }
+
+  function curlFor(action, method, body) {
+    const HOSTVAR = "$HOST";
+    const ADMINVAR = "$ADMIN";
+    const heads = [];
+    if (isAdminAction(action)) heads.push(`-H "X-Admin-Key: ${ADMINVAR}"`);
+    if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
+    const h = heads.length ? ` \\\n  ${heads.join(" \\\n  ")}` : "";
+    const data = method === "GET" || body == null ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
+    const basePath = new URL(API_BASE).pathname;
+    return `curl -sS -X ${method} "${HOSTVAR}${basePath}?action=${action}"${h}${data} | jq`;
+  }
+
+  async function callAction(action, { method = "GET", body = null } = {}) {
+    const headers = {};
+    if (method !== "GET") headers["Content-Type"] = "application/json";
+    if (isAdminAction(action)) headers["X-Admin-Key"] = ADMIN;
+
+    return jfetch(endpoint(action), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  // ===== LOADERS =====
+  async function pingPublic() {
+    apiBaseText.textContent = API_BASE;
+    apiBaseHint.textContent = API_BASE;
+    const r = await callAction("ping", { method: "GET" });
+    if (!r.ok) throw new Error(`API ping error (${r.status})`);
     return r.json;
   }
 
-  async function validateAdminKey() {
-    const r = await jfetch(endpoint("voucher.list"), { method: "GET", headers: hdrs() });
+  async function validateKey() {
+    const r = await callAction("voucher.list", { method: "GET" });
     if (r.status === 401) return false;
     return r.ok;
   }
 
   async function loadVouchers() {
-    const r = await jfetch(endpoint("voucher.list"), { method: "GET", headers: hdrs() });
-    if (!r.ok) throw new Error(r.json?.error || `voucher.list ${r.status}`);
+    const r = await callAction("voucher.list", { method: "GET" });
+    if (!r.ok) throw new Error(`voucher.list error (${r.status})`);
+    const raw = r.json?.data ?? r.json ?? [];
+    const list = Array.isArray(raw) ? raw : [];
 
-    const arr = Array.isArray(r.json?.data) ? r.json.data : [];
-    vouchers = arr
+    vouchers = list
       .map((v) => ({
-        code: sanitizeCode(v.code),
+        code: sanitizeCode(v.code || ""),
         name: String(v.name || ""),
         enabled: v.enabled !== false,
+        perDeviceMonth: v.perDeviceMonth !== false,
         percent: Number(v.percent || 0),
         maxRp: Number(v.maxRp || 0),
         maxUses: v.maxUses == null ? null : Number(v.maxUses),
-        uses: Number(v.uses || 0),
         expiresAt: v.expiresAt || null,
         updatedAt: v.updatedAt || null,
+        uses: Number(v.uses || 0),
       }))
       .filter((v) => v.code);
 
-    renderVoucherTable();
+    const on = vouchers.filter((v) => v.enabled).length;
+    pillVoucherCount.textContent = String(on);
+    return vouchers;
   }
 
   async function loadMonthly() {
-    const r = await jfetch(endpoint("monthly.get"), { method: "GET", headers: hdrs() });
-    if (!r.ok) throw new Error(r.json?.error || `monthly.get ${r.status}`);
-    monthly = r.json?.data || null;
+    const r = await callAction("monthly.get", { method: "GET" });
+    if (!r.ok) throw new Error(`monthly.get error (${r.status})`);
+    monthly = r.json?.data ?? r.json ?? null;
+    if (!monthly || typeof monthly !== "object") throw new Error("monthly invalid");
 
-    // fill form
-    mForm.enabled.checked = !!monthly.enabled;
-    mForm.unlimitedEnabled.checked = !!monthly.unlimitedEnabled;
-
-    mForm.code.value = String(monthly.code || "");
-    mForm.name.value = String(monthly.name || "");
-    mForm.percent.value = String(Number(monthly.percent || 0));
-    mForm.maxRp.value = String(Number(monthly.maxRp || 0));
-    mForm.maxUses.value = monthly.maxUses == null ? "" : String(Number(monthly.maxUses));
-    mForm.count.textContent = String(Number(monthly.unlimitedCount || 0));
-    mForm.updatedAt.textContent = monthly.updatedAt ? new Date(monthly.updatedAt).toLocaleString("id-ID") : "—";
-
-    // preview curl
-    monthlyCurlPreview();
+    pillMonthly.textContent = monthly.enabled ? "ON" : "OFF";
+    m_enabled.checked = !!monthly.enabled;
+    m_code.value = String(monthly.code ?? "");
+    m_name.value = String(monthly.name ?? "");
+    m_percent.value = String(Number(monthly.percent ?? 0));
+    m_maxRp.value = String(Number(monthly.maxRp ?? 0));
+    return monthly;
   }
 
-  // ===== UI render =====
+  async function loadSystem() {
+    const r = await callAction("system.get", { method: "GET" });
+    if (!r.ok) throw new Error(`system.get error (${r.status})`);
+    system = r.json?.data ?? r.json ?? null;
+    if (!system || typeof system !== "object") throw new Error("system invalid");
+
+    s_unlimitedEnabled.checked = !!system.unlimitedEnabled;
+    s_keyCount.textContent = String(system.unlimitedKeysCount || 0);
+    jsonSystem.textContent = JSON.stringify(system, null, 2);
+    return system;
+  }
+
+  // ===== RENDER =====
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "—";
+    return d.toLocaleString("id-ID");
+  }
+
+  function fmtRp(n) {
+    const x = Number(n || 0);
+    if (!x) return "∞";
+    return x.toLocaleString("id-ID");
+  }
+
+  function fmtUsesPair(used, max) {
+    const u = Number(used || 0);
+    if (max == null) return `${u} / ∞`;
+    const m = Number(max);
+    if (!Number.isFinite(m) || m <= 0) return `${u} / ∞`;
+    return `${u} / ${m}`;
+  }
+
   function renderVoucherTable() {
-    if (!vouchers.length) {
-      voucherTbody.innerHTML = `<tr><td colspan="7" class="muted">Belum ada voucher.</td></tr>`;
+    const onlyActive = !!onlyActiveToggle.checked;
+    const list = onlyActive ? vouchers.filter((v) => v.enabled) : vouchers.slice();
+
+    if (!list.length) {
+      voucherTbody.innerHTML = `<tr><td colspan="8" class="mutedCell">Belum ada data.</td></tr>`;
       return;
     }
 
-    voucherTbody.innerHTML = vouchers
-      .slice()
+    voucherTbody.innerHTML = list
       .sort((a, b) => a.code.localeCompare(b.code))
       .map((v) => {
-        const exp = v.expiresAt ? new Date(v.expiresAt).toLocaleString("id-ID") : "—";
-        const maxRp = v.maxRp ? v.maxRp.toLocaleString("id-ID") : "∞";
-        const maxUses = v.maxUses == null ? "∞" : String(v.maxUses);
+        const active = v.enabled
+          ? `<span class="badge on">ON</span>`
+          : `<span class="badge off">OFF</span>`;
+        const exp = v.expiresAt ? fmtDate(v.expiresAt) : "—";
         return `
-        <tr>
-          <td class="mono">${esc(v.code)}</td>
-          <td>${esc(v.name || v.code)}</td>
-          <td>
-            <label class="switch">
-              <input type="checkbox" data-toggle="${esc(v.code)}" ${v.enabled ? "checked" : ""}/>
-              <span class="track"></span>
-            </label>
-          </td>
-          <td class="mono">${esc(String(v.percent))}%</td>
-          <td class="mono">${esc(maxRp)}</td>
-          <td class="mono">${esc(String(v.uses))} / ${esc(maxUses)}</td>
-          <td class="mono">${esc(exp)}</td>
-          <td class="right">
-            <button class="btn ghost sm" data-edit="${esc(v.code)}">Edit</button>
-          </td>
-        </tr>
-      `;
+          <tr>
+            <td class="mono">${esc(v.code)}</td>
+            <td>${esc(v.name || v.code)}</td>
+            <td>${active}</td>
+            <td class="mono">${esc(String(v.percent))}%</td>
+            <td class="mono">${esc(fmtRp(v.maxRp))}</td>
+            <td class="mono">${esc(fmtUsesPair(v.uses, v.maxUses))}</td>
+            <td class="mono">${esc(exp)}</td>
+            <td class="tRight">
+              <button class="btn btn--ghost" data-pick="${esc(v.code)}" type="button">Edit</button>
+            </td>
+          </tr>
+        `;
       })
       .join("");
 
-    voucherTbody.querySelectorAll("button[data-edit]").forEach((b) => {
-      b.addEventListener("click", () => pickVoucher(b.getAttribute("data-edit")));
-    });
-
-    voucherTbody.querySelectorAll("input[data-toggle]").forEach((inp) => {
-      inp.addEventListener("change", async () => {
-        const code = inp.getAttribute("data-toggle");
+    voucherTbody.querySelectorAll("button[data-pick]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const code = btn.getAttribute("data-pick");
         if (!code) return;
-        const enabled = !!inp.checked;
+        const v = vouchers.find((x) => x.code === code);
+        if (!v) return;
+
+        v_code.value = v.code;
+        v_name.value = v.name || v.code;
+        v_percent.value = String(v.percent || 0);
+        v_maxRp.value = String(v.maxRp || 0);
+        v_maxUses.value = v.maxUses == null ? "" : String(v.maxUses);
+        v_enabled.checked = !!v.enabled;
+        v_perDeviceMonth.checked = !!v.perDeviceMonth;
+
+        if (v.expiresAt) {
+          const d = new Date(v.expiresAt);
+          if (Number.isFinite(d.getTime())) {
+            const pad = (n) => String(n).padStart(2, "0");
+            v_expiresAt.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+              d.getHours()
+            )}:${pad(d.getMinutes())}`;
+          } else v_expiresAt.value = "";
+        } else v_expiresAt.value = "";
+
         try {
-          const body = { code, enabled };
-          const r = await jfetch(endpoint("voucher.disable"), {
-            method: "POST",
-            headers: hdrs({ "Content-Type": "application/json" }),
-            body: JSON.stringify(body),
-          });
-          if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
-          // update local
-          const v = vouchers.find((x) => x.code === code);
-          if (v) v.enabled = enabled;
-          setMsg(vForm.msg, `Voucher ${code} => ${enabled ? "ON" : "OFF"} ✅`);
-        } catch (e) {
-          inp.checked = !enabled;
-          setMsg(vForm.msg, `Gagal toggle: ${e?.message || e}`, true);
-        }
+          curlVoucher.textContent = curlForVoucherUpsert();
+        } catch {}
       });
     });
   }
 
-  function pickVoucher(code) {
-    const v = vouchers.find((x) => x.code === code);
-    if (!v) return;
-
-    vForm.code.value = v.code;
-    vForm.name.value = v.name || v.code;
-    vForm.enabled.checked = !!v.enabled;
-    vForm.percent.value = String(v.percent || 0);
-    vForm.maxRp.value = String(v.maxRp || 0);
-    vForm.maxUses.value = v.maxUses == null ? "" : String(v.maxUses);
-
-    // datetime-local
-    if (v.expiresAt) {
-      const d = new Date(v.expiresAt);
-      if (Number.isFinite(d.getTime())) {
-        const pad = (n) => String(n).padStart(2, "0");
-        vForm.expiresAt.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-          d.getHours()
-        )}:${pad(d.getMinutes())}`;
-      }
-    } else {
-      vForm.expiresAt.value = "";
-    }
-
-    voucherCurlPreview();
-    setTab("vouchers");
-    vForm.code.focus();
-  }
-
   function buildVoucherPayload() {
-    const code = sanitizeCode(vForm.code.value);
+    const code = sanitizeCode(v_code.value);
     if (!code) throw new Error("Code wajib");
-
-    const percent = Number(String(vForm.percent.value || "").trim());
+    const percent = Number(String(v_percent.value || "").trim());
     if (!Number.isFinite(percent)) throw new Error("Percent wajib angka");
 
     const payload = {
       code,
-      enabled: !!vForm.enabled.checked,
-      name: String(vForm.name.value || "").trim() || code,
-      percent: clamp(percent, 0, 100),
-      maxRp: Math.max(0, Number(String(vForm.maxRp.value || "0").trim() || "0")),
+      enabled: !!v_enabled.checked,
+      perDeviceMonth: !!v_perDeviceMonth.checked,
+      name: String(v_name.value || "").trim() || code,
+      percent: Math.max(0, Math.min(100, percent)),
+      maxRp: Math.max(0, Number(String(v_maxRp.value || "0").trim() || "0")),
     };
 
-    const mu = String(vForm.maxUses.value || "").trim();
-    payload.maxUses = mu === "" ? null : Number(mu);
+    const mu = String(v_maxUses.value || "").trim();
+    if (mu !== "") {
+      const n = Number(mu);
+      if (Number.isFinite(n) && n > 0) payload.maxUses = n;
+    } else payload.maxUses = null;
 
-    const expRaw = String(vForm.expiresAt.value || "").trim();
+    const expRaw = String(v_expiresAt.value || "").trim();
     if (expRaw) {
       const d = new Date(expRaw);
       if (Number.isFinite(d.getTime())) payload.expiresAt = d.toISOString();
-    } else {
-      payload.expiresAt = null;
-    }
+    } else payload.expiresAt = null;
+
     return payload;
   }
 
-  function voucherCurlPreview() {
-    try {
-      const body = buildVoucherPayload();
-      vForm.curl.textContent = curlFor("voucher.upsert", "POST", body);
-    } catch {
-      vForm.curl.textContent = "—";
-    }
+  function curlForVoucherUpsert() {
+    const body = buildVoucherPayload();
+    return curlFor("voucher.upsert", "POST", body);
   }
 
-  function monthlyCurlPreview() {
-    const body = {
-      enabled: !!mForm.enabled.checked,
-      unlimitedEnabled: !!mForm.unlimitedEnabled.checked,
-      code: sanitizeCode(mForm.code.value),
-      name: String(mForm.name.value || "").trim(),
-      percent: Number(String(mForm.percent.value || "0").trim()),
-      maxRp: Number(String(mForm.maxRp.value || "0").trim()),
-      maxUses: String(mForm.maxUses.value || "").trim() === "" ? null : Number(mForm.maxUses.value),
-    };
-    mForm.curl.textContent = curlFor("monthly.set", "POST", body);
+  // ===== ACTIONS =====
+  async function refreshAll() {
+    setMsg(loginMsg, "");
+    setMsg(msgVoucher, "");
+    setMsg(msgMonthly, "");
+    setMsg(msgSystem, "");
+
+    await pingPublic();
+    await loadVouchers();
+    await loadMonthly();
+    await loadSystem();
+
+    renderVoucherTable();
+    lastSync.textContent = nowText();
   }
 
-  function toolsCurlPreview() {
-    const body = {
-      amount: Number(String(tForm.amount.value || "0").trim()),
-      deviceId: String(tForm.deviceId.value || "").trim(),
-      voucher: String(tForm.code.value || "").trim(),
-      reserveTtlMs: Number(String(tForm.ttl.value || "360000").trim()),
-    };
-    tForm.curl.textContent = curlFor("discount.apply", "POST", body);
-  }
-
-  // ===== Actions =====
   async function doLogin() {
-    setMsg(gateMsg, "");
-    const key = String(gateInput.value || "").trim();
-    if (!key) return setMsg(gateMsg, "Admin Key kosong.", true);
+    const key = String(adminKeyInput.value || "").trim();
+    if (!key) {
+      setMsg(loginMsg, "Admin Key kosong.", true);
+      return;
+    }
 
     ADMIN = key;
     localStorage.setItem(LS_ADMIN, ADMIN);
 
     try {
-      await ping();
-      const ok = await validateAdminKey();
+      await pingPublic();
+      const ok = await validateKey();
       if (!ok) {
-        setMsg(gateMsg, "Admin Key salah (401).", true);
+        setMsg(loginMsg, "Unauthorized (401). Admin key salah.", true);
         return;
       }
-      setGate(false);
+      setLocked(false);
+      setMsg(loginMsg, "");
       await refreshAll();
     } catch (e) {
-      setMsg(gateMsg, `Login gagal: ${e?.message || e}`, true);
+      setMsg(loginMsg, `Login gagal: ${e?.message || e}`, true);
     }
   }
 
@@ -397,174 +403,270 @@
     if (!confirm("Logout admin?")) return;
     ADMIN = "";
     localStorage.removeItem(LS_ADMIN);
-    setGate(true);
-    gateInput.value = "";
-    setMsg(gateMsg, "Logout ✅");
+    adminKeyInput.value = "";
+    setLocked(true);
+    setMsg(loginMsg, "Logout ✅");
   }
 
-  async function refreshAll() {
-    setMsg(vForm.msg, "");
-    setMsg(mForm.msg, "");
-    await ping();
-    await loadVouchers();
-    await loadMonthly();
-  }
-
-  async function saveVoucher() {
+  async function upsertVoucher() {
     try {
       const body = buildVoucherPayload();
-      vForm.curl.textContent = curlFor("voucher.upsert", "POST", body);
+      curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
 
-      const r = await jfetch(endpoint("voucher.upsert"), {
-        method: "POST",
-        headers: hdrs({ "Content-Type": "application/json" }),
-        body: JSON.stringify(body),
-      });
-      vForm.json.textContent = JSON.stringify(r.json, null, 2);
+      const r = await callAction("voucher.upsert", { method: "POST", body });
+      jsonVoucher.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      setMsg(vForm.msg, "Voucher saved ✅");
+      setMsg(msgVoucher, "Voucher disimpan ✅");
       await loadVouchers();
+      renderVoucherTable();
     } catch (e) {
-      setMsg(vForm.msg, `Gagal: ${e?.message || e}`, true);
+      setMsg(msgVoucher, `Gagal: ${e?.message || e}`, true);
     }
   }
 
-  async function disableVoucher() {
+  async function deleteVoucher() {
     try {
-      const code = sanitizeCode(vForm.code.value);
+      const code = sanitizeCode(v_code.value);
       if (!code) throw new Error("Code kosong");
-      if (!confirm(`Disable voucher ${code}?`)) return;
+      if (!confirm(`Hapus voucher ${code}? (nggak bisa dibalikin)`)) return;
 
-      const body = { code, enabled: false };
-      vForm.curl.textContent = curlFor("voucher.disable", "POST", body);
+      const body = { code };
+      curlVoucher.textContent = curlFor("voucher.delete", "POST", body);
 
-      const r = await jfetch(endpoint("voucher.disable"), {
-        method: "POST",
-        headers: hdrs({ "Content-Type": "application/json" }),
-        body: JSON.stringify(body),
-      });
-      vForm.json.textContent = JSON.stringify(r.json, null, 2);
+      const r = await callAction("voucher.delete", { method: "POST", body });
+      jsonVoucher.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      setMsg(vForm.msg, "Voucher OFF ✅");
+      setMsg(msgVoucher, "Voucher dihapus ✅");
+      // clear form
+      v_code.value = "";
+      v_name.value = "";
+      v_percent.value = "";
+      v_maxRp.value = "0";
+      v_maxUses.value = "";
+      v_expiresAt.value = "";
+      v_enabled.checked = true;
+      v_perDeviceMonth.checked = true;
+
       await loadVouchers();
+      renderVoucherTable();
     } catch (e) {
-      setMsg(vForm.msg, `Gagal: ${e?.message || e}`, true);
+      setMsg(msgVoucher, `Gagal: ${e?.message || e}`, true);
     }
   }
 
-  async function saveMonthly() {
+  async function saveMonthly(resetUsage = false) {
     try {
       const body = {
-        enabled: !!mForm.enabled.checked,
-        unlimitedEnabled: !!mForm.unlimitedEnabled.checked, // ✅ GLOBAL toggle
-        code: sanitizeCode(mForm.code.value),
-        name: String(mForm.name.value || "").trim(),
-        percent: Number(String(mForm.percent.value || "0").trim()),
-        maxRp: Number(String(mForm.maxRp.value || "0").trim()),
-        maxUses: String(mForm.maxUses.value || "").trim() === "" ? null : Number(mForm.maxUses.value),
+        enabled: !!m_enabled.checked,
+        code: sanitizeCode(m_code.value),
+        name: String(m_name.value || "").trim(),
+        percent: Number(String(m_percent.value || "0").trim()),
+        maxRp: Number(String(m_maxRp.value || "0").trim()),
       };
+      if (resetUsage) body.resetUsage = true;
 
-      if (!body.code) throw new Error("Kode promo bulanan wajib diisi (monthly butuh CODE).");
+      curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
-      mForm.curl.textContent = curlFor("monthly.set", "POST", body);
-
-      const r = await jfetch(endpoint("monthly.set"), {
-        method: "POST",
-        headers: hdrs({ "Content-Type": "application/json" }),
-        body: JSON.stringify(body),
-      });
-      mForm.json.textContent = JSON.stringify(r.json, null, 2);
+      const r = await callAction("monthly.set", { method: "POST", body });
+      jsonMonthly.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      setMsg(mForm.msg, "Monthly saved ✅");
+      setMsg(msgMonthly, resetUsage ? "Monthly reset ✅" : "Monthly updated ✅");
       await loadMonthly();
     } catch (e) {
-      setMsg(mForm.msg, `Gagal: ${e?.message || e}`, true);
+      setMsg(msgMonthly, `Gagal: ${e?.message || e}`, true);
+    }
+  }
+
+  async function saveSystem() {
+    try {
+      const body = { unlimitedEnabled: !!s_unlimitedEnabled.checked };
+      const r = await callAction("system.set", { method: "POST", body });
+      jsonSystem.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
+      if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
+      setMsg(msgSystem, "System updated ✅");
+      await loadSystem();
+    } catch (e) {
+      setMsg(msgSystem, `Gagal: ${e?.message || e}`, true);
     }
   }
 
   async function runApply() {
     try {
       const body = {
-        amount: Number(String(tForm.amount.value || "0").trim()),
-        deviceId: String(tForm.deviceId.value || "").trim(),
-        voucher: String(tForm.code.value || "").trim(),
-        reserveTtlMs: Number(String(tForm.ttl.value || "360000").trim()),
+        amount: Number(String(t_amount.value || "0").trim()),
+        deviceId: String(t_deviceId.value || "").trim(),
+        code: String(t_code.value || "").trim(),
       };
+      curlApply.textContent = curlFor("discount.apply", "POST", body);
 
-      toolsCurlPreview();
-
-      const r = await jfetch(endpoint("discount.apply"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      tForm.json.textContent = JSON.stringify(r.json, null, 2);
+      const r = await callAction("discount.apply", { method: "POST", body });
+      jsonApply.textContent = JSON.stringify({ ok: r.ok, status: r.status, data: r.json }, null, 2);
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
     } catch (e) {
-      tForm.json.textContent = JSON.stringify({ ok: false, error: e?.message || String(e) }, null, 2);
+      jsonApply.textContent = JSON.stringify({ ok: false, error: e?.message || String(e) }, null, 2);
     }
   }
 
-  // ===== Events =====
-  navVouchers.addEventListener("click", () => setTab("vouchers"));
-  navMonthly.addEventListener("click", () => setTab("monthly"));
-  navTools.addEventListener("click", () => setTab("tools"));
+  // ===== EVENTS =====
+  navItems.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
-  gateBtn.addEventListener("click", doLogin);
-  gateInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doLogin();
-  });
-
-  btnLogout.addEventListener("click", doLogout);
-  btnRefresh.addEventListener("click", async () => {
+  btnOpenGate.addEventListener("click", () => setLocked(true));
+  btnRefreshAll.addEventListener("click", async () => {
     try {
       await refreshAll();
     } catch (e) {
-      alert(`Refresh error: ${e?.message || e}`);
+      setMsg(loginMsg, `Refresh error: ${e?.message || e}`, true);
+      setLocked(true);
     }
   });
 
-  vForm.btnSave.addEventListener("click", saveVoucher);
-  vForm.btnDisable.addEventListener("click", disableVoucher);
+  btnLogin.addEventListener("click", doLogin);
+  btnLogout.addEventListener("click", doLogout);
 
-  // live preview
-  [vForm.code, vForm.name, vForm.percent, vForm.maxRp, vForm.maxUses, vForm.expiresAt].forEach((el) =>
-    el.addEventListener("input", voucherCurlPreview)
-  );
-  vForm.enabled.addEventListener("change", voucherCurlPreview);
+  // enter to login
+  adminKeyInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doLogin();
+  });
 
-  [mForm.enabled, mForm.unlimitedEnabled, mForm.code, mForm.name, mForm.percent, mForm.maxRp, mForm.maxUses].forEach((el) =>
-    el.addEventListener("input", monthlyCurlPreview)
-  );
-  mForm.btnSave.addEventListener("click", saveMonthly);
+  btnLoadVouchers.addEventListener("click", async () => {
+    try {
+      await loadVouchers();
+      renderVoucherTable();
+      lastSync.textContent = nowText();
+    } catch (e) {
+      setMsg(msgVoucher, `Load error: ${e?.message || e}`, true);
+    }
+  });
 
-  [tForm.amount, tForm.deviceId, tForm.code, tForm.ttl].forEach((el) => el.addEventListener("input", toolsCurlPreview));
-  tForm.btnRun.addEventListener("click", runApply);
+  onlyActiveToggle.addEventListener("change", renderVoucherTable);
 
-  // ===== Init =====
-  (async function init() {
-    topApiText.textContent = API;
+  btnUpsertVoucher.addEventListener("click", upsertVoucher);
+  btnDeleteVoucher.addEventListener("click", deleteVoucher);
+
+  btnLoadMonthly.addEventListener("click", async () => {
+    try {
+      await loadMonthly();
+      lastSync.textContent = nowText();
+    } catch (e) {
+      setMsg(msgMonthly, `Load error: ${e?.message || e}`, true);
+    }
+  });
+
+  btnSaveMonthly.addEventListener("click", () => saveMonthly(false));
+  btnResetMonthly.addEventListener("click", () => {
+    if (confirm("Reset usage promo bulanan?")) saveMonthly(true);
+  });
+
+  btnLoadSystem.addEventListener("click", async () => {
+    try {
+      await loadSystem();
+      lastSync.textContent = nowText();
+    } catch (e) {
+      setMsg(msgSystem, `Load error: ${e?.message || e}`, true);
+    }
+  });
+
+  btnSaveSystem.addEventListener("click", saveSystem);
+
+  btnRunApply.addEventListener("click", runApply);
+
+  // live curl previews
+  [v_code, v_name, v_percent, v_maxRp, v_maxUses, v_expiresAt].forEach((el) => {
+    el.addEventListener("input", () => {
+      try {
+        curlVoucher.textContent = curlForVoucherUpsert();
+      } catch {}
+    });
+  });
+  [v_enabled, v_perDeviceMonth].forEach((el) => {
+    el.addEventListener("change", () => {
+      try {
+        curlVoucher.textContent = curlForVoucherUpsert();
+      } catch {}
+    });
+  });
+
+  [m_enabled, m_code, m_name, m_percent, m_maxRp].forEach((el) => {
+    el.addEventListener("input", () => {
+      const body = {
+        enabled: !!m_enabled.checked,
+        code: sanitizeCode(m_code.value),
+        name: String(m_name.value || "").trim(),
+        percent: Number(String(m_percent.value || "0").trim()),
+        maxRp: Number(String(m_maxRp.value || "0").trim()),
+      };
+      curlMonthly.textContent = curlFor("monthly.set", "POST", body);
+    });
+  });
+
+  [t_amount, t_deviceId, t_code].forEach((el) => {
+    el.addEventListener("input", () => {
+      const body = {
+        amount: Number(String(t_amount.value || "0").trim()),
+        deviceId: String(t_deviceId.value || "").trim(),
+        code: String(t_code.value || "").trim(),
+      };
+      curlApply.textContent = curlFor("discount.apply", "POST", body);
+    });
+  });
+
+  // ===== INIT =====
+  async function init() {
+    apiBaseText.textContent = API_BASE;
+    apiBaseHint.textContent = API_BASE;
+
+    // default curls
+    curlVoucher.textContent = curlFor("voucher.upsert", "POST", {
+      code: "VIPL",
+      enabled: true,
+      perDeviceMonth: true,
+      name: "VIP LEVEL",
+      percent: 10,
+      maxRp: 0,
+      maxUses: null,
+      expiresAt: null,
+    });
+
+    curlMonthly.textContent = curlFor("monthly.set", "POST", {
+      enabled: true,
+      code: "KLZ",
+      name: "PROMO BULANAN",
+      percent: 5,
+      maxRp: 2000,
+    });
+
+    curlApply.textContent = curlFor("discount.apply", "POST", {
+      amount: 3000,
+      deviceId: "dev_rog6pro",
+      code: "KLZ",
+    });
+
     setTab("vouchers");
 
+    ADMIN = String(localStorage.getItem(LS_ADMIN) || "").trim();
     if (!ADMIN) {
-      setGate(true);
+      setLocked(true);
       return;
     }
 
+    adminKeyInput.value = ADMIN;
+
     try {
-      await ping();
-      const ok = await validateAdminKey();
+      await pingPublic();
+      const ok = await validateKey();
       if (!ok) {
-        setGate(true);
+        setLocked(true);
         return;
       }
-      setGate(false);
+      setLocked(false);
       await refreshAll();
     } catch {
-      setGate(true);
+      setLocked(true);
     }
-  })();
+  }
+
+  init();
 })();
