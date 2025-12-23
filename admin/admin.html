@@ -8,7 +8,7 @@
 </head>
 
 <body>
-  <!-- Blur gate -->
+  <!-- Login Gate (WAJIB) -->
   <div id="gate" class="gate is-on" aria-hidden="false">
     <div class="gate__backdrop"></div>
     <div class="gate__panel">
@@ -22,7 +22,7 @@
 
       <div class="gate__form">
         <label class="label">Admin Key</label>
-        <input id="adminKeyInput" class="input" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
+        <input id="adminKeyInput" class="input" placeholder="Admin Key" type="password" autocomplete="off" />
 
         <div class="row row--gap">
           <button id="btnLogin" class="btn btn--primary">Masuk</button>
@@ -30,8 +30,9 @@
         </div>
 
         <div class="hint">
-          Default API:
+          API otomatis pakai:
           <code class="mono">/api/levpay</code>
+          <div class="hint">Kalau admin key salah → 401.</div>
         </div>
 
         <div id="loginMsg" class="msg" style="display:none;"></div>
@@ -85,7 +86,7 @@
           </div>
           <div class="divider"></div>
           <div class="hint">
-            Tips: kalau diskon di tools bisa tapi di frontend nggak, biasanya frontend createqr belum pakai hasil diskon untuk amount.
+            Diskon hanya kepake kalau user input <b>KODE</b> dan cocok (voucher / promo bulanan).
           </div>
         </div>
       </aside>
@@ -163,7 +164,7 @@
                   <div class="field">
                     <label class="label">Max Uses (kosong = unlimited)</label>
                     <input id="v_maxUses" class="input" inputmode="numeric" placeholder="contoh: 5" />
-                    <div class="hint">Global limit total pemakaian voucher (paid). Misal 5 ⇒ hanya 5 transaksi paid.</div>
+                    <div class="hint">Global limit total pemakaian voucher (paid).</div>
                   </div>
 
                   <div class="field">
@@ -209,7 +210,7 @@
               <div class="card__head">
                 <div>
                   <div class="card__title">Promo Bulanan</div>
-                  <div class="card__sub">1× per device per bulan (kecuali unlimited deviceKey). Promo ini pakai KODE.</div>
+                  <div class="card__sub"><b>Wajib KODE</b>. 1× per device per bulan (kecuali unlimited).</div>
                 </div>
                 <div class="row row--gap">
                   <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
@@ -229,7 +230,7 @@
                   <div class="field">
                     <label class="label">Kode Promo Bulanan</label>
                     <input id="m_code" class="input mono" placeholder="contoh: PROMODEC" />
-                    <div class="hint">User harus ngetik kode ini di input diskon LP#2.</div>
+                    <div class="hint">Kalau kosong / user tidak input kode ini → tidak ada diskon.</div>
                   </div>
 
                   <div class="field">
@@ -250,7 +251,7 @@
                   <div class="field field--full">
                     <label class="label">Max Uses / bulan (kosong = unlimited)</label>
                     <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 10" />
-                    <div class="hint">Limit total pemakaian promo per bulan (global). Device tetap 1×/bulan.</div>
+                    <div class="hint">Global limit per bulan (semua device). Unlimited device tetap bisa bypass limit per-device.</div>
                   </div>
                 </div>
 
@@ -272,8 +273,8 @@
             <div class="card">
               <div class="card__head">
                 <div>
-                  <div class="card__title">Unlimited DeviceKey</div>
-                  <div class="card__sub">Tambah deviceKey (SHA256) untuk bypass limit bulanan.</div>
+                  <div class="card__title">Unlimited Device</div>
+                  <div class="card__sub">Masukkan Device ID → server hitung deviceKey (SHA-256) secara aman.</div>
                 </div>
               </div>
 
@@ -285,14 +286,9 @@
                   </div>
 
                   <div class="field field--full">
-                    <label class="label">Device Pepper</label>
-                    <input id="dev_pepper" class="input mono" placeholder="isi pepper yang sama dengan backend (DEVICE_PEPPER)" />
-                    <div class="hint">Pepper harus sama dengan backend. Kalau beda, deviceKey juga beda.</div>
-                  </div>
-
-                  <div class="field field--full">
-                    <label class="label">Generated deviceKey (SHA-256)</label>
+                    <label class="label">deviceKey (SHA-256, auto dari server)</label>
                     <input id="dev_key" class="input mono" readonly />
+                    <div class="hint">Pepper tidak pernah ditampilkan di admin UI.</div>
                   </div>
                 </div>
 
@@ -328,7 +324,7 @@
             <div class="card__head">
               <div>
                 <div class="card__title">Tools</div>
-                <div class="card__sub">Test discount.apply (reserve slot).</div>
+                <div class="card__sub">Test <span class="mono">discount.apply</span> (reserve slot).</div>
               </div>
               <div class="row row--gap">
                 <button id="btnRunApply" class="btn btn--primary">Run</button>
@@ -367,7 +363,7 @@
               </div>
 
               <div class="hint">
-                Kalau tools bisa tapi frontend nggak kepotong, biasanya frontend createqr belum pakai hasil <span class="mono">discount.apply</span> untuk final amount.
+                Kalau kode kosong / salah → diskon 0 (sesuai rule: harus input kode).
               </div>
             </div>
           </div>
@@ -380,7 +376,7 @@
       <div class="footer__inner">
         <span>LevPay Admin</span>
         <span class="sep">•</span>
-        <span class="mono">v1</span>
+        <span class="mono">premium</span>
       </div>
     </footer>
   </div>

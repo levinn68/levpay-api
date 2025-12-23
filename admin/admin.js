@@ -1,18 +1,18 @@
-// admin.js — LevPay Admin (router: /api/levpay?action=...)
-// - Voucher custom & promo bulanan (based on CODE)
-// - Unlimited deviceKey list for monthly bypass
+// admin/admin.js — FINAL (NO location.origin)
+// API hardcode ke domain API biar admin bisa dibuka dari mana aja.
+
 (() => {
   const $ = (id) => document.getElementById(id);
 
   // ====== CONFIG ======
-  const LS_ADMIN = "levpay_admin_key_v3";
-  const API_BASE_DEFAULT = `${location.origin}/api/levpay`;
-  const LS_API_BASE = "levpay_admin_api_base_v3";
+  const LS_ADMIN = "levpay_admin_key_v5";
+  const LS_API_BASE = "levpay_admin_api_base_v5";
 
-  // Optional preset (biar device lu auto kebaca di tab unlimited/tools)
+  // ✅ HARDCODE API DOMAIN (NO location.origin)
+  const API_BASE_DEFAULT = "https://levpay-api.vercel.app/api/levpay";
+
+  // Optional preset
   const PRESET_DEVICE_ID = "dev_rog6pro";
-  const PRESET_PEPPER = "6db5a8b3eafc122eda3c7a5a09f61a2c019fcab0a18a4b53b391451f95b4bea4";
-  const PRESET_DEVICEKEY = "3cba807b27e933940fed9994073973ec2496ab2a2a9c70a1fff11d94b8081805";
 
   // ====== ELEMENTS ======
   const gate = $("gate");
@@ -69,7 +69,6 @@
 
   // unlimited
   const dev_id = $("dev_id");
-  const dev_pepper = $("dev_pepper");
   const dev_key = $("dev_key");
   const btnGenKey = $("btnGenKey");
   const btnAddUnlimited = $("btnAddUnlimited");
@@ -81,14 +80,14 @@
   const btnRunApply = $("btnRunApply");
   const t_amount = $("t_amount");
   const t_deviceId = $("t_deviceId");
-  const t_voucher = $("t_voucher");
+  const t_code = $("t_voucher"); // kode voucher/promo
   const t_ttl = $("t_ttl");
   const curlApply = $("curlApply");
   const jsonApply = $("jsonApply");
 
   // ====== STATE ======
   let ADMIN = "";
-  let API_BASE = localStorage.getItem(LS_API_BASE) || API_BASE_DEFAULT;
+  let API_BASE = (localStorage.getItem(LS_API_BASE) || API_BASE_DEFAULT).trim();
   let vouchers = [];
   let monthly = null;
 
@@ -146,14 +145,24 @@
     tabTools.classList.toggle("is-on", name === "tools");
   }
 
+  function normalizeApiBase(s) {
+    let x = String(s || "").trim();
+    if (!x) x = API_BASE_DEFAULT;
+    x = x.replace(/\/+$/, "");
+    const q = x.indexOf("?");
+    if (q >= 0) x = x.slice(0, q);
+    return x;
+  }
+
+  // ✅ endpoint tanpa location.origin sama sekali
   function endpoint(action) {
-    const u = new URL(API_BASE, location.origin);
-    u.searchParams.set("action", action);
-    return u.toString();
+    const base = normalizeApiBase(API_BASE);
+    const glue = base.includes("?") ? "&" : "?";
+    return `${base}${glue}action=${encodeURIComponent(action)}`;
   }
 
   function isAdminAction(action) {
-    return /^(voucher\.|monthly\.|tx\.|discount\.)/.test(action);
+    return /^(voucher\.|monthly\.|tx\.|devicekey)$/.test(action);
   }
 
   function sanitizeCode(s) {
@@ -173,15 +182,14 @@
   }
 
   function curlFor(action, method, body) {
-    const HOSTVAR = "$HOST";
+    const HOSTVAR = "https://levpay-api.vercel.app";
     const ADMINVAR = "$ADMIN";
     const heads = [];
     if (isAdminAction(action)) heads.push(`-H "X-Admin-Key: ${ADMINVAR}"`);
     if (method !== "GET") heads.push(`-H "Content-Type: application/json"`);
     const h = heads.length ? ` \\\n  ${heads.join(" \\\n  ")}` : "";
     const data = method === "GET" || body == null ? "" : ` \\\n  -d '${JSON.stringify(body)}'`;
-    const basePath = new URL(API_BASE).pathname;
-    return `curl -sS -X ${method} "${HOSTVAR}${basePath}?action=${action}"${h}${data} | jq`;
+    return `curl -sS -X ${method} "${HOSTVAR}/api/levpay?action=${action}"${h}${data} | jq`;
   }
 
   async function callAction(action, { method = "GET", body = null } = {}) {
@@ -196,29 +204,10 @@
     });
   }
 
-  async function sha256Hex(text) {
-    const data = new TextEncoder().encode(String(text));
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    const arr = Array.from(new Uint8Array(hash));
-    return arr.map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  async function genDeviceKeyFromInputs() {
-    const id = String(dev_id.value || "").trim();
-    const pep = String(dev_pepper.value || "").trim();
-    if (!id || !pep) {
-      dev_key.value = "";
-      return "";
-    }
-    const key = await sha256Hex(`${id}|${pep}`);
-    dev_key.value = key;
-    return key;
-  }
-
   // ====== LOADERS ======
   async function pingPublic() {
     const r = await callAction("ping", { method: "GET" });
-    apiBaseText.textContent = API_BASE;
+    apiBaseText.textContent = normalizeApiBase(API_BASE);
     if (!r.ok) throw new Error(`API ping error (${r.status})`);
     return r.json;
   }
@@ -327,9 +316,7 @@
     voucherTbody.innerHTML = list
       .sort((a, b) => a.code.localeCompare(b.code))
       .map((v) => {
-        const active = v.enabled
-          ? `<span class="badge on">ON</span>`
-          : `<span class="badge off">OFF</span>`;
+        const active = v.enabled ? `<span class="badge on">ON</span>` : `<span class="badge off">OFF</span>`;
         const exp = v.expiresAt ? fmtDate(v.expiresAt) : "—";
         return `
         <tr>
@@ -531,12 +518,32 @@
     }
   }
 
+  async function genDeviceKeyServer() {
+    try {
+      const deviceId = String(dev_id.value || "").trim();
+      if (!deviceId) throw new Error("Device ID kosong");
+
+      const body = { deviceId };
+      const r = await callAction("devicekey", { method: "POST", body });
+      if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
+
+      const dk = r.json?.data?.deviceKey || "";
+      dev_key.value = dk;
+      setMsg(msgUnlimited, "deviceKey generated ✅");
+      return dk;
+    } catch (e) {
+      dev_key.value = "";
+      setMsg(msgUnlimited, `Gagal generate: ${e?.message || e}`, true);
+      return "";
+    }
+  }
+
   async function addUnlimited() {
     try {
-      const k = (dev_key.value || "").trim() || (await genDeviceKeyFromInputs());
-      if (!k) throw new Error("deviceKey kosong");
+      const deviceId = String(dev_id.value || "").trim();
+      if (!deviceId) throw new Error("Device ID kosong");
 
-      const body = { addUnlimitedDeviceKey: k };
+      const body = { addUnlimitedDeviceId: deviceId };
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
       const r = await callAction("monthly.set", { method: "POST", body });
@@ -544,8 +551,9 @@
 
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      setMsg(msgUnlimited, "Added unlimited ✅");
       await loadMonthly();
+      await genDeviceKeyServer();
+      setMsg(msgUnlimited, "Added unlimited ✅");
     } catch (e) {
       setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
     }
@@ -553,9 +561,10 @@
 
   async function removeUnlimited() {
     try {
-      const k = String(dev_key.value || "").trim();
-      if (!k) throw new Error("deviceKey kosong (isi / generate dulu)");
-      const body = { removeUnlimitedDeviceKey: k };
+      const deviceId = String(dev_id.value || "").trim();
+      if (!deviceId) throw new Error("Device ID kosong");
+
+      const body = { removeUnlimitedDeviceId: deviceId };
       curlMonthly.textContent = curlFor("monthly.set", "POST", body);
 
       const r = await callAction("monthly.set", { method: "POST", body });
@@ -563,8 +572,9 @@
 
       if (!r.ok) throw new Error(r.json?.error || `Error ${r.status}`);
 
-      setMsg(msgUnlimited, "Removed ✅");
       await loadMonthly();
+      await genDeviceKeyServer();
+      setMsg(msgUnlimited, "Removed ✅");
     } catch (e) {
       setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
     }
@@ -575,7 +585,7 @@
       const body = {
         amount: Number(String(t_amount.value || "0").trim()),
         deviceId: String(t_deviceId.value || "").trim(),
-        voucher: String(t_voucher.value || "").trim(),
+        code: String(t_code.value || "").trim(),
         reserveTtlMs: Number(String(t_ttl.value || "360000").trim()),
       };
 
@@ -632,100 +642,19 @@
 
   btnSaveMonthly.addEventListener("click", saveMonthly);
 
-  btnGenKey.addEventListener("click", async () => {
-    try {
-      const k = await genDeviceKeyFromInputs();
-      if (!k) setMsg(msgUnlimited, "Isi Device ID & Pepper dulu.", true);
-      else setMsg(msgUnlimited, "deviceKey generated ✅");
-    } catch (e) {
-      setMsg(msgUnlimited, `Gagal: ${e?.message || e}`, true);
-    }
-  });
-
+  btnGenKey.addEventListener("click", genDeviceKeyServer);
   btnAddUnlimited.addEventListener("click", addUnlimited);
   btnRemoveUnlimited.addEventListener("click", removeUnlimited);
 
   btnRunApply.addEventListener("click", runApply);
 
-  // live curl preview
-  [v_code, v_name, v_percent, v_maxRp, v_maxUses, v_expiresAt].forEach((el) => {
-    el.addEventListener("input", () => {
-      try {
-        const body = buildVoucherPayload();
-        curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
-      } catch {}
-    });
-  });
-  v_enabled.addEventListener("change", () => {
-    try {
-      const body = buildVoucherPayload();
-      curlVoucher.textContent = curlFor("voucher.upsert", "POST", body);
-    } catch {}
-  });
-
-  [m_enabled, m_code, m_name, m_percent, m_maxRp, m_maxUses].forEach((el) => {
-    el.addEventListener("input", () => {
-      const body = {
-        enabled: !!m_enabled.checked,
-        code: sanitizeCode(m_code.value),
-        name: String(m_name.value || "").trim(),
-        percent: Number(String(m_percent.value || "0").trim()),
-        maxRp: Number(String(m_maxRp.value || "0").trim()),
-      };
-      const mu = String(m_maxUses.value || "").trim();
-      body.maxUses = mu ? Number(mu) : null;
-      curlMonthly.textContent = curlFor("monthly.set", "POST", body);
-    });
-  });
-
-  [t_amount, t_deviceId, t_voucher, t_ttl].forEach((el) => {
-    el.addEventListener("input", () => {
-      const body = {
-        amount: Number(String(t_amount.value || "0").trim()),
-        deviceId: String(t_deviceId.value || "").trim(),
-        voucher: String(t_voucher.value || "").trim(),
-        reserveTtlMs: Number(String(t_ttl.value || "360000").trim()),
-      };
-      curlApply.textContent = curlFor("discount.apply", "POST", body);
-    });
-  });
-
   // ====== INIT ======
   async function init() {
+    API_BASE = normalizeApiBase(API_BASE);
     apiBaseText.textContent = API_BASE;
 
-    // preset device fields
     dev_id.value = PRESET_DEVICE_ID || dev_id.value;
-    dev_pepper.value = PRESET_PEPPER || dev_pepper.value;
-    dev_key.value = PRESET_DEVICEKEY || dev_key.value;
     t_deviceId.value = PRESET_DEVICE_ID || t_deviceId.value;
-
-    // default curl previews
-    curlVoucher.textContent = curlFor("voucher.upsert", "POST", {
-      code: "VIPL",
-      enabled: true,
-      name: "VIP LEVEL",
-      percent: 10,
-      maxRp: 0,
-      maxUses: 5,
-      expiresAt: "2026-12-31T23:59:59.000Z",
-    });
-
-    curlMonthly.textContent = curlFor("monthly.set", "POST", {
-      enabled: true,
-      code: "PROMODEC",
-      name: "PROMO BULANAN",
-      percent: 5,
-      maxRp: 2000,
-      maxUses: null,
-    });
-
-    curlApply.textContent = curlFor("discount.apply", "POST", {
-      amount: 10000,
-      deviceId: PRESET_DEVICE_ID || "dev_frontend_1",
-      voucher: "VIPL",
-      reserveTtlMs: 360000,
-    });
 
     setTab("vouchers");
 
@@ -744,6 +673,7 @@
       }
       setLocked(false);
       await refreshAll();
+      await genDeviceKeyServer();
     } catch {
       setLocked(true);
     }
