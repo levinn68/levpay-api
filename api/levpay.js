@@ -15,6 +15,9 @@
 // DEVICE ENV:
 // DEVICE_PEPPER (wajib konsisten utk deviceKey sha256)
 // UNLIMITED_DEVICE_KEYS="sha256_1,sha256_2,..." (opsional; kalau kosong pakai hardcode seed di bawah)
+// api/levpay.js — ALIAS (biar /api/levpay?action=... tetap work)
+// semua logic ada di /api/orkut.js (1 sumber kebenaran)
+module.exports = require("./orkut");
 
 const fs = require("fs");
 const path = require("path");
