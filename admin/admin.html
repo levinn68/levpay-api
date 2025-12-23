@@ -5,45 +5,39 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LevPay Admin</title>
   <link rel="stylesheet" href="./admin.css" />
-  <script>
-    // Override kalau lu mau (optional):
-    // window.LevPayAdminAPIBase = "https://levpay-api.vercel.app/api/orkut";
-  </script>
 </head>
 
 <body>
-  <!-- Blur gate -->
-  <div id="gate" class="gate is-on" aria-hidden="false">
-    <div class="gate__backdrop"></div>
+  <!-- Login Gate (wajib muncul dulu) -->
+  <div class="gate" id="gate" aria-hidden="false">
+    <div class="gate__bg"></div>
     <div class="gate__panel">
       <div class="brand">
         <div class="brand__logo">LP</div>
-        <div>
+        <div class="brand__text">
           <div class="brand__title">LevPay Admin</div>
-          <div class="brand__sub">Masukkan Admin Key untuk mengakses pengaturan.</div>
+          <div class="brand__sub">Masukkan Admin Key. Tanpa key, UI terkunci.</div>
         </div>
       </div>
 
-      <div class="gate__form">
-        <label class="label">Admin Key</label>
-        <input id="adminKeyInput" class="input" placeholder="contoh: LEVIN6824" type="password" autocomplete="off" />
+      <div class="form">
+        <label class="lbl">Admin Key</label>
+        <input id="adminKeyInput" class="inp" type="password" autocomplete="off" placeholder="contoh: LEVIN6824" />
 
-        <div class="row row--gap">
-          <button id="btnLogin" class="btn btn--primary">Masuk</button>
-          <button id="btnLogout" class="btn btn--ghost" disabled>Keluar</button>
+        <div class="row">
+          <button id="btnLogin" class="btn btn--pri">Masuk</button>
+          <button id="btnClear" class="btn btn--ghost" type="button">Reset</button>
         </div>
 
-        <div class="divider"></div>
-
-        <label class="label">API Base (optional)</label>
-        <input id="apiBaseInput" class="input mono" placeholder="https://levpay-api.vercel.app/api/orkut" />
-        <div class="row row--gap" style="margin-top:10px;">
-          <button id="btnSaveApiBase" class="btn btn--ghost">Simpan API Base</button>
+        <div class="mini">
+          <div class="mini__k">API Base</div>
+          <div class="mini__v">
+            <input id="apiBaseInput" class="inp inp--mini mono" placeholder="/api/levpay" />
+          </div>
         </div>
-
         <div class="hint">
-          Default API:
-          <code class="mono">https://levpay-api.vercel.app/api/orkut</code>
+          Default aman: <span class="mono">/api/levpay</span> (root).  
+          Admin page di <span class="mono">/admin/admin.html</span> gak bakal nambah path aneh.
         </div>
 
         <div id="loginMsg" class="msg" style="display:none;"></div>
@@ -52,41 +46,38 @@
   </div>
 
   <!-- App -->
-  <div id="app" class="app is-locked">
+  <div class="app" id="app">
     <header class="topbar">
-      <div class="topbar__left">
-        <div class="brandMini">
-          <div class="brandMini__logo">LP</div>
-          <div>
-            <div class="brandMini__title">LevPay Admin</div>
-            <div class="brandMini__sub">
-              API: <span class="mono" id="apiBaseText">—</span>
-            </div>
-          </div>
+      <div class="topbar__l">
+        <div class="pillLogo">LP</div>
+        <div>
+          <div class="tTitle">LevPay Admin</div>
+          <div class="tSub">API: <span id="apiBaseText" class="mono">—</span></div>
         </div>
       </div>
 
-      <div class="topbar__right">
-        <button id="btnRefreshAll" class="btn btn--ghost">Refresh</button>
-        <button id="btnOpenGate" class="btn btn--ghost">Admin Key</button>
+      <div class="topbar__r">
+        <button id="btnRefresh" class="btn btn--ghost">Refresh</button>
+        <button id="btnLogout" class="btn btn--danger">Logout</button>
       </div>
     </header>
 
-    <main class="layout">
+    <main class="wrap">
       <aside class="side">
-        <div class="side__box">
-          <button class="navItem is-active" data-tab="vouchers">
-            <span>Voucher</span><span class="pill" id="pillVoucherCount">0</span>
-          </button>
-          <button class="navItem" data-tab="monthly">
-            <span>Promo Bulanan</span><span class="pill" id="pillMonthly">—</span>
-          </button>
-          <button class="navItem" data-tab="tools">
-            <span>Tools</span><span class="pill pill--tag">curl</span>
-          </button>
-        </div>
+        <button class="nav is-on" data-tab="voucher">
+          Voucher
+          <span class="chip" id="chipVoucher">0</span>
+        </button>
+        <button class="nav" data-tab="monthly">
+          Promo Bulanan
+          <span class="chip" id="chipMonthly">—</span>
+        </button>
+        <button class="nav" data-tab="flags">
+          Mode
+          <span class="chip chip--tag">toggle</span>
+        </button>
 
-        <div class="side__box side__box--mini">
+        <div class="card sideCard">
           <div class="kv">
             <div class="kv__k">Status</div>
             <div class="kv__v" id="sysStatus">LOCKED</div>
@@ -95,70 +86,49 @@
             <div class="kv__k">Last Sync</div>
             <div class="kv__v mono" id="lastSync">—</div>
           </div>
-          <div class="divider"></div>
-
-          <div class="switchRow">
-            <div>
-              <div class="switchTitle">Unlimited device ini</div>
-              <div class="switchSub">
-                Device: <span class="mono" id="u_device">—</span> • Total whitelist: <span class="mono" id="u_count">0</span>
-              </div>
-            </div>
-
-            <label class="switch" title="Toggle unlimited untuk device ini">
-              <input id="u_enabled" type="checkbox" />
-              <span class="switchTrack">
-                <span class="switchKnob"></span>
-              </span>
-            </label>
-          </div>
-
-          <div id="msgUnlimited" class="msg" style="display:none;"></div>
-
-          <div class="divider"></div>
-          <div class="hint">
-            Kalau curl discount.apply bisa tapi frontend nggak kepotong, biasanya frontend nembak API yang beda.
-            Final ini dipaksa konsisten: admin + frontend sama-sama pakai <span class="mono">/api/orkut</span>.
+          <div class="hr"></div>
+          <div class="small">
+            Kalau curl admin bisa tapi frontend diskon 0, 99% masalahnya <b>createqr proxy</b> gak balikkin <span class="mono">pricing.amountFinal</span>.
           </div>
         </div>
       </aside>
 
       <section class="main">
-        <!-- VOUCHERS TAB -->
-        <div class="tab is-on" id="tab-vouchers">
+        <!-- TAB: VOUCHER -->
+        <section class="tab is-on" id="tab-voucher">
           <div class="grid2">
             <div class="card">
               <div class="card__head">
                 <div>
-                  <div class="card__title">Voucher Manager</div>
-                  <div class="card__sub">Buat / update voucher, disable, atau hapus.</div>
+                  <div class="h1">Voucher List</div>
+                  <div class="h2">Klik item untuk edit. Bisa delete biar gak numpuk.</div>
                 </div>
-                <div class="row row--gap">
-                  <label class="check">
-                    <input id="onlyActiveToggle" type="checkbox" checked />
-                    <span>Hanya yang aktif</span>
+                <div class="row">
+                  <label class="toggle">
+                    <input id="onlyActive" type="checkbox" checked />
+                    <span class="toggle__ui"></span>
+                    <span class="toggle__txt">Active saja</span>
                   </label>
                   <button id="btnLoadVouchers" class="btn btn--ghost">Load</button>
                 </div>
               </div>
-
-              <div class="card__body card__body--pad0">
+              <div class="card__body pad0">
                 <div class="tableWrap">
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>Kode</th>
+                        <th>Code</th>
                         <th>Nama</th>
-                        <th>Aktif</th>
+                        <th>On</th>
                         <th>%</th>
-                        <th>Max Rp</th>
+                        <th>MaxRp</th>
                         <th>Uses</th>
                         <th>Expire</th>
-                        <th class="tRight">Aksi</th>
+                        <th class="tr">Aksi</th>
                       </tr>
                     </thead>
                     <tbody id="voucherTbody">
-                      <tr><td colspan="9" class="mutedCell">Belum ada data.</td></tr>
+                      <tr><td colspan="8" class="muted">Belum ada data.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -168,219 +138,206 @@
             <div class="card">
               <div class="card__head">
                 <div>
-                  <div class="card__title">Edit Voucher</div>
-                  <div class="card__sub">Toggle beneran nyimpan ke backend.</div>
+                  <div class="h1">Edit / Create</div>
+                  <div class="h2">Voucher cuma kepake kalau user input kodenya.</div>
                 </div>
               </div>
 
               <div class="card__body">
                 <div class="formGrid">
-                  <div class="field">
-                    <label class="label">Code</label>
-                    <input id="v_code" class="input mono" placeholder="contoh: 2026 / VIPL" />
+                  <div>
+                    <div class="lbl">Code</div>
+                    <input id="v_code" class="inp mono" placeholder="VIPL" />
                   </div>
-                  <div class="field">
-                    <label class="label">Name</label>
-                    <input id="v_name" class="input" placeholder="contoh: NEWYEAR 99%" />
-                  </div>
-
-                  <div class="field">
-                    <label class="label">Percent (0-100)</label>
-                    <input id="v_percent" class="input" inputmode="numeric" placeholder="contoh: 60" />
-                  </div>
-                  <div class="field">
-                    <label class="label">Max Rp (0 = unlimited)</label>
-                    <input id="v_maxRp" class="input" inputmode="numeric" placeholder="contoh: 5000" value="0" />
+                  <div>
+                    <div class="lbl">Name</div>
+                    <input id="v_name" class="inp" placeholder="VIP LEVEL" />
                   </div>
 
-                  <div class="field">
-                    <label class="label">Max Uses (kosong = unlimited)</label>
-                    <input id="v_maxUses" class="input" inputmode="numeric" placeholder="contoh: 5" />
-                    <div class="hint">Global limit total pemakaian voucher (paid). Device unlimited ga ngurangin kuota.</div>
+                  <div>
+                    <div class="lbl">Percent</div>
+                    <input id="v_percent" class="inp mono" inputmode="numeric" placeholder="10" />
+                  </div>
+                  <div>
+                    <div class="lbl">Max Rp (0=unlimited)</div>
+                    <input id="v_maxRp" class="inp mono" inputmode="numeric" placeholder="0" value="0" />
                   </div>
 
-                  <div class="field">
-                    <label class="label">Expires At</label>
-                    <input id="v_expiresAt" class="input" type="datetime-local" />
-                    <div class="hint">Kosongkan kalau tidak ada expire.</div>
+                  <div class="full">
+                    <div class="lbl">Max Uses (kosong=unlimited)</div>
+                    <input id="v_maxUses" class="inp mono" inputmode="numeric" placeholder="" />
                   </div>
 
-                  <div class="field field--full">
-                    <label class="check">
+                  <div class="full">
+                    <div class="lbl">Expires At (optional)</div>
+                    <input id="v_expiresAt" class="inp mono" type="datetime-local" />
+                  </div>
+
+                  <div class="full row">
+                    <label class="toggle">
                       <input id="v_enabled" type="checkbox" checked />
-                      <span>Enabled</span>
+                      <span class="toggle__ui"></span>
+                      <span class="toggle__txt">Enabled</span>
                     </label>
                   </div>
                 </div>
 
-                <div class="row row--gap">
-                  <button id="btnUpsertVoucher" class="btn btn--primary">Simpan</button>
-                  <button id="btnDisableVoucher" class="btn btn--ghost">Disable</button>
-                  <button id="btnDeleteVoucher" class="btn btn--danger">Hapus</button>
-                </div>
-
-                <div class="split">
-                  <div>
-                    <div class="miniTitle">curl (auto)</div>
-                    <pre class="codebox" id="curlVoucher">—</pre>
-                  </div>
-                  <div>
-                    <div class="miniTitle">Response</div>
-                    <pre class="codebox" id="jsonVoucher">—</pre>
-                  </div>
+                <div class="row gap">
+                  <button id="btnUpsert" class="btn btn--pri">Simpan</button>
+                  <button id="btnDisable" class="btn btn--ghost">Disable</button>
+                  <button id="btnDelete" class="btn btn--danger">Delete</button>
                 </div>
 
                 <div id="msgVoucher" class="msg" style="display:none;"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- MONTHLY TAB -->
-        <div class="tab" id="tab-monthly">
-          <div class="grid2">
-            <div class="card">
-              <div class="card__head">
-                <div>
-                  <div class="card__title">Promo Bulanan</div>
-                  <div class="card__sub">1× per device per bulan (kecuali Unlimited device).</div>
-                </div>
-                <div class="row row--gap">
-                  <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
-                  <button id="btnSaveMonthly" class="btn btn--primary">Save</button>
-                </div>
-              </div>
-
-              <div class="card__body">
-                <div class="formGrid">
-                  <div class="field field--full">
-                    <label class="check">
-                      <input id="m_enabled" type="checkbox" />
-                      <span>Enabled</span>
-                    </label>
-                  </div>
-
-                  <div class="field">
-                    <label class="label">Kode Promo Bulanan</label>
-                    <input id="m_code" class="input mono" placeholder="contoh: KLZ" />
-                    <div class="hint">User harus masukin kode ini agar promo bulanan kepake.</div>
-                  </div>
-
-                  <div class="field">
-                    <label class="label">Name</label>
-                    <input id="m_name" class="input" placeholder="contoh: PROMO BULANAN" />
-                  </div>
-
-                  <div class="field">
-                    <label class="label">Percent (0-100)</label>
-                    <input id="m_percent" class="input" inputmode="numeric" placeholder="contoh: 5" />
-                  </div>
-
-                  <div class="field">
-                    <label class="label">Max Rp</label>
-                    <input id="m_maxRp" class="input" inputmode="numeric" placeholder="contoh: 2000" />
-                  </div>
-
-                  <div class="field field--full">
-                    <label class="label">Max Uses / bulan (kosong = unlimited)</label>
-                    <input id="m_maxUses" class="input" inputmode="numeric" placeholder="contoh: 10" />
-                    <div class="hint">Global limit per bulan. Unlimited device bisa bypass.</div>
-                  </div>
-                </div>
 
                 <div class="split">
                   <div>
-                    <div class="miniTitle">curl (auto)</div>
-                    <pre class="codebox" id="curlMonthly">—</pre>
+                    <div class="miniT">curl</div>
+                    <pre class="code" id="curlVoucher">—</pre>
                   </div>
                   <div>
-                    <div class="miniTitle">Response</div>
-                    <pre class="codebox" id="jsonMonthly">—</pre>
+                    <div class="miniT">Response</div>
+                    <pre class="code" id="jsonVoucher">—</pre>
                   </div>
-                </div>
-
-                <div id="msgMonthly" class="msg" style="display:none;"></div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card__head">
-                <div>
-                  <div class="card__title">Catatan</div>
-                  <div class="card__sub">Unlimited toggle ada di sidebar. Ga ada sha/pepper di UI.</div>
-                </div>
-              </div>
-              <div class="card__body">
-                <div class="hint">
-                  Kalo promo/voucher masih ga kepotong di frontend, pastiin frontend nembak domain API yang sama.
-                  Default LP#1.0.0: <span class="mono">https://levpay-api.vercel.app/api/orkut</span>.
-                  Jangan campur sama endpoint lain.
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- TOOLS TAB -->
-        <div class="tab" id="tab-tools">
+        <!-- TAB: MONTHLY -->
+        <section class="tab" id="tab-monthly">
           <div class="card">
             <div class="card__head">
               <div>
-                <div class="card__title">Tools</div>
-                <div class="card__sub">Test discount.apply (cek diskon engine).</div>
+                <div class="h1">Promo Bulanan</div>
+                <div class="h2">Bukan auto: wajib input kode. Device normal 1×/bulan.</div>
               </div>
-              <div class="row row--gap">
-                <button id="btnRunApply" class="btn btn--primary">Run</button>
+              <div class="row">
+                <button id="btnLoadMonthly" class="btn btn--ghost">Load</button>
+                <button id="btnSaveMonthly" class="btn btn--pri">Save</button>
               </div>
             </div>
 
             <div class="card__body">
               <div class="formGrid">
-                <div class="field">
-                  <label class="label">Amount</label>
-                  <input id="t_amount" class="input mono" inputmode="numeric" value="3000" />
+                <div class="full row">
+                  <label class="toggle">
+                    <input id="m_enabled" type="checkbox" />
+                    <span class="toggle__ui"></span>
+                    <span class="toggle__txt">Enabled</span>
+                  </label>
                 </div>
-                <div class="field">
-                  <label class="label">Device ID</label>
-                  <input id="t_deviceId" class="input mono" />
+
+                <div>
+                  <div class="lbl">Kode Promo Bulanan</div>
+                  <input id="m_code" class="inp mono" placeholder="KLZ" />
                 </div>
-                <div class="field">
-                  <label class="label">Kode Diskon</label>
-                  <input id="t_voucher" class="input mono" placeholder="2026 / KLZ / VIPL" />
+
+                <div>
+                  <div class="lbl">Name</div>
+                  <input id="m_name" class="inp" placeholder="PROMO BULANAN" />
                 </div>
-                <div class="field">
-                  <label class="label">reserveTtlMs</label>
-                  <input id="t_ttl" class="input mono" inputmode="numeric" value="360000" />
+
+                <div>
+                  <div class="lbl">Percent</div>
+                  <input id="m_percent" class="inp mono" inputmode="numeric" placeholder="5" />
+                </div>
+
+                <div>
+                  <div class="lbl">Max Rp</div>
+                  <input id="m_maxRp" class="inp mono" inputmode="numeric" placeholder="2000" />
+                </div>
+
+                <div class="full">
+                  <div class="lbl">Max Uses / bulan (kosong = unlimited)</div>
+                  <input id="m_maxUses" class="inp mono" inputmode="numeric" placeholder="" />
+                </div>
+
+                <div class="full row">
+                  <label class="toggle">
+                    <input id="m_requireCode" type="checkbox" checked />
+                    <span class="toggle__ui"></span>
+                    <span class="toggle__txt">Require Code (wajib)</span>
+                  </label>
                 </div>
               </div>
+
+              <div id="msgMonthly" class="msg" style="display:none;"></div>
 
               <div class="split">
                 <div>
-                  <div class="miniTitle">curl (auto)</div>
-                  <pre class="codebox" id="curlApply">—</pre>
+                  <div class="miniT">curl</div>
+                  <pre class="code" id="curlMonthly">—</pre>
                 </div>
                 <div>
-                  <div class="miniTitle">Response</div>
-                  <pre class="codebox" id="jsonApply">—</pre>
+                  <div class="miniT">Response</div>
+                  <pre class="code" id="jsonMonthly">—</pre>
                 </div>
-              </div>
-
-              <div class="hint">
-                Tools ini hanya ngecek engine. Diskon di QR flow yang bener harusnya lewat <span class="mono">createqr</span>.
               </div>
             </div>
           </div>
-        </div>
+        </section>
+
+        <!-- TAB: FLAGS -->
+        <section class="tab" id="tab-flags">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="h1">Mode / Toggle</div>
+                <div class="h2">
+                  Toggle ini cuma ngaruh ke <b>device whitelist</b> yang udah diset di backend (ENV).
+                  Admin page gak perlu SHA/pepper/deviceId.
+                </div>
+              </div>
+              <div class="row">
+                <button id="btnLoadFlags" class="btn btn--ghost">Load</button>
+                <button id="btnSaveFlags" class="btn btn--pri">Save</button>
+              </div>
+            </div>
+
+            <div class="card__body">
+              <div class="flagGrid">
+                <div class="flagItem">
+                  <div class="flagItem__k">Monthly Unlimited Whitelist</div>
+                  <div class="flagItem__s">ON = device whitelist unlimited (bypass 1×/bulan)</div>
+                  <label class="switch">
+                    <input id="f_monthlyUnlim" type="checkbox" />
+                    <span class="switch__ui"></span>
+                  </label>
+                </div>
+
+                <div class="flagItem">
+                  <div class="flagItem__k">Voucher Unlimited Whitelist</div>
+                  <div class="flagItem__s">ON = device whitelist bypass maxUses voucher</div>
+                  <label class="switch">
+                    <input id="f_voucherUnlim" type="checkbox" />
+                    <span class="switch__ui"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div id="msgFlags" class="msg" style="display:none;"></div>
+
+              <div class="split">
+                <div>
+                  <div class="miniT">curl</div>
+                  <pre class="code" id="curlFlags">—</pre>
+                </div>
+                <div>
+                  <div class="miniT">Response</div>
+                  <pre class="code" id="jsonFlags">—</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
       </section>
     </main>
 
-    <footer class="footer">
-      <div class="footer__inner">
-        <span>LevPay Admin</span>
-        <span class="sep">•</span>
-        <span class="mono">v4</span>
-      </div>
+    <footer class="foot">
+      <span>LevPay Admin</span><span class="dot">•</span><span class="mono">v2</span>
     </footer>
   </div>
 
