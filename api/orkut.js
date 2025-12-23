@@ -1,444 +1,407 @@
-// api/orkut.js
-const axios = require("axios");
+// api/orkut.js — FINAL (QR + Voucher/Promo + Admin UI compatible)
+// - Frontend LP#1.0.0 default pake /api/orkut => biar diskon kepake di frontend.
+// - /api/levpay nanti cukup jadi alias ke file ini.
+//
+// Actions:
+// - ping | help
+// - createqr | status | cancel | qr
+// - discount.apply | discount.commit | discount.release
+// - voucher.upsert (ADMIN) | voucher.disable (ADMIN) | voucher.delete (ADMIN) | voucher.list (ADMIN) | voucher.get (ADMIN)
+// - monthly.get (ADMIN) | monthly.set (ADMIN)
+// - unlimited.get (ADMIN) | unlimited.set (ADMIN)   <-- toggle unlimited device (tanpa sha/pepper di UI)
 
-// DB via GitHub (shared with admin)
 const { loadDb, saveDb } = require("../lib/github");
+const voucherEngine = require("../lib/voucher");
 
-// Voucher/promo logic (shared)
-const {
-  getDeviceKey,
-  applyDiscount,
-  commitReservations,
-  releaseReservations,
-  adminUpsertVoucher,
-  adminDisableVoucher,
-  adminSetMonthlyPromo,
-} = require("../lib/voucher");
+const ORKUT_BASE = process.env.ORKUT_BASE || "http://193.23.209.47:7032"; // base VPS (contoh: https://cp.yupra.me/server/xxxx)
+const ADMIN_KEY = process.env.ADMIN_KEY || "LEVIN6824";
 
-// ✅ FIX: default VPS_BASE ke IP+PORT yang kebukti bisa (193.23.209.47:7032)
-const VPS_BASE = (process.env.VPS_BASE || "http://193.23.209.47:7032").replace(/\/+$/, "");
-const CALLBACK_SECRET = process.env.CALLBACK_SECRET || "";
-const ADMIN_KEY = process.env.ADMIN_KEY || "";
+function send(res, code, obj) {
+  res.statusCode = code;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(obj));
+}
 
-function setCors(res) {
+function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Callback-Secret, X-Admin-Key"
+    "Content-Type, Authorization, X-Admin-Key, X-Callback-Secret"
   );
-  res.setHeader("Cache-Control", "no-store");
+  if (req.method === "OPTIONS") {
+    res.statusCode = 200;
+    res.end("");
+    return true;
+  }
+  return false;
 }
 
-function getBaseUrl(req) {
-  const proto = (req.headers["x-forwarded-proto"] || "https").toString().split(",")[0].trim();
-  const host = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
-  return `${proto}://${host}`;
+function isAdmin(req) {
+  const k = String(req.headers["x-admin-key"] || "").trim();
+  return !!(k && k === ADMIN_KEY);
 }
 
-function requireSecret(req, res) {
-  if (!CALLBACK_SECRET) return true;
-
-  const got =
-    (req.headers["x-callback-secret"] || "").toString().trim() ||
-    (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
-
-  if (got !== CALLBACK_SECRET) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-    return false;
-  }
-  return true;
-}
-
-function requireAdmin(req, res) {
-  if (!ADMIN_KEY) {
-    res.status(500).json({ success: false, error: "ADMIN_KEY not set" });
-    return false;
-  }
-
-  const got =
-    (req.headers["x-admin-key"] || "").toString().trim() ||
-    (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
-
-  if (got !== ADMIN_KEY) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-    return false;
-  }
-  return true;
-}
-
-module.exports = async function handler(req, res) {
-  setCors(res);
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-  const action = String(req.query?.action || "").toLowerCase().trim();
-  const baseUrl = getBaseUrl(req);
-
-  if (!action || action === "ping") {
-    return res.status(200).json({
-      success: true,
-      service: "levpay-vercel-proxy",
-      vps: VPS_BASE,
-      dbPath: process.env.GH_PATH || "(GH_PATH not set)",
-      routes: [
-        "POST /api/orkut?action=createqr",
-        "POST /api/orkut?action=discount.apply (ADMIN dry-run)",
-        "GET  /api/orkut?action=status&idTransaksi=...",
-        "POST /api/orkut?action=cancel",
-        "GET  /api/orkut?action=qr&idTransaksi=...",
-        "POST /api/orkut?action=setstatus",
-        "POST /api/orkut?action=paidhook",
-        "GET  /api/orkut?action=voucher.list (ADMIN)",
-        "POST /api/orkut?action=voucher.upsert (ADMIN)",
-        "POST /api/orkut?action=voucher.disable (ADMIN)",
-        "GET  /api/orkut?action=monthly.get (ADMIN)",
-        "POST /api/orkut?action=monthly.set (ADMIN)",
-      ],
-    });
-  }
-
-  // ===================== DISCOUNT PREVIEW (ADMIN) =====================
-  // Admin tester: hit /api/orkut?action=discount.apply (POST)
-  // body: { amount, deviceId, voucher }
-  if (action === "discount.apply") {
-    if (req.method !== "POST")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireAdmin(req, res)) return;
-
-    const amount = Number(req.body?.amount);
-    const deviceId = String(req.body?.deviceId || "").trim();
-    const code = String(req.body?.voucher || req.body?.code || "").trim();
-
-    if (!Number.isFinite(amount) || amount < 1)
-      return res.status(400).json({ success: false, error: "amount invalid" });
-    if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
-
-    const db = await loadDb();
-    const dbClone = JSON.parse(JSON.stringify(db || {})); // dry-run: jangan nulis reservation ke DB asli
-
-    const deviceKey = getDeviceKey(deviceId);
-    const out = applyDiscount(dbClone, {
-      amount,
-      deviceKey,
-      voucherCode: code || null,
-      reserveTtlMs: 6 * 60 * 1000,
-    });
-
-    return res.status(200).json({ success: true, data: out });
-  }
-
-  // ===================== CREATE QR =====================
-  // body: { amount, theme, deviceId, voucher? }
-  // - voucher kosong => TIDAK ADA POTONGAN
-  // - voucher terisi => bisa jadi voucher custom ATAU promo bulanan (kode wajib)
-  if (action === "createqr") {
-    if (req.method !== "POST")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-
-    const amount = Number(req.body?.amount);
-    const theme = req.body?.theme === "theme1" ? "theme1" : "theme2";
-    const deviceId = String(req.body?.deviceId || "").trim();
-    const code = String(req.body?.voucher || req.body?.code || "").trim();
-
-    if (!Number.isFinite(amount) || amount < 1)
-      return res.status(400).json({ success: false, error: "amount invalid" });
-    if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
-
-    const db = await loadDb();
-    const deviceKey = getDeviceKey(deviceId);
-
-    // reserve voucher/monthly (kalau code valid) — no auto discount
-    const { finalAmount, discountRp, applied, reservations } = applyDiscount(db, {
-      amount,
-      deviceKey,
-      voucherCode: code || null,
-      reserveTtlMs: 6 * 60 * 1000,
-    });
-
-    let r;
-    try {
-      // ✅ FIX: endpoint yang bener sesuai curl lu -> /api/orkut?action=createqr
-      // + kirim X-Admin-Key supaya match provider requirement (kalau provider minta)
-      r = await axios.post(
-        `${VPS_BASE}/api/orkut?action=createqr`,
-        { amount: finalAmount, deviceId, voucher: code || "", theme },
-        {
-          timeout: 20000,
-          validateStatus: () => true,
-          headers: {
-            "Content-Type": "application/json",
-            ...(ADMIN_KEY ? { "X-Admin-Key": ADMIN_KEY } : {}),
-          },
-        }
-      );
-    } catch (err) {
-      releaseReservations(db, reservations || []);
-      await saveDb(db);
-      return res.status(502).json({
-        success: false,
-        error: "VPS createqr network error",
-        detail: String(err?.message || err),
-        vps: VPS_BASE,
-      });
-    }
-
-    const data = r.data;
-
-    if (r.status < 200 || r.status >= 300) {
-      releaseReservations(db, reservations || []);
-      await saveDb(db);
-      return res.status(r.status).json({ success: false, error: "VPS createqr failed", provider: data });
-    }
-
-    const idTransaksi = String(data?.data?.idTransaksi || data?.idTransaksi || "").trim();
-    if (!idTransaksi) {
-      releaseReservations(db, reservations || []);
-      await saveDb(db);
-      return res.status(502).json({ success: false, error: "VPS createqr missing idTransaksi", provider: data });
-    }
-
-    // dari response provider kadang udah ada path png; fallback ke /api/qr/{id}.png
-    const vpsQrPngUrl =
-      data?.data?.qrPngUrl ||
-      data?.qrPngUrl ||
-      `/api/qr/${encodeURIComponent(idTransaksi)}.png`;
-
-    db.tx = db.tx || {};
-    db.tx[idTransaksi] = {
-      idTransaksi,
-      deviceKey,
-      deviceIdMasked: deviceId.slice(0, 3) + "***",
-
-      amountOriginal: amount,
-      amountFinal: finalAmount,
-      discountRp,
-      applied,
-
-      reservations: reservations || [],
-      discountCommitted: false,
-
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      paidAt: null,
-      paidVia: null,
-    };
-
-    await saveDb(db);
-
-    return res.status(200).json({
-      ...data,
-      data: {
-        ...(data?.data || {}),
-        idTransaksi,
-        qrUrl: `${baseUrl}/api/orkut?action=qr&idTransaksi=${encodeURIComponent(idTransaksi)}`,
-        qrVpsUrl: `${VPS_BASE}${vpsQrPngUrl}`,
-        pricing: { amountOriginal: amount, amountFinal: finalAmount, discountRp, applied },
-      },
-    });
-  }
-
-  // ===================== PAIDHOOK (commit/release diskon) =====================
-  if (action === "paidhook") {
-    if (req.method !== "POST")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireSecret(req, res)) return;
-
-    const { idTransaksi, status, paidAt, paidVia, note } = req.body || {};
-    if (!idTransaksi || !status)
-      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
-
-    const st = String(status).toLowerCase();
-    const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
-    if (!terminal.has(st))
-      return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
-
-    const db = await loadDb();
-    db.tx = db.tx || {};
-    const tx = db.tx[idTransaksi];
-    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
-
-    tx.status = st;
-    if (paidAt) tx.paidAt = paidAt;
-    if (paidVia) tx.paidVia = paidVia;
-    if (note) tx.note = note;
-    tx.updatedAt = new Date().toISOString();
-
-    if (st === "paid") {
-      if (!tx.discountCommitted) {
-        commitReservations(db, tx.reservations || []);
-        tx.discountCommitted = true;
+async function readBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        resolve({});
       }
-    } else {
-      if (!tx.discountCommitted) releaseReservations(db, tx.reservations || []);
-      tx.discountCommitted = false;
+    });
+  });
+}
+
+async function proxyJson(url, method, body) {
+  if (!url) throw new Error("ORKUT_BASE kosong. Set env ORKUT_BASE.");
+  const r = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: method === "GET" ? undefined : JSON.stringify(body || {}),
+  });
+  const txt = await r.text().catch(() => "");
+  let j = {};
+  try {
+    j = txt ? JSON.parse(txt) : {};
+  } catch {
+    j = { raw: txt };
+  }
+  if (!r.ok) throw new Error(j?.error || j?.message || `Upstream HTTP ${r.status}`);
+  return j;
+}
+
+function actionHelp() {
+  return {
+    success: true,
+    service: "orkut (qr + voucher/promo)",
+    actions: [
+      "ping",
+      "help",
+      "createqr",
+      "status",
+      "cancel",
+      "qr",
+      "discount.apply",
+      "discount.commit",
+      "discount.release",
+      "voucher.upsert (ADMIN)",
+      "voucher.disable (ADMIN)",
+      "voucher.delete (ADMIN)",
+      "voucher.list (ADMIN)",
+      "voucher.get (ADMIN)",
+      "monthly.get (ADMIN)",
+      "monthly.set (ADMIN)",
+      "unlimited.get (ADMIN)",
+      "unlimited.set (ADMIN)",
+    ],
+    adminHeader: "X-Admin-Key",
+    notes: [
+      "Frontend LP#1.0.0 harusnya otomatis kepotong karena createqr di sini sudah apply discount.",
+      "Unlimited device toggle pakai deviceId (tanpa sha/pepper di UI). Backend yang hash.",
+    ],
+  };
+}
+
+module.exports = async (req, res) => {
+  if (setCors(req, res)) return;
+
+  const url = new URL(req.url, "http://localhost");
+  const action = String(url.searchParams.get("action") || "").trim();
+
+  if (!action || action === "help") return send(res, 200, actionHelp());
+  if (action === "ping") return send(res, 200, { success: true, ok: true, time: new Date().toISOString() });
+
+  const body = await readBody(req);
+
+  // ===== DB =====
+  const db = await loadDb();
+  voucherEngine.ensureDb(db);
+
+  try {
+    // =========================
+    // PUBLIC: DISCOUNT ENGINE
+    // =========================
+    if (action === "discount.apply") {
+      const amount = Number(body.amount);
+      const deviceId = body.deviceId || body.deviceid || body.device_id || "";
+      const voucherCode = body.voucher || body.voucherCode || body.code || "";
+
+      if (!Number.isFinite(amount) || amount < 1) {
+        return send(res, 400, { success: false, error: "amount invalid" });
+      }
+
+      const r = voucherEngine.applyDiscount(db, {
+        amount,
+        deviceId: String(deviceId || ""),
+        voucherCode: String(voucherCode || ""),
+        ttlMs: Number(body.ttlMs || body.reserveTtlMs || 6 * 60 * 1000),
+      });
+
+      await saveDb(db);
+
+      return send(res, 200, {
+        success: true,
+        data: {
+          amountOriginal: r.amountOriginal,
+          amountFinal: r.amountFinal,
+          discountRp: r.discountRp,
+          applied: r.applied,
+          reservations: r.reservations,
+          deviceKey: r.deviceKey, // boleh buat debug, frontend ga wajib pake
+        },
+      });
     }
 
-    await saveDb(db);
-    return res.status(200).json({ success: true, saved: true, status: st });
-  }
+    if (action === "discount.release") {
+      voucherEngine.releaseReservations(db, Array.isArray(body.reservations) ? body.reservations : []);
+      await saveDb(db);
+      return send(res, 200, { success: true, data: { released: true } });
+    }
 
-  // ===================== LOCAL STATUS =====================
-  if (action === "status") {
-    const idTransaksi = String(req.query?.idTransaksi || "").trim();
-    if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
+    if (action === "discount.commit") {
+      voucherEngine.commitReservations(db, Array.isArray(body.reservations) ? body.reservations : []);
+      await saveDb(db);
+      return send(res, 200, { success: true, data: { committed: true } });
+    }
 
-    const db = await loadDb();
-    const tx = db?.tx?.[idTransaksi];
-    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
+    // =========================
+    // ADMIN: UNLIMITED DEVICE (global, berlaku voucher+monthly)
+    // =========================
+    if (action === "unlimited.get") {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+      const deviceId = String(body.deviceId || url.searchParams.get("deviceId") || "").trim();
+      if (!deviceId) return send(res, 400, { success: false, error: "deviceId required" });
 
-    return res.status(200).json({ success: true, data: tx });
-  }
+      const enabled = voucherEngine.isUnlimitedDeviceById(db, deviceId);
+      const count = Object.keys(db?.promo?.unlimitedDevices || {}).length;
 
-  // ===================== CANCEL =====================
-  if (action === "cancel") {
-    if (req.method !== "POST")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
+      return send(res, 200, { success: true, data: { deviceId, enabled, count } });
+    }
 
-    const idTransaksi = String(req.body?.idTransaksi || req.query?.idTransaksi || "").trim();
-    if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
+    if (action === "unlimited.set") {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+      const deviceId = String(body.deviceId || "").trim();
+      const enabled = !!body.enabled;
+      if (!deviceId) return send(res, 400, { success: false, error: "deviceId required" });
 
-    let r;
-    try {
-      r = await axios.post(
-        `${VPS_BASE}/api/cancel`,
-        { idTransaksi },
-        {
-          timeout: 15000,
-          validateStatus: () => true,
-          headers: {
-            "Content-Type": "application/json",
-            ...(ADMIN_KEY ? { "X-Admin-Key": ADMIN_KEY } : {}),
+      const out = voucherEngine.adminSetUnlimitedDeviceById(db, { deviceId, enabled });
+      await saveDb(db);
+
+      return send(res, 200, { success: true, data: out });
+    }
+
+    // =========================
+    // ADMIN: VOUCHER
+    // =========================
+    if (action.startsWith("voucher.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "voucher.upsert") {
+        const out = voucherEngine.adminUpsertVoucher(db, body || {});
+        await saveDb(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "voucher.disable") {
+        const out = voucherEngine.adminDisableVoucher(db, body || {});
+        await saveDb(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "voucher.delete") {
+        const out = voucherEngine.adminDeleteVoucher(db, body || {});
+        await saveDb(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      if (action === "voucher.list") {
+        const items = Object.values(db.vouchers || {}).sort((a, b) =>
+          String(a.code || "").localeCompare(String(b.code || ""))
+        );
+        return send(res, 200, { success: true, data: items });
+      }
+
+      if (action === "voucher.get") {
+        const code = String(body.code || url.searchParams.get("code") || "").trim().toUpperCase();
+        if (!code) return send(res, 400, { success: false, error: "code required" });
+        const v = db.vouchers?.[code];
+        if (!v) return send(res, 404, { success: false, error: "voucher not found" });
+        return send(res, 200, { success: true, data: v });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown voucher action" });
+    }
+
+    // =========================
+    // ADMIN: MONTHLY
+    // =========================
+    if (action.startsWith("monthly.")) {
+      if (!isAdmin(req)) return send(res, 401, { success: false, error: "unauthorized" });
+
+      if (action === "monthly.get") {
+        voucherEngine.cleanupExpiredReservations(db);
+        return send(res, 200, { success: true, data: db.promo.monthly });
+      }
+
+      if (action === "monthly.set") {
+        const out = voucherEngine.adminSetMonthlyPromo(db, body || {});
+        await saveDb(db);
+        return send(res, 200, { success: true, data: out });
+      }
+
+      return send(res, 400, { success: false, error: "Unknown monthly action" });
+    }
+
+    // =========================
+    // QR FLOW (create/status/cancel/qr)
+    // =========================
+    if (action === "createqr") {
+      const amount = Number(body.amount);
+      const deviceId = String(body.deviceId || "").trim();
+      const voucher = String(body.voucher || body.vouccer || "").trim();
+      const theme = body.theme === "theme1" ? "theme1" : "theme2";
+
+      if (!Number.isFinite(amount) || amount < 1) {
+        return send(res, 400, { success: false, error: "amount invalid" });
+      }
+
+      // apply discount di server (ini kuncinya biar frontend kepotong)
+      const discountRes = voucherEngine.applyDiscount(db, {
+        amount,
+        deviceId,
+        voucherCode: voucher,
+        ttlMs: 6 * 60 * 1000,
+      });
+
+      // create QR ke VPS pakai amountFinal
+      const created = await proxyJson(`${ORKUT_BASE}/api/createqr`, "POST", {
+        amount: discountRes.amountFinal,
+        theme,
+      });
+
+      // simpan tx map (buat status + commit)
+      const idTransaksi =
+        created?.idTransaksi || created?.idtransaksi || created?.transactionId || created?.trxId || created?.id;
+      if (!idTransaksi) throw new Error("Upstream createqr schema mismatch (missing idTransaksi)");
+
+      db.tx = db.tx || {};
+      db.tx[idTransaksi] = {
+        idTransaksi,
+        createdAt: created?.createdAt || new Date().toISOString(),
+        expiredAt: created?.expiredAt || created?.expired || null,
+        amountOriginal: discountRes.amountOriginal,
+        amountFinal: discountRes.amountFinal,
+        discountRp: discountRes.discountRp,
+        applied: discountRes.applied,
+        reservations: discountRes.reservations,
+        voucherInput: voucher || null,
+        deviceId: deviceId || null,
+        deviceKey: discountRes.deviceKey || null,
+        status: "PENDING",
+        updatedAt: new Date().toISOString(),
+      };
+
+      await saveDb(db);
+
+      const qrUrl = `/api/orkut?action=qr&idTransaksi=${encodeURIComponent(idTransaksi)}`;
+
+      return send(res, 200, {
+        success: true,
+        data: {
+          ...created,
+          idTransaksi,
+          qrUrl,
+          pricing: {
+            amountOriginal: discountRes.amountOriginal,
+            amountFinal: discountRes.amountFinal,
+            discountRp: discountRes.discountRp,
+            applied: discountRes.applied,
           },
-        }
+        },
+      });
+    }
+
+    if (action === "status") {
+      const idTransaksi = String(url.searchParams.get("idTransaksi") || "").trim();
+      if (!idTransaksi) return send(res, 400, { success: false, error: "idTransaksi required" });
+
+      const st = await proxyJson(
+        `${ORKUT_BASE}/api/status?idTransaksi=${encodeURIComponent(idTransaksi)}`,
+        "GET"
       );
-    } catch (err) {
-      return res.status(502).json({
-        success: false,
-        error: "VPS cancel network error",
-        detail: String(err?.message || err),
-        vps: VPS_BASE,
+
+      const tx = db.tx?.[idTransaksi] || null;
+      return send(res, 200, {
+        success: true,
+        data: {
+          ...st,
+          idTransaksi,
+          pricing: tx
+            ? {
+                amountOriginal: tx.amountOriginal,
+                amountFinal: tx.amountFinal,
+                discountRp: tx.discountRp,
+                applied: tx.applied || [],
+              }
+            : undefined,
+        },
       });
     }
 
-    const db = await loadDb();
-    const tx = db?.tx?.[idTransaksi];
-    if (tx && !tx.discountCommitted) {
-      releaseReservations(db, tx.reservations || []);
-      tx.status = "cancelled";
-      tx.updatedAt = new Date().toISOString();
-      await saveDb(db);
+    if (action === "cancel") {
+      const idTransaksi = String(body.idTransaksi || "").trim();
+      if (!idTransaksi) return send(res, 400, { success: false, error: "idTransaksi required" });
+
+      const out = await proxyJson(`${ORKUT_BASE}/api/cancel`, "POST", { idTransaksi });
+
+      // release reservation kalau batal
+      const tx = db.tx?.[idTransaksi];
+      if (tx?.reservations) {
+        voucherEngine.releaseReservations(db, tx.reservations);
+        tx.status = "CANCELED";
+        tx.updatedAt = new Date().toISOString();
+        await saveDb(db);
+      }
+
+      return send(res, 200, { success: true, data: out });
     }
 
-    return res.status(r.status).json(r.data);
+    if (action === "qr") {
+      const idTransaksi = String(url.searchParams.get("idTransaksi") || "").trim();
+      if (!idTransaksi) {
+        res.statusCode = 400;
+        res.end("idTransaksi required");
+        return;
+      }
+
+      // proxy image/png dari VPS
+      if (!ORKUT_BASE) {
+        res.statusCode = 500;
+        res.end("ORKUT_BASE kosong");
+        return;
+      }
+
+      const up = await fetch(`${ORKUT_BASE}/api/qr?idTransaksi=${encodeURIComponent(idTransaksi)}`);
+      res.statusCode = up.status;
+      res.setHeader("Cache-Control", "no-store");
+
+      // copy content-type
+      const ct = up.headers.get("content-type") || "image/png";
+      res.setHeader("Content-Type", ct);
+
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.end(buf);
+      return;
+    }
+
+    return send(res, 404, { success: false, error: "Unknown action" });
+  } catch (e) {
+    return send(res, 500, { success: false, error: e?.message || "server error" });
   }
-
-  // ===================== QR IMAGE PROXY =====================
-  if (action === "qr") {
-    if (req.method !== "GET")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-
-    const idTransaksi = String(req.query?.idTransaksi || "").trim();
-    if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
-
-    let r;
-    try {
-      r = await axios.get(`${VPS_BASE}/api/qr/${encodeURIComponent(idTransaksi)}.png`, {
-        responseType: "arraybuffer",
-        timeout: 20000,
-        validateStatus: () => true,
-      });
-    } catch (err) {
-      return res.status(502).json({
-        success: false,
-        error: "VPS qr network error",
-        detail: String(err?.message || err),
-        vps: VPS_BASE,
-      });
-    }
-
-    if (r.status < 200 || r.status >= 300) return res.status(r.status).send("QR not found");
-
-    res.status(200);
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "no-store");
-    res.send(Buffer.from(r.data));
-    return;
-  }
-
-  // ===================== SETSTATUS (internal) =====================
-  if (action === "setstatus") {
-    if (req.method !== "POST")
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireSecret(req, res)) return;
-
-    const { idTransaksi, status } = req.body || {};
-    if (!idTransaksi || !status)
-      return res.status(400).json({ success: false, error: "idTransaksi & status required" });
-
-    const db = await loadDb();
-    const tx = db?.tx?.[idTransaksi];
-    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
-
-    tx.status = String(status).toLowerCase();
-    tx.updatedAt = new Date().toISOString();
-    await saveDb(db);
-
-    return res.status(200).json({ success: true, data: tx });
-  }
-
-  // ===================== ADMIN: voucher + monthly =====================
-  const isAdminAction = new Set([
-    "voucher.list",
-    "voucher.upsert",
-    "voucher.disable",
-    "monthly.get",
-    "monthly.set",
-    "admin_upsert_voucher",
-    "admin_disable_voucher",
-    "admin_set_monthly_promo",
-  ]);
-
-  if (isAdminAction.has(action)) {
-    if (!requireAdmin(req, res)) return;
-
-    const db = await loadDb();
-
-    if (action === "voucher.list") {
-      const list = Object.values(db.vouchers || {}).sort((a, b) =>
-        String(a.code).localeCompare(String(b.code))
-      );
-      return res.status(200).json({ success: true, data: list });
-    }
-
-    if (action === "voucher.upsert" || action === "admin_upsert_voucher") {
-      if (req.method !== "POST")
-        return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminUpsertVoucher(db, req.body || {});
-      await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
-    }
-
-    if (action === "voucher.disable" || action === "admin_disable_voucher") {
-      if (req.method !== "POST")
-        return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminDisableVoucher(db, req.body || {});
-      await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
-    }
-
-    if (action === "monthly.get") {
-      const p = db?.promo?.monthly || {};
-      return res.status(200).json({ success: true, data: p });
-    }
-
-    if (action === "monthly.set" || action === "admin_set_monthly_promo") {
-      if (req.method !== "POST")
-        return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminSetMonthlyPromo(db, req.body || {});
-      await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
-    }
-  }
-
-  return res.status(404).json({ success: false, error: "Unknown action" });
 };
