@@ -1,50 +1,42 @@
-// api/orkut.js — FINAL (ONLY VPS_BASE from ENV, NO DEFAULT, NO ALIAS)
+// api/orkut.js — FULL FINAL (DISCOUNT WORKING END-TO-END)
+// Matches scripts/api.js endpoints:
+// - POST  /api/orkut?action=createqr
+// - GET   /api/orkut?action=status&idTransaksi=...
+// - POST  /api/orkut?action=cancel
+// - GET   /api/orkut?action=qr&idTransaksi=...        (PNG proxy)
 //
-// WAJIB ENV:
-// - VPS_BASE = "http://193.23.209.47:7032"   (tanpa trailing slash)
+// + internal callback (optional but IMPORTANT for committing discounts):
+// - POST  /api/orkut?action=paidhook  (commit/release reservations)
 //
-// OPTIONAL:
-// - VPS_CREATEQR_PATH (default "/api/createqr")
-// - VPS_CANCEL_PATH   (default "/api/cancel")
-// - VPS_QR_PATH       (default "/api/qr")    => GET {VPS_QR_PATH}/{id}.png
-// - CALLBACK_SECRET   (optional protect paidhook/setstatus)
-// - ADMIN_KEY         (optional protect admin actions)
-// - VPS_TIMEOUT_MS    (default 20000)
+// ENV:
+// - VPS_BASE="http://193.23.209.47:7032"   (REQUIRED, no trailing slash)
+// - CALLBACK_SECRET="..."                  (optional, protect paidhook)
+// - VPS_TIMEOUT_MS=20000                   (optional)
+// - VPS_CREATEQR_PATH="/api/createqr"      (optional)
+// - VPS_CANCEL_PATH="/api/cancel"          (optional)
+// - VPS_QR_PATH="/api/qr"                  (optional)
 
 const axios = require("axios");
-
-// DB via GitHub (shared with admin)
 const { loadDb, saveDb } = require("../lib/github");
 
-// Voucher/promo logic (shared)
+// voucher engine
 const {
   getDeviceKey,
   applyDiscount,
   commitReservations,
   releaseReservations,
-  adminUpsertVoucher,
-  adminDisableVoucher,
-  adminSetMonthlyPromo,
 } = require("../lib/voucher");
 
-// ===================== ENV / CONFIG =====================
-const VPS_BASE = String(process.env.VPS_BASE || "").trim().replace(/\/+$/, ""); // ONLY THIS
+// ===== ENV =====
+const VPS_BASE = String(process.env.VPS_BASE || "").trim().replace(/\/+$/, "");
+const CALLBACK_SECRET = String(process.env.CALLBACK_SECRET || "").trim();
+
+const VPS_TIMEOUT_MS = Number(process.env.VPS_TIMEOUT_MS || 20000);
 const VPS_CREATEQR_PATH = String(process.env.VPS_CREATEQR_PATH || "/api/createqr").trim();
 const VPS_CANCEL_PATH = String(process.env.VPS_CANCEL_PATH || "/api/cancel").trim();
 const VPS_QR_PATH = String(process.env.VPS_QR_PATH || "/api/qr").trim();
 
-const CALLBACK_SECRET = String(process.env.CALLBACK_SECRET || "").trim();
-const ADMIN_KEY = String(process.env.ADMIN_KEY || "").trim();
-
-const VPS_TIMEOUT_MS = Number(process.env.VPS_TIMEOUT_MS || 20000);
-
-const http = axios.create({
-  timeout: VPS_TIMEOUT_MS,
-  validateStatus: () => true,
-  headers: { "Content-Type": "application/json" },
-});
-
-// ===================== HELPERS =====================
+// ===== helpers =====
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -61,13 +53,22 @@ function getBaseUrl(req) {
   return `${proto}://${host}`;
 }
 
-function requireSecret(req, res) {
-  if (!CALLBACK_SECRET) return true;
+function joinUrl(base, p) {
+  const b = String(base || "").replace(/\/+$/, "");
+  const pp = String(p || "");
+  return pp.startsWith("/") ? `${b}${pp}` : `${b}/${pp}`;
+}
 
+function assertVpsBase() {
+  if (!VPS_BASE) throw new Error('VPS_BASE kosong. Set env VPS_BASE contoh: "http://193.23.209.47:7032"');
+  if (!/^https?:\/\//i.test(VPS_BASE)) throw new Error(`VPS_BASE invalid. Sekarang: "${VPS_BASE}"`);
+}
+
+function requireSecret(req, res) {
+  if (!CALLBACK_SECRET) return true; // secret off
   const got =
     (req.headers["x-callback-secret"] || "").toString().trim() ||
     (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
-
   if (got !== CALLBACK_SECRET) {
     res.status(401).json({ success: false, error: "Unauthorized" });
     return false;
@@ -75,42 +76,35 @@ function requireSecret(req, res) {
   return true;
 }
 
-function requireAdmin(req, res) {
-  if (!ADMIN_KEY) {
-    res.status(500).json({ success: false, error: "ADMIN_KEY not set" });
-    return false;
-  }
-  const got =
-    (req.headers["x-admin-key"] || "").toString().trim() ||
-    (req.headers.authorization || "").toString().replace(/^Bearer\s+/i, "").trim();
+const http = axios.create({
+  timeout: VPS_TIMEOUT_MS,
+  validateStatus: () => true,
+  headers: { "Content-Type": "application/json" },
+});
 
-  if (got !== ADMIN_KEY) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-    return false;
+function pick(obj, keys) {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
   }
-  return true;
+  return null;
 }
 
-function joinUrl(base, p) {
-  const b = String(base || "").replace(/\/+$/, "");
-  const pp = String(p || "").startsWith("/") ? String(p || "") : `/${p || ""}`;
-  return `${b}${pp}`;
+function pickIdTransaksi(provider) {
+  const d = provider?.data || provider || {};
+  return String(pick(d, ["idTransaksi", "idtransaksi", "transactionId", "trxId", "id"]) || "").trim();
 }
 
-function assertVpsBase() {
-  if (!VPS_BASE) {
-    const err = new Error('VPS_BASE kosong. Set env VPS_BASE contoh: "http://193.23.209.47:7032"');
-    err.code = "VPS_BASE_MISSING";
-    throw err;
-  }
-  if (!/^https?:\/\//i.test(VPS_BASE)) {
-    const err = new Error(`VPS_BASE invalid (harus http/https). Sekarang: "${VPS_BASE}"`);
-    err.code = "VPS_BASE_INVALID";
-    throw err;
-  }
+function pickExpiredAt(provider) {
+  const d = provider?.data || provider || {};
+  return pick(d, ["expiredAt", "expired"]);
 }
 
-// ===================== HANDLER =====================
+function pickQrPngUrl(provider) {
+  const d = provider?.data || provider || {};
+  return pick(d, ["qrPngUrl", "qrpngurl"]);
+}
+
 module.exports = async function handler(req, res) {
   setCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -118,91 +112,78 @@ module.exports = async function handler(req, res) {
   const action = String(req.query?.action || "").toLowerCase().trim();
   const baseUrl = getBaseUrl(req);
 
-  // ping/help
+  // ===== ping =====
   if (!action || action === "ping") {
     return res.status(200).json({
       success: true,
-      service: "levpay-vercel-proxy",
+      service: "orkut-proxy",
       vpsBase: VPS_BASE || "(VPS_BASE not set)",
-      vpsPaths: { createqr: VPS_CREATEQR_PATH, cancel: VPS_CANCEL_PATH, qr: VPS_QR_PATH },
       routes: [
         "POST /api/orkut?action=createqr",
         "GET  /api/orkut?action=status&idTransaksi=...",
         "POST /api/orkut?action=cancel",
         "GET  /api/orkut?action=qr&idTransaksi=...",
-        "POST /api/orkut?action=paidhook (secret optional)",
-        "POST /api/orkut?action=setstatus (secret optional)",
-        "GET  /api/orkut?action=voucher.list (ADMIN)",
-        "POST /api/orkut?action=voucher.upsert (ADMIN)",
-        "POST /api/orkut?action=voucher.disable (ADMIN)",
-        "GET  /api/orkut?action=monthly.get (ADMIN)",
-        "POST /api/orkut?action=monthly.set (ADMIN)",
+        "POST /api/orkut?action=paidhook (optional)",
       ],
     });
   }
 
-  // ===================== CREATE QR =====================
+  // =====================
+  // CREATE QR (DISCOUNT APPLIED HERE)
+  // =====================
   if (action === "createqr") {
-    if (req.method !== "POST") {
-      return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
     try {
       assertVpsBase();
 
-      const amount = Number(req.body?.amount);
-      const theme = req.body?.theme === "theme1" ? "theme1" : "theme2";
+      const amountOriginal = Number(req.body?.amount);
       const deviceId = String(req.body?.deviceId || "").trim();
-      const code = String(req.body?.voucher || req.body?.code || req.body?.vouccer || "").trim();
 
-      if (!Number.isFinite(amount) || amount < 1) {
+      // NOTE: frontend kirim "voucher" + fallback typo "vouccer"
+      const voucherCode = String(
+        req.body?.voucher || req.body?.code || req.body?.vouccer || ""
+      ).trim();
+
+      const theme = req.body?.theme === "theme1" ? "theme1" : "theme2";
+
+      if (!Number.isFinite(amountOriginal) || amountOriginal < 1) {
         return res.status(400).json({ success: false, error: "amount invalid" });
       }
-      if (!deviceId) {
-        return res.status(400).json({ success: false, error: "deviceId required" });
-      }
+      if (!deviceId) return res.status(400).json({ success: false, error: "deviceId required" });
 
       const db = await loadDb();
+      db.tx = db.tx || {};
+
       const deviceKey = getDeviceKey(deviceId);
 
-      // reserve voucher/monthly (kalau code valid) — kalau code kosong => no diskon
+      // ✅ DISKON CUMA JALAN KALAU USER MASUKIN KODE (voucherCode)
+      // kalau kosong, applied = [] dan discountRp = 0
       const { finalAmount, discountRp, applied, reservations } = applyDiscount(db, {
-        amount,
+        amount: amountOriginal,
         deviceKey,
-        voucherCode: code || null,
+        voucherCode: voucherCode || null,
         reserveTtlMs: 6 * 60 * 1000,
       });
 
+      // call VPS createqr with FINAL AMOUNT
       const vpsUrl = joinUrl(VPS_BASE, VPS_CREATEQR_PATH);
-
-      let r;
-      try {
-        r = await http.post(vpsUrl, { amount: finalAmount, theme });
-      } catch (e) {
-        releaseReservations(db, reservations || []);
-        await saveDb(db);
-        return res.status(502).json({
-          success: false,
-          error: "VPS createqr network error",
-          detail: String(e?.message || e),
-          vpsUrl,
-        });
-      }
-
-      const provider = r.data;
+      const r = await http.post(vpsUrl, { amount: finalAmount, theme });
 
       if (r.status < 200 || r.status >= 300) {
+        // gagal bikin QR => release reservation biar gak "ke-lock"
         releaseReservations(db, reservations || []);
         await saveDb(db);
         return res.status(r.status).json({
           success: false,
           error: "VPS createqr failed",
           vpsUrl,
-          provider,
+          provider: r.data,
         });
       }
 
-      const idTransaksi = String(provider?.data?.idTransaksi || provider?.idTransaksi || "").trim();
+      const provider = r.data;
+      const idTransaksi = pickIdTransaksi(provider);
       if (!idTransaksi) {
         releaseReservations(db, reservations || []);
         await saveDb(db);
@@ -214,86 +195,73 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      const vpsQrPngUrl =
-        provider?.data?.qrPngUrl ||
-        provider?.qrPngUrl ||
-        `${VPS_QR_PATH}/${encodeURIComponent(idTransaksi)}.png`;
+      const createdAt = new Date().toISOString();
+      const expiredAt = pickExpiredAt(provider) || null;
+      const qrPngUrl = pickQrPngUrl(provider) || null;
 
-      db.tx = db.tx || {};
+      // scripts/api.js expects qrUrl (proxy https) + qrVpsUrl (direct vps)
+      const qrUrl = `${baseUrl}/api/orkut?action=qr&idTransaksi=${encodeURIComponent(idTransaksi)}`;
+      const qrVpsUrl = joinUrl(
+        VPS_BASE,
+        qrPngUrl ? String(qrPngUrl) : `${VPS_QR_PATH}/${encodeURIComponent(idTransaksi)}.png`
+      );
+
+      // save tx to DB (important for status + commit later)
       db.tx[idTransaksi] = {
         idTransaksi,
         deviceKey,
         deviceIdMasked: deviceId.slice(0, 3) + "***",
 
-        amountOriginal: amount,
+        voucherCode: voucherCode || null,
+        amountOriginal,
         amountFinal: finalAmount,
-        discountRp,
-        applied,
+        discountRp: discountRp || 0,
+        applied: applied || [],
 
         reservations: reservations || [],
         discountCommitted: false,
 
         status: "pending",
-        createdAt: new Date().toISOString(),
+        createdAt,
+        expiredAt,
         paidAt: null,
         paidVia: null,
+        updatedAt: createdAt,
+
+        qrUrl,
+        qrVpsUrl,
+        qrPngUrl,
       };
 
       await saveDb(db);
 
       return res.status(200).json({
-        ...provider,
+        success: true,
         data: {
-          ...(provider?.data || {}),
           idTransaksi,
-          qrUrl: `${baseUrl}/api/orkut?action=qr&idTransaksi=${encodeURIComponent(idTransaksi)}`,
-          qrVpsUrl: joinUrl(VPS_BASE, vpsQrPngUrl),
-          pricing: { amountOriginal: amount, amountFinal: finalAmount, discountRp, applied },
+          createdAt,
+          expiredAt,
+          qrUrl,
+          qrVpsUrl,
+          qrPngUrl,
+
+          // ✅ ini yang dibaca normalizePricing() di scripts/api.js
+          pricing: {
+            amountOriginal,
+            amountFinal: finalAmount,
+            discountRp: discountRp || 0,
+            applied: applied || [],
+          },
         },
       });
     } catch (e) {
-      return res.status(500).json({ success: false, error: e?.message || "server error" });
+      return res.status(500).json({ success: false, error: String(e?.message || e) });
     }
   }
 
-  // ===================== PAIDHOOK =====================
-  if (action === "paidhook") {
-    if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-    if (!requireSecret(req, res)) return;
-
-    const { idTransaksi, status, paidAt, paidVia, note } = req.body || {};
-    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
-
-    const st = String(status).toLowerCase();
-    const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
-    if (!terminal.has(st)) return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
-
-    const db = await loadDb();
-    db.tx = db.tx || {};
-    const tx = db.tx[idTransaksi];
-    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
-
-    tx.status = st;
-    if (paidAt) tx.paidAt = paidAt;
-    if (paidVia) tx.paidVia = paidVia;
-    if (note) tx.note = note;
-    tx.updatedAt = new Date().toISOString();
-
-    if (st === "paid") {
-      if (!tx.discountCommitted) {
-        commitReservations(db, tx.reservations || []);
-        tx.discountCommitted = true;
-      }
-    } else {
-      if (!tx.discountCommitted) releaseReservations(db, tx.reservations || []);
-      tx.discountCommitted = false;
-    }
-
-    await saveDb(db);
-    return res.status(200).json({ success: true, saved: true, status: st });
-  }
-
-  // ===================== LOCAL STATUS =====================
+  // =====================
+  // STATUS
+  // =====================
   if (action === "status") {
     const idTransaksi = String(req.query?.idTransaksi || "").trim();
     if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
@@ -302,10 +270,23 @@ module.exports = async function handler(req, res) {
     const tx = db?.tx?.[idTransaksi];
     if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
 
-    return res.status(200).json({ success: true, data: tx });
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...tx,
+        pricing: {
+          amountOriginal: tx.amountOriginal,
+          amountFinal: tx.amountFinal,
+          discountRp: tx.discountRp || 0,
+          applied: tx.applied || [],
+        },
+      },
+    });
   }
 
-  // ===================== CANCEL =====================
+  // =====================
+  // CANCEL (release reservations)
+  // =====================
   if (action === "cancel") {
     if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
@@ -318,10 +299,13 @@ module.exports = async function handler(req, res) {
       const vpsUrl = joinUrl(VPS_BASE, VPS_CANCEL_PATH);
       const r = await http.post(vpsUrl, { idTransaksi });
 
+      // always update local DB
       const db = await loadDb();
       const tx = db?.tx?.[idTransaksi];
-      if (tx && !tx.discountCommitted) {
-        releaseReservations(db, tx.reservations || []);
+      if (tx) {
+        // ✅ kalau belum paid => release diskon
+        if (!tx.discountCommitted) releaseReservations(db, tx.reservations || []);
+        tx.discountCommitted = false;
         tx.status = "cancelled";
         tx.updatedAt = new Date().toISOString();
         await saveDb(db);
@@ -329,11 +313,13 @@ module.exports = async function handler(req, res) {
 
       return res.status(r.status).json(r.data);
     } catch (e) {
-      return res.status(500).json({ success: false, error: e?.message || "server error" });
+      return res.status(500).json({ success: false, error: String(e?.message || e) });
     }
   }
 
-  // ===================== QR IMAGE PROXY =====================
+  // =====================
+  // QR IMAGE PROXY (PNG)
+  // =====================
   if (action === "qr") {
     if (req.method !== "GET") return res.status(405).json({ success: false, error: "Method Not Allowed" });
 
@@ -344,7 +330,7 @@ module.exports = async function handler(req, res) {
       if (!idTransaksi) return res.status(400).json({ success: false, error: "idTransaksi required" });
 
       const url = joinUrl(VPS_BASE, `${VPS_QR_PATH}/${encodeURIComponent(idTransaksi)}.png`);
-      const r = await http.get(url, { responseType: "arraybuffer", headers: {} });
+      const r = await http.get(url, { responseType: "arraybuffer" });
 
       if (r.status < 200 || r.status >= 300) return res.status(r.status).send("QR not found");
 
@@ -357,73 +343,57 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // ===================== SETSTATUS (internal) =====================
-  if (action === "setstatus") {
+  // =====================
+  // PAIDHOOK (commit/release reservations)
+  // IMPORTANT: ini yang bikin voucher/monthly "kepake" beneran.
+  // =====================
+  if (action === "paidhook") {
     if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
     if (!requireSecret(req, res)) return;
 
-    const { idTransaksi, status } = req.body || {};
-    if (!idTransaksi || !status) return res.status(400).json({ success: false, error: "idTransaksi & status required" });
+    try {
+      const idTransaksi = String(req.body?.idTransaksi || "").trim();
+      const status = String(req.body?.status || "").trim().toLowerCase();
+      const paidAt = req.body?.paidAt ? String(req.body.paidAt) : null;
+      const paidVia = req.body?.paidVia ? String(req.body.paidVia) : null;
 
-    const db = await loadDb();
-    const tx = db?.tx?.[idTransaksi];
-    if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
+      if (!idTransaksi || !status) {
+        return res.status(400).json({ success: false, error: "idTransaksi & status required" });
+      }
 
-    tx.status = String(status).toLowerCase();
-    tx.updatedAt = new Date().toISOString();
-    await saveDb(db);
+      const terminal = new Set(["paid", "expired", "cancelled", "failed"]);
+      if (!terminal.has(status)) {
+        return res.status(400).json({ success: false, error: "status must be paid|expired|cancelled|failed" });
+      }
 
-    return res.status(200).json({ success: true, data: tx });
-  }
+      const db = await loadDb();
+      db.tx = db.tx || {};
+      const tx = db.tx[idTransaksi];
+      if (!tx) return res.status(404).json({ success: false, error: "tx not found" });
 
-  // ===================== ADMIN: voucher + monthly =====================
-  const isAdminAction = new Set([
-    "voucher.list",
-    "voucher.upsert",
-    "voucher.disable",
-    "monthly.get",
-    "monthly.set",
-  ]);
+      tx.status = status;
+      if (paidAt) tx.paidAt = paidAt;
+      if (paidVia) tx.paidVia = paidVia;
+      tx.updatedAt = new Date().toISOString();
 
-  if (isAdminAction.has(action)) {
-    if (!requireAdmin(req, res)) return;
+      if (status === "paid") {
+        // ✅ COMMIT reservations => voucher/monthly use count naik
+        if (!tx.discountCommitted) {
+          commitReservations(db, tx.reservations || []);
+          tx.discountCommitted = true;
+        }
+      } else {
+        // ✅ kalau bukan paid => release (kalau belum commit)
+        if (!tx.discountCommitted) releaseReservations(db, tx.reservations || []);
+        tx.discountCommitted = false;
+      }
 
-    const db = await loadDb();
-
-    if (action === "voucher.list") {
-      const list = Object.values(db.vouchers || {}).sort((a, b) =>
-        String(a.code).localeCompare(String(b.code))
-      );
-      return res.status(200).json({ success: true, data: list });
-    }
-
-    if (action === "voucher.upsert") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminUpsertVoucher(db, req.body || {});
       await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
-    }
-
-    if (action === "voucher.disable") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminDisableVoucher(db, req.body || {});
-      await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
-    }
-
-    if (action === "monthly.get") {
-      const p = db?.promo?.monthly || {};
-      return res.status(200).json({ success: true, data: p });
-    }
-
-    if (action === "monthly.set") {
-      if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method Not Allowed" });
-      const out = adminSetMonthlyPromo(db, req.body || {});
-      await saveDb(db);
-      return res.status(200).json({ success: true, data: out });
+      return res.status(200).json({ success: true, saved: true, status });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: String(e?.message || e) });
     }
   }
 
   return res.status(404).json({ success: false, error: "Unknown action" });
 };
-```0
