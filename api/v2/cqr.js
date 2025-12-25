@@ -1,155 +1,130 @@
 // api/v2/cqr.js
 const axios = require("axios");
-const base64 = require("base-64");
+const {
+  CONFIG,
+  UA,
+  XRW,
+  REDIRECT_URL,
+  autologin,
+  getRefererAndKasir,
+  fetchKasirHtml,
+  extractEndpointsFromKasirHtml,
+} = require("./_shared");
 
-// ===== HARDCODE CONFIG (sama kaya index.js lu) =====
-const CONFIG = {
-  auth_username: "vinzyy",
-  auth_token: "1331927:cCVk0A4be8WL2ONriangdHJvU7utmfTh",
-  merchant: "NEVERMOREOK1331927",
-};
-
-function extractCookieHeader(setCookieArr) {
-  if (!setCookieArr || !Array.isArray(setCookieArr)) return "";
-  const rawCookie = setCookieArr.join(", ");
-  const cookieChunks = [...rawCookie.matchAll(/\b[\w_]+=.*?(?=,\s\w+=|$)/g)];
-  return cookieChunks.map((m) => m[0]).join("; ");
+function sendJson(res, code, obj) {
+  res.status(code).setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(obj, null, 2));
 }
 
-function ok200or302(status) {
-  return status === 200 || status === 302;
-}
-
-module.exports = async function handler(req, res) {
+module.exports = async (req, res) => {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({
+      return sendJson(res, 405, {
         success: false,
         message: "Method Not Allowed. Use POST JSON.",
         example: { nominal: 1 },
       });
     }
 
-    const nominal = Number(req.body?.nominal);
-    const merchant = String(req.body?.merchant || CONFIG.merchant).trim();
-
+    const body = typeof req.body === "object" ? req.body : {};
+    const nominal = Number(body.nominal);
     if (!Number.isFinite(nominal) || nominal < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "nominal invalid",
-        example: { nominal: 1 },
-      });
+      return sendJson(res, 400, { success: false, message: "nominal invalid", example: { nominal: 1 } });
     }
 
-    const redirectTarget = "https://app.orderkuota.com/digital_app/qris";
-    const encodedRedirect = base64.encode(redirectTarget);
+    // 1) autologin ambil cookie
+    const login = await autologin();
+    const cookieHeader = login.cookieHeader || "";
 
-    const headersBase = {
-      "User-Agent": "WebView",
-      Accept: "*/*",
-      "Accept-Encoding": "gzip, deflate",
-      "x-requested-with": "com.orderkuota.app",
-      "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-      Connection: "keep-alive",
-    };
+    // 2) buka qris page ambil referer/kasirUrl (FIX terima 200/302)
+    const step2 = await getRefererAndKasir(cookieHeader);
 
-    // STEP 1: autologin (TERIMA 200/302, jangan ngunci 302 doang)
-    const loginResp = await axios.get("https://app.orderkuota.com/api/v2/autologin", {
-      params: {
-        auth_username: CONFIG.auth_username,
-        auth_token: CONFIG.auth_token,
-        redirect: encodedRedirect,
-      },
-      headers: headersBase,
-      maxRedirects: 0,
-      validateStatus: ok200or302,
-    });
+    // 3) kalau dapat kasirUrl, fetch HTML kasir untuk cari endpoint yang bener (biar ga 404)
+    let kasirHtml = "";
+    let kasirStatus = 0;
+    let endpoints = {};
+    if (step2.kasirUrl) {
+      const kas = await fetchKasirHtml(step2.kasirUrl, cookieHeader);
+      kasirStatus = kas.status;
+      kasirHtml = kas.html || "";
+      endpoints = extractEndpointsFromKasirHtml(kasirHtml);
+    }
 
-    const cookieHeader = extractCookieHeader(loginResp.headers["set-cookie"]);
+    // 4) tentuin path create endpoint
+    // - kalau ketemu di HTML kasir -> pakai itu
+    // - fallback: path lama
+    const createPath =
+      endpoints.createPath ||
+      "/qris/curl/create_qris_image.php";
 
-    // STEP 2: buka /digital_app/qris (kadang 200, kadang 302)
-    const qrisResp = await axios.get(redirectTarget, {
-      params: {
-        auth_username: CONFIG.auth_username,
-        auth_token: CONFIG.auth_token,
-        redirect: encodedRedirect,
-      },
-      headers: { ...headersBase, Cookie: cookieHeader },
-      maxRedirects: 0,
-      validateStatus: ok200or302,
-    });
+    const createUrl = `https://kasir.orderkuota.com${createPath}`;
 
-    // kalau dapet location (302), pake itu sebagai referer.
-    // kalau 200 (no location), fallback ke redirectTarget (ini FIX penting).
-    const refererUsed = qrisResp.headers?.location || redirectTarget;
-
-    // STEP 3: hit create_qris_image.php
-    const imgResp = await axios.get("https://kasir.orderkuota.com/qris/curl/create_qris_image.php", {
-      params: { merchant, nominal },
+    // 5) request gambar QR (arraybuffer)
+    const r = await axios.get(createUrl, {
+      params: { merchant: CONFIG.merchant, nominal: String(nominal) },
       headers: {
-        ...headersBase,
-        Accept: "image/*,*/*",
-        Referer: refererUsed,
+        "User-Agent": UA,
+        "x-requested-with": XRW,
+        "Accept": "image/*,*/*",
+        "Referer": step2.referer || REDIRECT_URL,
+        "Cookie": cookieHeader,
       },
       responseType: "arraybuffer",
-      timeout: 15000,
-      // terima status apa aja biar kita bisa debug HTML 404 juga
-      validateStatus: () => true,
+      maxRedirects: 0,
+      validateStatus: (s) => s >= 200 && s < 500,
+      timeout: 20000,
     });
 
-    const ct = String(imgResp.headers["content-type"] || "").toLowerCase();
-    const upstreamStatus = imgResp.status;
+    const ct = String(r.headers["content-type"] || "").toLowerCase();
+    const isImage = ct.includes("image/");
 
-    // Kalau balik HTML (biasanya 404 fake), return debug headPreview
-    if (!ct.includes("image/")) {
-      const headPreview = Buffer.from(imgResp.data || "")
-        .toString("utf8")
-        .slice(0, 250);
+    if (!isImage) {
+      // biasanya 404 html / blokir / dll
+      const headPreview = Buffer.from(r.data || "").toString("utf8").slice(0, 220);
 
-      return res.status(200).json({
+      return sendJson(res, 200, {
         success: true,
-        merchant,
+        merchant: CONFIG.merchant,
         nominal,
-        upstreamStatus,
+        upstreamStatus: r.status,
         debug: {
-          autologinStatus: loginResp.status,
-          qrisStatus: qrisResp.status,
-          qrisHasLocation: !!qrisResp.headers?.location,
-          refererUsed,
+          autologinStatus: login.status,
+          qrisStatus: step2.qrisStatus,
+          qrisHasLocation: step2.qrisHasLocation,
+          qrisHtmlBytes: step2.qrisHtmlBytes,
+          kasirPageStatus: kasirStatus || null,
+          createPathUsed: createPath,
+          createContentType: ct || null,
+          refererUsed: step2.referer || null,
         },
         error: "create_qris_image upstream not OK",
         headPreview,
       });
     }
 
-    // OK image/png
-    const b64 = Buffer.from(imgResp.data).toString("base64");
+    // return base64 PNG (biar gampang dipakai)
+    const buf = Buffer.from(r.data);
+    const b64 = buf.toString("base64");
 
-    // option: kalau client minta raw image (biar gampang dipake front)
-    if (String(req.query?.raw || "") === "1") {
-      res.setHeader("Content-Type", "image/png");
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).send(Buffer.from(imgResp.data));
-    }
-
-    return res.status(200).json({
+    return sendJson(res, 200, {
       success: true,
-      merchant,
+      merchant: CONFIG.merchant,
       nominal,
-      upstreamStatus,
+      upstreamStatus: r.status,
+      contentType: ct,
+      pngBase64: b64,
+      bytes: buf.length,
       debug: {
-        autologinStatus: loginResp.status,
-        qrisStatus: qrisResp.status,
-        qrisHasLocation: !!qrisResp.headers?.location,
-        refererUsed,
+        autologinStatus: login.status,
+        qrisStatus: step2.qrisStatus,
+        qrisHasLocation: step2.qrisHasLocation,
+        kasirPageStatus: kasirStatus || null,
+        createPathUsed: createPath,
+        refererUsed: step2.referer || null,
       },
-      // kirim base64 biar bisa langsung render:
-      // <img src="data:image/png;base64,...." />
-      imageBase64: b64,
-      contentType: "image/png",
     });
   } catch (e) {
-    return res.status(500).json({
+    return sendJson(res, 200, {
       success: false,
       message: "internal error",
       error: e?.message || "unknown",
