@@ -7,10 +7,13 @@ const CONFIG = {
   auth_token: "1331927:cCVk0A4be8WL2ONriangdHJvU7utmfTh",
   merchant: "NEVERMOREOK1331927",
   timeoutMs: 20000,
+  maxHops: 8,
 };
 
-function accept200_399(status) {
-  return status >= 200 && status < 400;
+function parseSetCookieToHeader(setCookies) {
+  const raw = (setCookies || []).join(", ") || "";
+  const cookieChunks = [...raw.matchAll(/\b[\w_]+=.*?(?=,\s\w+=|$)/g)];
+  return cookieChunks.map((m) => m[0]).join("; ");
 }
 
 function mergeCookies(cookieA, cookieB) {
@@ -33,35 +36,72 @@ function mergeCookies(cookieA, cookieB) {
   return [...m.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
-function parseSetCookieToHeader(setCookies) {
-  const raw = (setCookies || []).join(", ") || "";
-  const cookieChunks = [...raw.matchAll(/\b[\w_]+=.*?(?=,\s\w+=|$)/g)];
-  return cookieChunks.map((m) => m[0]).join("; ");
+function absolutize(baseUrl, maybeRelative) {
+  try {
+    return new URL(maybeRelative, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
-function getResponseUrl(resp) {
-  return (
-    resp?.request?.res?.responseUrl ||
-    resp?.request?._redirectable?._currentUrl ||
-    null
-  );
-}
-
-function extractKasirUrlFromHtml(html) {
+function extractKasirUrlFromHtml(html, baseUrl) {
   const s = String(html || "");
-  const meta = s.match(/url\s*=\s*([^"'>\s]+)/i);
-  if (meta && meta[1] && meta[1].startsWith("http")) return meta[1];
+
+  const meta = s.match(/http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"']+)["']/i);
+  if (meta && meta[1]) return absolutize(baseUrl, meta[1]);
 
   const loc1 = s.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/i);
-  if (loc1 && loc1[1] && loc1[1].startsWith("http")) return loc1[1];
+  if (loc1 && loc1[1]) return absolutize(baseUrl, loc1[1]);
 
   const loc2 = s.match(/location\.href\s*=\s*["']([^"']+)["']/i);
-  if (loc2 && loc2[1] && loc2[1].startsWith("http")) return loc2[1];
+  if (loc2 && loc2[1]) return absolutize(baseUrl, loc2[1]);
 
-  const kasir = s.match(/https?:\/\/kasir\.orderkuota\.com\/[^"'<> ]+/i);
-  if (kasir && kasir[0]) return kasir[0];
+  const kasirAbs = s.match(/https?:\/\/kasir\.orderkuota\.com\/[^"'<> ]+/i);
+  if (kasirAbs && kasirAbs[0]) return kasirAbs[0];
+
+  const kasirRel = s.match(/["'](\/qris\/[^"']+)["']/i);
+  if (kasirRel && kasirRel[1]) return absolutize("https://kasir.orderkuota.com", kasirRel[1]);
 
   return null;
+}
+
+async function followRedirectsGet(startUrl, headersBase, cookieStart) {
+  let url = startUrl;
+  let cookie = cookieStart || "";
+  const chain = [];
+
+  for (let hop = 0; hop < CONFIG.maxHops; hop++) {
+    const resp = await axios.get(url, {
+      headers: { ...headersBase, Cookie: cookie || undefined },
+      maxRedirects: 0,
+      timeout: CONFIG.timeoutMs,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+
+    chain.push({ hop, url, status: resp.status, hasLocation: !!resp.headers?.location });
+
+    const setC = parseSetCookieToHeader(resp.headers?.["set-cookie"]);
+    cookie = mergeCookies(cookie, setC);
+
+    const loc = resp.headers?.location ? absolutize(url, resp.headers.location) : null;
+
+    if (loc && resp.status >= 300 && resp.status < 400) {
+      url = loc;
+      continue;
+    }
+
+    if (resp.status === 200 && typeof resp.data === "string") {
+      const maybeKasir = extractKasirUrlFromHtml(resp.data, url);
+      if (maybeKasir && maybeKasir !== url) {
+        url = maybeKasir;
+        continue;
+      }
+    }
+
+    return { finalUrl: url, cookie, chain };
+  }
+
+  return { finalUrl: url, cookie, chain };
 }
 
 module.exports = async (req, res) => {
@@ -84,6 +124,9 @@ module.exports = async (req, res) => {
 
   const merchant = String(req.body?.merchant || CONFIG.merchant).trim() || CONFIG.merchant;
 
+  const redirectTarget = "https://app.orderkuota.com/digital_app/qris";
+  const encodedRedirect = base64.encode(redirectTarget);
+
   const headersBase = {
     "User-Agent": "WebView",
     Accept: "*/*",
@@ -93,9 +136,6 @@ module.exports = async (req, res) => {
   };
 
   try {
-    const redirectTarget = "https://app.orderkuota.com/digital_app/qris";
-    const encodedRedirect = base64.encode(redirectTarget);
-
     const loginResp = await axios.get("https://app.orderkuota.com/api/v2/autologin", {
       params: {
         auth_username: CONFIG.auth_username,
@@ -105,39 +145,18 @@ module.exports = async (req, res) => {
       headers: headersBase,
       maxRedirects: 0,
       timeout: CONFIG.timeoutMs,
-      validateStatus: accept200_399,
+      validateStatus: (s) => s >= 200 && s < 400,
     });
 
-    const appCookie = parseSetCookieToHeader(loginResp.headers["set-cookie"]);
+    const appCookie = parseSetCookieToHeader(loginResp.headers?.["set-cookie"]);
+    const startLoc =
+      loginResp.headers?.location
+        ? absolutize("https://app.orderkuota.com/api/v2/autologin", loginResp.headers.location)
+        : redirectTarget;
 
-    const qrisResp = await axios.get(redirectTarget, {
-      params: {
-        auth_username: CONFIG.auth_username,
-        auth_token: CONFIG.auth_token,
-        redirect: encodedRedirect,
-      },
-      headers: { ...headersBase, Cookie: appCookie },
-      maxRedirects: 0,
-      timeout: CONFIG.timeoutMs,
-      validateStatus: accept200_399,
-    });
-
-    let refererUrl = qrisResp.headers?.location || null;
-    if (!refererUrl && qrisResp.status === 200) {
-      refererUrl = extractKasirUrlFromHtml(qrisResp.data) || null;
-    }
-    if (!refererUrl) refererUrl = getResponseUrl(qrisResp) || redirectTarget;
-
-    // buka kasir page biar cookie kasir ada
-    const kasirPageResp = await axios.get(refererUrl, {
-      headers: { ...headersBase, Cookie: appCookie },
-      maxRedirects: 5,
-      timeout: CONFIG.timeoutMs,
-      validateStatus: (s) => s >= 200 && s < 500,
-    });
-
-    const kasirCookie = parseSetCookieToHeader(kasirPageResp.headers["set-cookie"]);
-    const cookieHeader = mergeCookies(appCookie, kasirCookie);
+    const follow = await followRedirectsGet(startLoc, headersBase, appCookie);
+    const refererUrl = follow.finalUrl || redirectTarget;
+    const cookieHeader = follow.cookie || appCookie;
 
     const timestamp = Date.now().toString();
     const stResp = await axios.get("https://kasir.orderkuota.com/qris/curl/status_pembayaran.php", {
@@ -160,10 +179,10 @@ module.exports = async (req, res) => {
       upstreamStatus: stResp.status,
       debug: {
         autologinStatus: loginResp.status,
-        qrisStatus: qrisResp.status,
-        qrisHasLocation: !!qrisResp.headers?.location,
-        refererUsed: refererUrl,
-        kasirPageStatus: kasirPageResp.status,
+        startLoc,
+        finalUrl: follow.finalUrl,
+        finalIsKasir: String(follow.finalUrl || "").includes("kasir.orderkuota.com"),
+        chain: follow.chain,
       },
       data: stResp.data,
     });
