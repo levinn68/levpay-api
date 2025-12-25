@@ -2,12 +2,11 @@
 const axios = require("axios");
 const base64 = require("base-64");
 
-// ===== HARDCODE CONFIG (samain kaya index.js lu) =====
 const CONFIG = {
   auth_username: "vinzyy",
   auth_token: "1331927:cCVk0A4be8WL2ONriangdHJvU7utmfTh",
   merchant: "NEVERMOREOK1331927",
-  timeoutMs: 12000,
+  timeoutMs: 15000,
 };
 
 function bad(res, status, message, extra = {}) {
@@ -16,11 +15,20 @@ function bad(res, status, message, extra = {}) {
 function ok(res, data) {
   res.status(200).json({ success: true, ...data });
 }
-
+function accept200_399(status) {
+  return status >= 200 && status < 400;
+}
 function parseCookieHeader(setCookies) {
   const raw = (setCookies || []).join(", ") || "";
   const cookieChunks = [...raw.matchAll(/\b[\w_]+=.*?(?=,\s\w+=|$)/g)];
   return cookieChunks.map((m) => m[0]).join("; ");
+}
+function getResponseUrl(resp) {
+  return (
+    resp?.request?.res?.responseUrl ||
+    resp?.request?._redirectable?._currentUrl ||
+    null
+  );
 }
 
 async function getCookieAndReferer(auth_username, auth_token) {
@@ -40,7 +48,7 @@ async function getCookieAndReferer(auth_username, auth_token) {
     headers: headersBase,
     maxRedirects: 0,
     timeout: CONFIG.timeoutMs,
-    validateStatus: (s) => s === 302,
+    validateStatus: accept200_399,
   });
 
   const cookieHeader = parseCookieHeader(loginResp.headers["set-cookie"]);
@@ -50,35 +58,28 @@ async function getCookieAndReferer(auth_username, auth_token) {
     headers: { ...headersBase, Cookie: cookieHeader },
     maxRedirects: 0,
     timeout: CONFIG.timeoutMs,
-    validateStatus: (s) => s === 302,
+    validateStatus: accept200_399,
   });
 
-  return { cookieHeader, refererUrl: qrisResp.headers["location"], headersBase };
-}
+  let refererUrl = qrisResp.headers?.location || null;
+  if (!refererUrl) refererUrl = getResponseUrl(qrisResp);
+  if (!refererUrl) refererUrl = redirectTarget;
 
-async function cekStatusPembayaran(merchant, nominal, session) {
-  const timestamp = Date.now().toString();
-  const resp = await axios.get("https://kasir.orderkuota.com/qris/curl/status_pembayaran.php", {
-    params: { timestamp, merchant, nominal },
-    headers: {
-      ...session.headersBase,
-      Accept: "application/json",
-      "content-type": "application/json",
-      referer: session.refererUrl,
-      Cookie: session.cookieHeader,
+  return {
+    cookieHeader,
+    refererUrl,
+    headersBase,
+    upstream: {
+      autologinStatus: loginResp.status,
+      qrisStatus: qrisResp.status,
+      qrisHasLocation: !!qrisResp.headers?.location,
     },
-    timeout: CONFIG.timeoutMs,
-    validateStatus: (s) => s >= 200 && s < 500,
-  });
-
-  return { upstreamStatus: resp.status, data: resp.data };
+  };
 }
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    return bad(res, 405, "Method Not Allowed. Use POST JSON.", {
-      example: { nominal: 1 },
-    });
+    return bad(res, 405, "Method Not Allowed. Use POST JSON.", { example: { nominal: 1 } });
   }
 
   const nominal = Number(req.body?.nominal ?? req.body?.amount ?? 0);
@@ -90,13 +91,27 @@ module.exports = async (req, res) => {
 
   try {
     const session = await getCookieAndReferer(CONFIG.auth_username, CONFIG.auth_token);
-    const r = await cekStatusPembayaran(merchant, nominal, session);
+
+    const timestamp = Date.now().toString();
+    const resp = await axios.get("https://kasir.orderkuota.com/qris/curl/status_pembayaran.php", {
+      params: { timestamp, merchant, nominal },
+      headers: {
+        ...session.headersBase,
+        Accept: "application/json",
+        "content-type": "application/json",
+        referer: session.refererUrl,
+        Cookie: session.cookieHeader,
+      },
+      timeout: CONFIG.timeoutMs,
+      validateStatus: (s) => s >= 200 && s < 500,
+    });
 
     return ok(res, {
       merchant,
       nominal,
-      upstreamStatus: r.upstreamStatus,
-      data: r.data,
+      upstreamStatus: resp.status,
+      debug: session.upstream,
+      data: resp.data,
     });
   } catch (e) {
     return bad(res, 500, "internal error", { error: e?.message || "unknown" });
