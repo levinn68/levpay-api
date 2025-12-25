@@ -1,133 +1,138 @@
 // api/v2/cqr.js
-const axios = require("axios");
-const {
-  CONFIG,
-  UA,
-  XRW,
-  REDIRECT_URL,
-  autologin,
-  getRefererAndKasir,
-  fetchKasirHtml,
-  extractEndpointsFromKasirHtml,
-} = require("./_shared");
+// LevPay V2 - Create QR (tanpa kasir.create_qris_image.php karena upstream 404)
+// Output: qrString + pngBase64
 
-function sendJson(res, code, obj) {
-  res.status(code).setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(obj, null, 2));
+const QRCode = require("qrcode");
+
+// ===== HARDCODE CONFIG (sama kayak index.js lu) =====
+const CONFIG = {
+  storeName: "NEVERMORE",
+  merchant: "NEVERMOREOK1331927",
+
+  // base QRIS lu (yang udah ada CRC di ekor)
+  baseQrString:
+    "00020101021126670016COM.NOBUBANK.WWW01189360050300000879140214503370116723410303UMI51440014ID.CO.QRIS.WWW0215ID20232921353400303UMI5204541153033605802ID5919NEVERMORE OK13319276013JAKARTA UTARA61051411062070703A0163046C64",
+};
+
+// ===== CRC16-CCITT (FALSE) =====
+function crc16ccitt(str) {
+  let crc = 0xffff;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if (crc & 0x8000) crc = ((crc << 1) ^ 0x1021) & 0xffff;
+      else crc = (crc << 1) & 0xffff;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+// Parse EMV TLV simple (tag 2 digit, len 2 digit)
+function parseTLV(payload) {
+  const out = [];
+  let i = 0;
+  while (i + 4 <= payload.length) {
+    const tag = payload.slice(i, i + 2);
+    const len = parseInt(payload.slice(i + 2, i + 4), 10);
+    const start = i + 4;
+    const end = start + (Number.isFinite(len) ? len : 0);
+    if (!Number.isFinite(len) || end > payload.length) break;
+    const value = payload.slice(start, end);
+    out.push({ tag, len, value });
+    i = end;
+  }
+  return out;
+}
+
+function buildTLV(items) {
+  return items
+    .map(({ tag, value }) => {
+      const v = String(value ?? "");
+      const len = String(v.length).padStart(2, "0");
+      return `${tag}${len}${v}`;
+    })
+    .join("");
+}
+
+function stripCRC(base) {
+  // CRC tag 63 harusnya di ujung: ...6304FFFF
+  const idx = base.lastIndexOf("6304");
+  if (idx >= 0 && idx + 8 <= base.length) return base.slice(0, idx); // buang "6304XXXX"
+  return base;
+}
+
+function injectAmount(baseQr, nominal) {
+  const amt = Math.max(1, Math.floor(Number(nominal || 0)));
+  const amtStr = String(amt);
+
+  const baseNoCrc = stripCRC(String(baseQr || "").trim());
+  const items = parseTLV(baseNoCrc);
+
+  // buang tag 54 (amount) kalau udah ada
+  const filtered = items.filter((x) => x.tag !== "54" && x.tag !== "63");
+
+  // sisipkan amount setelah tag 53 (currency) kalau ada
+  const out = [];
+  let inserted = false;
+  for (const it of filtered) {
+    out.push({ tag: it.tag, value: it.value });
+    if (!inserted && it.tag === "53") {
+      out.push({ tag: "54", value: amtStr });
+      inserted = true;
+    }
+  }
+  if (!inserted) out.push({ tag: "54", value: amtStr });
+
+  // build + CRC
+  const payload = buildTLV(out);
+  const withCrcTag = payload + "6304";
+  const crc = crc16ccitt(withCrcTag);
+  return withCrcTag + crc;
+}
+
+function json(res, code, obj) {
+  res.statusCode = code;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(obj));
 }
 
 module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    return json(res, 405, {
+      success: false,
+      message: "Method Not Allowed. Use POST JSON.",
+      example: { nominal: 1000 },
+    });
+  }
+
   try {
-    if (req.method !== "POST") {
-      return sendJson(res, 405, {
-        success: false,
-        message: "Method Not Allowed. Use POST JSON.",
-        example: { nominal: 1 },
-      });
-    }
+    const body = typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+    const nominal = Number(body?.nominal);
 
-    const body = typeof req.body === "object" ? req.body : {};
-    const nominal = Number(body.nominal);
     if (!Number.isFinite(nominal) || nominal < 1) {
-      return sendJson(res, 400, { success: false, message: "nominal invalid", example: { nominal: 1 } });
+      return json(res, 400, { success: false, message: "nominal invalid", example: { nominal: 1 } });
     }
 
-    // 1) autologin ambil cookie
-    const login = await autologin();
-    const cookieHeader = login.cookieHeader || "";
+    const qrString = injectAmount(CONFIG.baseQrString, nominal);
 
-    // 2) buka qris page ambil referer/kasirUrl (FIX terima 200/302)
-    const step2 = await getRefererAndKasir(cookieHeader);
-
-    // 3) kalau dapat kasirUrl, fetch HTML kasir untuk cari endpoint yang bener (biar ga 404)
-    let kasirHtml = "";
-    let kasirStatus = 0;
-    let endpoints = {};
-    if (step2.kasirUrl) {
-      const kas = await fetchKasirHtml(step2.kasirUrl, cookieHeader);
-      kasirStatus = kas.status;
-      kasirHtml = kas.html || "";
-      endpoints = extractEndpointsFromKasirHtml(kasirHtml);
-    }
-
-    // 4) tentuin path create endpoint
-    // - kalau ketemu di HTML kasir -> pakai itu
-    // - fallback: path lama
-    const createPath =
-      endpoints.createPath ||
-      "/qris/curl/create_qris_image.php";
-
-    const createUrl = `https://kasir.orderkuota.com${createPath}`;
-
-    // 5) request gambar QR (arraybuffer)
-    const r = await axios.get(createUrl, {
-      params: { merchant: CONFIG.merchant, nominal: String(nominal) },
-      headers: {
-        "User-Agent": UA,
-        "x-requested-with": XRW,
-        "Accept": "image/*,*/*",
-        "Referer": step2.referer || REDIRECT_URL,
-        "Cookie": cookieHeader,
-      },
-      responseType: "arraybuffer",
-      maxRedirects: 0,
-      validateStatus: (s) => s >= 200 && s < 500,
-      timeout: 20000,
+    const png = await QRCode.toBuffer(qrString, {
+      type: "png",
+      errorCorrectionLevel: "M",
+      margin: 1,
+      scale: 8,
     });
 
-    const ct = String(r.headers["content-type"] || "").toLowerCase();
-    const isImage = ct.includes("image/");
-
-    if (!isImage) {
-      // biasanya 404 html / blokir / dll
-      const headPreview = Buffer.from(r.data || "").toString("utf8").slice(0, 220);
-
-      return sendJson(res, 200, {
-        success: true,
-        merchant: CONFIG.merchant,
-        nominal,
-        upstreamStatus: r.status,
-        debug: {
-          autologinStatus: login.status,
-          qrisStatus: step2.qrisStatus,
-          qrisHasLocation: step2.qrisHasLocation,
-          qrisHtmlBytes: step2.qrisHtmlBytes,
-          kasirPageStatus: kasirStatus || null,
-          createPathUsed: createPath,
-          createContentType: ct || null,
-          refererUsed: step2.referer || null,
-        },
-        error: "create_qris_image upstream not OK",
-        headPreview,
-      });
-    }
-
-    // return base64 PNG (biar gampang dipakai)
-    const buf = Buffer.from(r.data);
-    const b64 = buf.toString("base64");
-
-    return sendJson(res, 200, {
+    return json(res, 200, {
       success: true,
       merchant: CONFIG.merchant,
-      nominal,
-      upstreamStatus: r.status,
-      contentType: ct,
-      pngBase64: b64,
-      bytes: buf.length,
-      debug: {
-        autologinStatus: login.status,
-        qrisStatus: step2.qrisStatus,
-        qrisHasLocation: step2.qrisHasLocation,
-        kasirPageStatus: kasirStatus || null,
-        createPathUsed: createPath,
-        refererUsed: step2.referer || null,
-      },
+      storeName: CONFIG.storeName,
+      nominal: Math.floor(nominal),
+      qrString,
+      pngBase64: png.toString("base64"),
+      // biar gampang dipake di FE:
+      dataUrl: "data:image/png;base64," + png.toString("base64"),
     });
   } catch (e) {
-    return sendJson(res, 200, {
-      success: false,
-      message: "internal error",
-      error: e?.message || "unknown",
-    });
+    return json(res, 500, { success: false, message: "internal error", error: e?.message || "unknown" });
   }
 };
