@@ -1,111 +1,94 @@
 // api/v2/status.js
 const axios = require("axios");
-const base64 = require("base-64");
+const {
+  CONFIG,
+  UA,
+  XRW,
+  REDIRECT_URL,
+  autologin,
+  getRefererAndKasir,
+  fetchKasirHtml,
+  extractEndpointsFromKasirHtml,
+} = require("./_shared");
 
-// ===== HARDCODE CONFIG =====
-const CONFIG = {
-  auth_username: "vinzyy",
-  auth_token: "1331927:cCVk0A4be8WL2ONriangdHJvU7utmfTh",
-  merchant: "NEVERMOREOK1331927",
-};
-
-function extractCookieHeader(setCookieArr) {
-  if (!setCookieArr || !Array.isArray(setCookieArr)) return "";
-  const rawCookie = setCookieArr.join(", ");
-  const cookieChunks = [...rawCookie.matchAll(/\b[\w_]+=.*?(?=,\s\w+=|$)/g)];
-  return cookieChunks.map((m) => m[0]).join("; ");
+function sendJson(res, code, obj) {
+  res.status(code).setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(obj, null, 2));
 }
 
-function ok200or302(status) {
-  return status === 200 || status === 302;
-}
-
-module.exports = async function handler(req, res) {
+module.exports = async (req, res) => {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({
+      return sendJson(res, 405, {
         success: false,
         message: "Method Not Allowed. Use POST JSON.",
         example: { nominal: 1 },
       });
     }
 
-    const nominal = Number(req.body?.nominal);
-    const merchant = String(req.body?.merchant || CONFIG.merchant).trim();
-
+    const body = typeof req.body === "object" ? req.body : {};
+    const nominal = Number(body.nominal);
     if (!Number.isFinite(nominal) || nominal < 1) {
-      return res.status(400).json({ success: false, message: "nominal invalid", example: { nominal: 1 } });
+      return sendJson(res, 400, { success: false, message: "nominal invalid", example: { nominal: 1 } });
     }
 
-    const redirectTarget = "https://app.orderkuota.com/digital_app/qris";
-    const encodedRedirect = base64.encode(redirectTarget);
+    const login = await autologin();
+    const cookieHeader = login.cookieHeader || "";
 
-    const headersBase = {
-      "User-Agent": "WebView",
-      "x-requested-with": "com.orderkuota.app",
-      Accept: "*/*",
-      "Accept-Encoding": "gzip, deflate",
-      "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-      Connection: "keep-alive",
-    };
+    const step2 = await getRefererAndKasir(cookieHeader);
 
-    // autologin
-    const loginResp = await axios.get("https://app.orderkuota.com/api/v2/autologin", {
-      params: {
-        auth_username: CONFIG.auth_username,
-        auth_token: CONFIG.auth_token,
-        redirect: encodedRedirect,
-      },
-      headers: headersBase,
-      maxRedirects: 0,
-      validateStatus: ok200or302,
-    });
+    let kasirHtml = "";
+    let kasirStatus = 0;
+    let endpoints = {};
+    if (step2.kasirUrl) {
+      const kas = await fetchKasirHtml(step2.kasirUrl, cookieHeader);
+      kasirStatus = kas.status;
+      kasirHtml = kas.html || "";
+      endpoints = extractEndpointsFromKasirHtml(kasirHtml);
+    }
 
-    const cookieHeader = extractCookieHeader(loginResp.headers["set-cookie"]);
+    const statusPath =
+      endpoints.statusPath ||
+      "/qris/curl/status_pembayaran.php";
 
-    // qris page
-    const qrisResp = await axios.get(redirectTarget, {
-      params: {
-        auth_username: CONFIG.auth_username,
-        auth_token: CONFIG.auth_token,
-        redirect: encodedRedirect,
-      },
-      headers: { ...headersBase, Cookie: cookieHeader },
-      maxRedirects: 0,
-      validateStatus: ok200or302,
-    });
+    const statusUrl = `https://kasir.orderkuota.com${statusPath}`;
 
-    const refererUsed = qrisResp.headers?.location || redirectTarget;
-
-    // status pembayaran
     const timestamp = Date.now().toString();
-    const stResp = await axios.get("https://kasir.orderkuota.com/qris/curl/status_pembayaran.php", {
-      params: { timestamp, merchant, nominal },
+
+    const r = await axios.get(statusUrl, {
+      params: { timestamp, merchant: CONFIG.merchant, nominal: String(nominal) },
       headers: {
-        ...headersBase,
-        Accept: "application/json",
+        "User-Agent": UA,
+        "x-requested-with": XRW,
+        "Accept": "application/json",
         "content-type": "application/json",
-        referer: refererUsed,
+        "Referer": step2.referer || REDIRECT_URL,
+        "Cookie": cookieHeader,
       },
-      timeout: 15000,
-      validateStatus: () => true,
+      maxRedirects: 0,
+      validateStatus: (s) => s >= 200 && s < 500,
+      timeout: 20000,
     });
 
-    return res.status(200).json({
+    // jangan “auto paid” dari sini — return raw aja, index.js yang decide
+    return sendJson(res, 200, {
       success: true,
-      merchant,
+      merchant: CONFIG.merchant,
       nominal,
-      upstreamStatus: stResp.status,
+      upstreamStatus: r.status,
+      data: r.data,
       debug: {
-        autologinStatus: loginResp.status,
-        qrisStatus: qrisResp.status,
-        qrisHasLocation: !!qrisResp.headers?.location,
-        refererUsed,
+        autologinStatus: login.status,
+        qrisStatus: step2.qrisStatus,
+        qrisHasLocation: step2.qrisHasLocation,
+        qrisHtmlBytes: step2.qrisHtmlBytes,
+        kasirPageStatus: kasirStatus || null,
+        statusPathUsed: statusPath,
+        refererUsed: step2.referer || null,
       },
-      data: stResp.data,
     });
   } catch (e) {
-    return res.status(500).json({
+    return sendJson(res, 200, {
       success: false,
       message: "internal error",
       error: e?.message || "unknown",
